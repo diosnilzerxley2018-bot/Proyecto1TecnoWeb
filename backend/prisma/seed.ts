@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import bcrypt from 'bcrypt';
+import { pathToFileURL } from 'node:url';
 
 const prisma = new PrismaClient({
   adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }),
@@ -55,7 +56,7 @@ async function sembrarConfiguracion() {
   });
 }
 
-async function main() {
+export async function main() {
   console.log('Cargando datos iniciales...');
 
   // 1. Permisos
@@ -487,6 +488,19 @@ async function cargarRecetas(): Promise<void> {
 }
 
 
-main()
-  .then(() => prisma.$disconnect())
-  .catch(async (e) => { console.error(e); await prisma.$disconnect(); process.exit(1); });
+/*
+ * Se ejecuta solo cuando se invoca este archivo directamente.
+ *
+ * `inicializar.ts` lo importa para sembrar después de crear el esquema, y sin
+ * esta comprobación la siembra arrancaría sola al importarlo —antes de que
+ * quien importa pueda decidir cuándo—.
+ */
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main()
+    .then(() => prisma.$disconnect())
+    .catch(async (e) => {
+      console.error(e);
+      await prisma.$disconnect();
+      process.exit(1);
+    });
+}

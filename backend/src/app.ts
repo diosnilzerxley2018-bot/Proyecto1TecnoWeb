@@ -5,6 +5,7 @@ import { env } from './config/env.js';
 import rutas from './routes/index.js';
 import { manejadorErrores, rutaNoEncontrada } from './middlewares/error.middleware.js';
 import { barridoDeCobros } from './middlewares/mantenimiento.middleware.js';
+import { ErrorApp } from './errors/error-app.js';
 
 export const app = express();
 
@@ -17,7 +18,22 @@ export const app = express();
  */
 app.use(helmet({ contentSecurityPolicy: false, crossOriginResourcePolicy: false }));
 
-app.use(cors({ origin: env.corsOrigin, credentials: true }));
+/*
+ * CORS con lista de orígenes.
+ *
+ * Se acepta una petición **sin** `Origin` —las hace curl, y también el aviso
+ * de la pasarela— porque CORS protege al navegador de otra página, no al
+ * servidor de un cliente cualquiera; eso lo hacen la sesión y los permisos.
+ */
+app.use(
+  cors({
+    origin(origen, responder) {
+      if (!origen || env.corsOrigin.includes(origen)) return responder(null, true);
+      responder(new ErrorApp(403, `Origen no autorizado: ${origen}`));
+    },
+    credentials: true,
+  }),
+);
 
 /**
  * El aviso de la pasarela se recibe **sin interpretar**.

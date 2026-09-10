@@ -14,7 +14,18 @@ export const env = {
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? '8h',
   bcryptRounds: Number(process.env.BCRYPT_ROUNDS ?? 10),
   maxIntentosFallidos: Number(process.env.MAX_INTENTOS_FALLIDOS ?? 3),
-  corsOrigin: process.env.CORS_ORIGIN ?? 'http://localhost:3000',
+  /**
+   * Orígenes autorizados, separados por coma.
+   *
+   * Es una lista y no un valor único porque un despliegue en Vercel tiene más
+   * de una dirección: el dominio de producción y uno distinto por cada
+   * previsualización. Con un solo origen, las previsualizaciones quedan
+   * bloqueadas por CORS y parecen un fallo del backend.
+   */
+  corsOrigin: (process.env.CORS_ORIGIN ?? 'http://localhost:3000')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean),
 
   /**
    * Cobros. El modo (simulado o real) NO vive aquí: lo cambia el
@@ -51,7 +62,16 @@ export const env = {
    * materia, `TecnoCorreo` lo provee en `localhost:25`.
    */
   correo: {
-    /** `simulado` registra en el log y no envía. Es el valor por omisión. */
+    /**
+     * Con qué se envía:
+     *
+     * - `simulado` guarda en memoria y no envía nada. Es el valor por omisión
+     *   y el que usan las pruebas.
+     * - `smtp` (o `real`) entrega por un servidor SMTP. Es lo que se usa en el
+     *   laboratorio, contra el Postfix de la VM.
+     * - `brevo` entrega por la API HTTPS de Brevo. Es lo que hace falta en una
+     *   plataforma gestionada, donde el puerto SMTP suele estar bloqueado.
+     */
     modo: process.env.CORREO_MODO ?? 'simulado',
     servidor: process.env.CORREO_SERVIDOR ?? 'localhost',
     puerto: Number(process.env.CORREO_PUERTO ?? 25),
@@ -63,6 +83,8 @@ export const env = {
     /** Postfix en `mynetworks` no pide credenciales; una nube sí. */
     usuario: process.env.CORREO_USUARIO ?? '',
     contrasena: process.env.CORREO_CONTRASENA ?? '',
+    /** Clave de la API de Brevo. Solo hace falta con `CORREO_MODO=brevo`. */
+    brevoApiKey: process.env.BREVO_API_KEY ?? '',
   },
 
   pago: {

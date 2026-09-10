@@ -1,6 +1,7 @@
 import { env } from '../config/env.js';
 import { MensajeroSimulado } from './simulado.js';
 import { MensajeroSmtp } from './smtp.js';
+import { MensajeroBrevo } from './brevo.js';
 import type { Mensajero } from './mensajero.js';
 
 export type { Mensajero, Mensaje, Adjunto, ResultadoEnvio } from './mensajero.js';
@@ -17,11 +18,26 @@ let vigente: Mensajero | null = null;
 
 export function mensajero(): Mensajero {
   if (!vigente) {
-    // Cualquier valor distinto de `real` deja el sistema sin enviar nada. Es
-    // la falla segura: equivocarse hacia el lado que no molesta a nadie.
-    vigente = env.correo.modo === 'real' ? new MensajeroSmtp() : new MensajeroSimulado();
+    // Cualquier valor no reconocido deja el sistema sin enviar nada. Es la
+    // falla segura: equivocarse hacia el lado que no molesta a nadie. Un modo
+    // mal escrito no debe empezar a mandar correos de verdad por su cuenta.
+    vigente = elegir(env.correo.modo);
   }
   return vigente;
+}
+
+function elegir(modo: string): Mensajero {
+  switch (modo) {
+    case 'brevo':
+      return new MensajeroBrevo();
+    // `real` se conserva porque es como quedó documentado el modo SMTP antes
+    // de que hubiera un segundo mensajero real.
+    case 'smtp':
+    case 'real':
+      return new MensajeroSmtp();
+    default:
+      return new MensajeroSimulado();
+  }
 }
 
 /** Solo para las pruebas, que necesitan volver al estado inicial. */

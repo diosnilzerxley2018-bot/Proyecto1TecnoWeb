@@ -17,7 +17,10 @@
     "db:studio": "prisma studio",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:db": "tsx tests/preparar-bd.ts"
+    "test:db": "tsx tests/preparar-bd.ts",
+    "postinstall": "prisma generate",
+    "db:init": "tsx prisma/inicializar.ts",
+    "db:seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.0",
@@ -34,7 +37,9 @@
     "jsonwebtoken": "9.0.3",
     "nodemailer": "^10.0.1",
     "pdfkit": "^0.20.2",
+    "prisma": "7.10.0",
     "qrcode": "^1.5.4",
+    "tsx": "4.23.13",
     "zod": "4.5.4"
   },
   "devDependencies": {
@@ -45,9 +50,7 @@
     "@types/node": "22.20.1",
     "@types/pg": "^8.23.1",
     "@types/supertest": "^7.2.1",
-    "prisma": "7.10.0",
     "supertest": "^7.2.2",
-    "tsx": "4.23.13",
     "typescript": "6.0.3",
     "vitest": "^4.1.11"
   },
