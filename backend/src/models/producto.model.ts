@@ -1,0 +1,258 @@
+import { prisma } from '../config/prisma.js';
+import type { ClientePrisma } from './stock.model.js';
+
+/** Capa Model — clases de análisis tblProducto, tblCategoria y tblValorNutricional. */
+
+/**
+ * Proyección pública de un producto.
+ *
+ * Se enumeran los campos uno a uno de forma deliberada: la receta, sus
+ * instrucciones y los costos de los insumos no deben salir del servidor
+ * hacia el portal.
+ */
+const CAMPOS_PUBLICOS = {
+  id_producto: true,
+  nombre: true,
+  descripcion: true,
+  precio_venta: true,
+  categoria: { select: { id_categoria: true, nombre: true } },
+  valor_nutricional: {
+    select: {
+      calorias: true,
+      proteinas_g: true,
+      carbohidratos_g: true,
+      grasas_g: true,
+      fibra_g: true,
+    },
+  },
+  producto_almacen: { select: { stock_actual: true } },
+} as const;
+
+export interface FiltroCatalogo {
+  termino?: string;
+  idCategoria?: number;
+}
+
+/**
+ * Consulta los productos activos por coincidencia parcial de nombre y por
+ * categoría (CU-PED-01). La comparación no distingue mayúsculas.
+ */
+export const buscarActivos = (filtro: FiltroCatalogo) =>
+  prisma.producto.findMany({
+    where: {
+      activo: true,
+      ...(filtro.idCategoria ? { id_categoria: filtro.idCategoria } : {}),
+      ...(filtro.termino
+        ? {
+            OR: [
+              { nombre: { contains: filtro.termino, mode: 'insensitive' } },
+              { categoria: { nombre: { contains: filtro.termino, mode: 'insensitive' } } },
+            ],
+          }
+        : {}),
+    },
+    select: CAMPOS_PUBLICOS,
+    orderBy: [{ id_categoria: 'asc' }, { nombre: 'asc' }],
+  });
+
+export const buscarActivoPorId = (id: number) =>
+  prisma.producto.findFirst({ where: { id_producto: id, activo: true }, select: CAMPOS_PUBLICOS });
+
+export const listarCategorias = () =>
+  prisma.categoria.findMany({
+    select: { id_categoria: true, nombre: true },
+    orderBy: { nombre: 'asc' },
+  });
+
+export type ProductoPublico = Awaited<ReturnType<typeof buscarActivos>>[number];
+
+/* ------------------------------------------------------------------ */
+/* CU-PRO-01 — lado de gestión                                         */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Las escrituras devuelven solo el identificador y el servicio vuelve a leer
+ * con la proyección completa. Pedirle a Prisma un `select` con varias
+ * relaciones dentro de un `create` o un `update` hace que cargue esas
+ * relaciones en paralelo sobre el cliente que la transacción implícita tiene
+ * fijado, lo que `pg` marca como obsoleto y dejará de admitir en su versión 9.
+ */
+
+/**
+ * Proyección para el personal: agrega el estado y las existencias.
+ *
+ * No incluye la relación `receta` a propósito. El esquema declara el índice
+ * parcial `ux_receta_activa ON receta(id_producto) WHERE activa`, y Prisma lo
+ * introspecta como un UNIQUE completo: por eso modela `producto.receta` como
+ * uno a uno, cuando en realidad un producto tiene varias versiones y solo una
+ * activa. Las recetas se consultan por su propio modelo.
+ */
+const CAMPOS_GESTION = {
+  id_producto: true,
+  nombre: true,
+  descripcion: true,
+  precio_venta: true,
+  activo: true,
+  tipo_conservacion: true,
+  categoria: { select: { id_categoria: true, nombre: true } },
+  valor_nutricional: {
+    select: {
+      calorias: true,
+      proteinas_g: true,
+      carbohidratos_g: true,
+      grasas_g: true,
+      fibra_g: true,
+    },
+  },
+  producto_almacen: {
+    select: { stock_actual: true, almacen: { select: { id_almacen: true, nombre: true } } },
+  },
+} as const;
+
+export interface FiltroGestion {
+  termino?: string;
+  idCategoria?: number;
+  incluirInactivos?: boolean;
+}
+
+export const listarParaGestion = (filtro: FiltroGestion) =>
+  prisma.producto.findMany({
+    where: {
+      ...(filtro.incluirInactivos ? {} : { activo: true }),
+      ...(filtro.idCategoria ? { id_categoria: filtro.idCategoria } : {}),
+      ...(filtro.termino ? { nombre: { contains: filtro.termino, mode: 'insensitive' } } : {}),
+    },
+    select: CAMPOS_GESTION,
+    orderBy: [{ id_categoria: 'asc' }, { nombre: 'asc' }],
+  });
+
+export const buscarParaGestion = (id: number) =>
+  prisma.producto.findUnique({ where: { id_producto: id }, select: CAMPOS_GESTION });
+
+export const crear = (datos: {
+  nombre: string;
+  descripcion: string | null;
+  precioVenta: number;
+  idCategoria: number;
+  tipoConservacion: string;
+}) =>
+  prisma.producto.create({
+    data: {
+      nombre: datos.nombre,
+      descripcion: datos.descripcion,
+      precio_venta: datos.precioVenta,
+      tipo_conservacion: datos.tipoConservacion,
+      id_categoria: datos.idCategoria,
+    },
+    select: { id_producto: true },
+  });
+
+export const actualizar = (
+  id: number,
+  datos: {
+    nombre?: string;
+    descripcion?: string | null;
+    precioVenta?: number;
+    idCategoria?: number;
+    activo?: boolean;
+    tipoConservacion?: string;
+  },
+) =>
+  prisma.producto.update({
+    where: { id_producto: id },
+    data: {
+      ...(datos.nombre !== undefined ? { nombre: datos.nombre } : {}),
+      ...(datos.descripcion !== undefined ? { descripcion: datos.descripcion } : {}),
+      ...(datos.precioVenta !== undefined ? { precio_venta: datos.precioVenta } : {}),
+      ...(datos.idCategoria !== undefined ? { id_categoria: datos.idCategoria } : {}),
+      ...(datos.activo !== undefined ? { activo: datos.activo } : {}),
+      ...(datos.tipoConservacion !== undefined
+        ? { tipo_conservacion: datos.tipoConservacion }
+        : {}),
+    },
+    select: { id_producto: true },
+  });
+
+export const eliminar = (id: number) => prisma.producto.delete({ where: { id_producto: id } });
+
+export const buscarCategoria = (id: number) =>
+  prisma.categoria.findUnique({ where: { id_categoria: id }, select: { id_categoria: true } });
+
+/** CU-PRO-01, excepción: un producto con ventas o pedidos no se elimina. */
+export async function contarOperaciones(id: number): Promise<{ ventas: number; pedidos: number }> {
+  const [ventas, pedidos] = await Promise.all([
+    prisma.detalle_venta.count({ where: { id_producto: id } }),
+    prisma.detalle_pedido.count({ where: { id_producto: id } }),
+  ]);
+  return { ventas, pedidos };
+}
+
+export const contarExistencias = (id: number) =>
+  prisma.producto_almacen.count({ where: { id_producto: id } });
+
+export const contarRecetas = (id: number) =>
+  prisma.receta.count({ where: { id_producto: id } });
+
+/** CU-PRO-03 — Registrar Valor Nutricional. Extiende a CU-PRO-01 y es opcional. */
+export const guardarValorNutricional = (
+  idProducto: number,
+  datos: {
+    calorias: number;
+    proteinas: number;
+    carbohidratos: number;
+    grasas: number;
+    fibra: number | null;
+  },
+) => {
+  const fila = {
+    calorias: datos.calorias,
+    proteinas_g: datos.proteinas,
+    carbohidratos_g: datos.carbohidratos,
+    grasas_g: datos.grasas,
+    fibra_g: datos.fibra,
+  };
+  return prisma.valor_nutricional.upsert({
+    where: { id_producto: idProducto },
+    update: fila,
+    create: { id_producto: idProducto, ...fila },
+  });
+};
+
+export type ProductoGestion = NonNullable<Awaited<ReturnType<typeof buscarParaGestion>>>;
+
+/** Productos existentes entre los indicados; `soloActivos` filtra las bajas lógicas. */
+export const existentes = (ids: number[], tx: ClientePrisma, soloActivos: boolean) =>
+  tx.producto.findMany({
+    where: { id_producto: { in: ids }, ...(soloActivos ? { activo: true } : {}) },
+    select: { id_producto: true, nombre: true, tipo_conservacion: true },
+  });
+
+/**
+ * Costo unitario promedio del producto, calculado a partir de sus ingresos.
+ *
+ * `producto_almacen` guarda cuánto hay, no cuánto costó, y agregarle una
+ * columna de costo obligaría a recalcularla en cada movimiento. No hace falta:
+ * cada nota de ingreso ya registró el costo unitario de lo que entró —sea
+ * compra o producción—, de modo que el promedio ponderado se deduce.
+ *
+ * Es el mismo criterio con el que el proyecto resuelve las alertas de stock y
+ * el comprobante de venta: dato derivado, calculado al consultar, no
+ * almacenado.
+ */
+export async function costoPromedio(idProducto: number): Promise<number | null> {
+  const agregado = await prisma.detalle_ingreso_producto.aggregate({
+    where: { id_producto: idProducto },
+    _sum: { cantidad: true },
+  });
+
+  const unidades = agregado._sum.cantidad ?? 0;
+  if (unidades === 0) return null;
+
+  const lineas = await prisma.detalle_ingreso_producto.findMany({
+    where: { id_producto: idProducto },
+    select: { cantidad: true, costo_unitario: true },
+  });
+
+  const total = lineas.reduce((suma, l) => suma + l.cantidad * Number(l.costo_unitario), 0);
+  return Math.round((total / unidades) * 100) / 100;
+}

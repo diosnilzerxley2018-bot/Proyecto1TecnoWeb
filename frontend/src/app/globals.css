@@ -1,0 +1,292 @@
+@import "tailwindcss";
+
+/* ------------------------------------------------------------------ */
+/* Tokens de diseño                                                    */
+/* ------------------------------------------------------------------ */
+
+@theme {
+  /* Superficies: del fondo más profundo al panel más elevado */
+  --color-fondo: #07090c;
+  --color-superficie: #0d1117;
+  --color-superficie-alta: #141a22;
+  --color-superficie-suave: #1a222c;
+
+  /* Bordes y separadores */
+  --color-borde: rgba(255, 255, 255, 0.08);
+  --color-borde-fuerte: rgba(255, 255, 255, 0.14);
+
+  /* Texto */
+  --color-tinta: #e8edf4;
+  --color-tinta-suave: #9aa7b8;
+  --color-tinta-tenue: #64748b;
+
+  /* Acento de marca */
+  --color-marca-300: #6ee7b7;
+  --color-marca-400: #34d399;
+  --color-marca-500: #10b981;
+  --color-marca-600: #059669;
+  /* Texto legible sobre el color de marca; cada tema lo redefine */
+  --color-sobre-marca: #04140d;
+
+  /* Semánticos */
+  --color-aviso: #fbbf24;
+  --color-peligro: #f87171;
+  --color-info: #60a5fa;
+  --color-violeta: #a78bfa;
+
+  --radius-xl2: 1rem;
+
+  --animate-brillo: brillo 2s ease-in-out infinite;
+
+  @keyframes brillo {
+    0%, 100% { opacity: 0.45; }
+    50% { opacity: 0.9; }
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Base                                                                */
+/* ------------------------------------------------------------------ */
+
+* {
+  border-color: var(--color-borde);
+}
+
+html {
+  color-scheme: dark;
+}
+html[data-modo='dia'] {
+  color-scheme: light;
+}
+
+body {
+  background-color: var(--color-fondo);
+  color: var(--color-tinta);
+  font-family: var(--font-sans), system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Textura de fondo: dos halos muy tenues, para que el negro no sea plano */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(60rem 40rem at 15% -10%, rgba(16, 185, 129, 0.07), transparent 60%),
+    radial-gradient(50rem 35rem at 95% 5%, rgba(96, 165, 250, 0.05), transparent 55%);
+}
+
+/* ------------------------------------------------------------------ */
+/* Nada con aspecto nativo                                             */
+/* ------------------------------------------------------------------ */
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+  background-clip: content-box;
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+}
+
+/* El autocompletado de Chrome pinta el input de amarillo: se neutraliza */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--color-tinta);
+  -webkit-box-shadow: 0 0 0 1000px var(--color-superficie-alta) inset;
+  caret-color: var(--color-tinta);
+  transition: background-color 9999s ease-out;
+}
+
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--color-tinta-tenue);
+}
+
+::selection {
+  background: rgba(16, 185, 129, 0.28);
+  color: #fff;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-marca-400);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------------ */
+/* Utilidades compartidas                                              */
+/* ------------------------------------------------------------------ */
+
+@utility vidrio {
+  background-color: rgba(20, 26, 34, 0.72);
+  backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid var(--color-borde);
+}
+
+@utility superficie-tarjeta {
+  background-image: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.035),
+    rgba(255, 255, 255, 0)
+  );
+  background-color: var(--color-superficie);
+  border: 1px solid var(--color-borde);
+}
+
+/* Respeto por quien pide menos movimiento */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* RF-WEB-02 · Temas visuales y modo día / noche                       */
+/* ------------------------------------------------------------------ */
+/*
+ * Dos ejes independientes, no seis combinaciones escritas a mano:
+ *
+ *   `data-tema` cambia únicamente el acento de marca (niños, jóvenes,
+ *   adultos), y `data-modo` cambia únicamente las superficies y la tinta.
+ *
+ * Al ser ortogonales, tres bloques más dos cubren las seis apariencias, y
+ * todo el sistema de diseño se repinta solo porque cada componente consume
+ * los tokens en lugar de colores literales.
+ */
+
+/* --- Acento por tema --- */
+
+:root[data-tema='ninos'] {
+  --color-marca-300: #fdba74;
+  --color-marca-400: #fb923c;
+  --color-marca-500: #f97316;
+  --color-marca-600: #ea580c;
+  --color-violeta: #f472b6;
+  --color-info: #22d3ee;
+  --radius-xl2: 1.5rem;
+}
+
+:root[data-tema='adultos'] {
+  --color-marca-300: #93c5fd;
+  --color-marca-400: #60a5fa;
+  --color-marca-500: #3b82f6;
+  --color-marca-600: #2563eb;
+  --color-violeta: #818cf8;
+}
+
+/* --- Superficies por modo --- */
+
+:root[data-modo='dia'] {
+  --color-fondo: #f6f8fa;
+  --color-superficie: #ffffff;
+  --color-superficie-alta: #f2f5f8;
+  --color-superficie-suave: #e9eef3;
+
+  --color-borde: rgba(15, 23, 42, 0.1);
+  --color-borde-fuerte: rgba(15, 23, 42, 0.18);
+
+  --color-tinta: #0f172a;
+  --color-tinta-suave: #475569;
+  --color-tinta-tenue: #94a3b8;
+}
+
+/* En modo día las superficies son claras: el degradado de luz cenital y el
+   cristal deben oscurecer en lugar de aclarar, o las tarjetas desaparecen. */
+:root[data-modo='dia'] .superficie-tarjeta {
+  background-image: linear-gradient(
+    to bottom,
+    rgba(15, 23, 42, 0.02),
+    rgba(15, 23, 42, 0)
+  );
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+:root[data-modo='dia'] .vidrio {
+  background-color: rgba(255, 255, 255, 0.82);
+}
+
+:root[data-modo='dia'] body::before {
+  opacity: 0.5;
+}
+
+:root[data-modo='dia'] ::-webkit-scrollbar-thumb {
+  background: rgba(15, 23, 42, 0.16);
+  background-clip: content-box;
+}
+
+:root[data-modo='dia'] input:-webkit-autofill,
+:root[data-modo='dia'] input:-webkit-autofill:hover,
+:root[data-modo='dia'] input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px var(--color-superficie-alta) inset;
+}
+
+/* El texto sobre el acento se define por token para que cada tema elija el
+   contraste correcto sin tocar los componentes. */
+:root[data-tema='ninos'],
+:root[data-tema='adultos'] {
+  --color-sobre-marca: #ffffff;
+}
+
+/* ------------------------------------------------------------------ */
+/* Mapa del punto de entrega (CU-PED-03)                               */
+/* ------------------------------------------------------------------ */
+
+/* Leaflet pinta su propio fondo gris mientras cargan las teselas; con el tema
+   oscuro ese gris es un destello blanco cada vez que se abre el mapa. */
+.mapa-entrega .leaflet-container {
+  background: var(--color-superficie-alta);
+  font: inherit;
+}
+
+/* Las teselas de OpenStreetMap solo existen en versión clara. Invertirlas y
+   girar el tono devuelve un mapa oscuro legible sin depender de un proveedor
+   de teselas con clave de API. El pin queda fuera del filtro porque vive en
+   otro panel, así que conserva el color de marca. */
+:root:not([data-modo='dia']) .mapa-entrega .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.9);
+}
+
+.mapa-entrega .leaflet-control-attribution {
+  background: color-mix(in srgb, var(--color-superficie) 78%, transparent);
+  color: var(--color-tinta-tenue);
+  font-size: 10px;
+}
+
+.mapa-entrega .leaflet-control-attribution a {
+  color: var(--color-tinta-suave);
+}
+
+.mapa-entrega .leaflet-control-zoom a {
+  background: var(--color-superficie);
+  color: var(--color-tinta);
+  border-color: var(--color-borde);
+}

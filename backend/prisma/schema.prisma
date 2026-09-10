@@ -1,0 +1,475 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["partialIndexes"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model almacen {
+  id_almacen          Int                   @id @default(autoincrement())
+  nombre              String                @unique @db.VarChar(50)
+  tipo_conservacion   String                @unique(map: "ux_almacen_preferido", where: raw("preferido")) @db.VarChar(20)
+  ubicacion_fisica    String?               @db.VarChar(150)
+  preferido           Boolean               @default(false)
+  ingrediente_almacen ingrediente_almacen[]
+  lote_almacen        lote_almacen[]
+  producto_almacen    producto_almacen[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model cargo {
+  id_cargo     Int        @id @default(autoincrement())
+  nombre       String     @unique @db.VarChar(50)
+  salario_base Decimal    @default(0) @db.Decimal(10, 2)
+  empleado     empleado[]
+}
+
+model categoria {
+  id_categoria Int        @id @default(autoincrement())
+  nombre       String     @unique @db.VarChar(50)
+  producto     producto[]
+}
+
+model cliente {
+  id_cliente              Int         @id
+  preferencia_alimentaria String?     @db.VarChar(100)
+  restriccion_dietetica   String?     @db.VarChar(100)
+  usuario                 usuario     @relation(fields: [id_cliente], references: [id_usuario], onDelete: NoAction, onUpdate: NoAction, map: "fk_cliente_usuario")
+  pedido                  pedido[]
+  ubicacion               ubicacion[]
+  venta                   venta[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model detalle_egreso_insumo {
+  id_nota_egreso      Int
+  id_ingrediente      Int
+  id_almacen          Int
+  cantidad            Decimal             @db.Decimal(10, 2)
+  nota_egreso         nota_egreso         @relation(fields: [id_nota_egreso], references: [id_nota_egreso], onDelete: NoAction, onUpdate: NoAction, map: "fk_detegrins_nota")
+  ingrediente_almacen ingrediente_almacen @relation(fields: [id_ingrediente, id_almacen], references: [id_ingrediente, id_almacen], onDelete: NoAction, onUpdate: NoAction, map: "fk_detegrins_stock")
+
+  @@id([id_nota_egreso, id_ingrediente, id_almacen])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model detalle_egreso_producto {
+  id_nota_egreso   Int
+  id_producto      Int
+  id_almacen       Int
+  cantidad         Int
+  nota_egreso      nota_egreso      @relation(fields: [id_nota_egreso], references: [id_nota_egreso], onDelete: NoAction, onUpdate: NoAction, map: "fk_detegrprod_nota")
+  producto_almacen producto_almacen @relation(fields: [id_producto, id_almacen], references: [id_producto, id_almacen], onDelete: NoAction, onUpdate: NoAction, map: "fk_detegrprod_stock")
+
+  @@id([id_nota_egreso, id_producto, id_almacen])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model detalle_ingreso_insumo {
+  id_nota_ingreso     Int
+  id_ingrediente      Int
+  id_almacen          Int
+  cantidad            Decimal             @db.Decimal(10, 2)
+  costo_unitario      Decimal             @db.Decimal(10, 2)
+  nota_ingreso        nota_ingreso        @relation(fields: [id_nota_ingreso], references: [id_nota_ingreso], onDelete: NoAction, onUpdate: NoAction, map: "fk_detingins_nota")
+  ingrediente_almacen ingrediente_almacen @relation(fields: [id_ingrediente, id_almacen], references: [id_ingrediente, id_almacen], onDelete: NoAction, onUpdate: NoAction, map: "fk_detingins_stock")
+
+  @@id([id_nota_ingreso, id_ingrediente, id_almacen])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model detalle_ingreso_producto {
+  id_nota_ingreso  Int
+  id_producto      Int
+  id_almacen       Int
+  cantidad         Int
+  costo_unitario   Decimal          @db.Decimal(10, 2)
+  nota_ingreso     nota_ingreso     @relation(fields: [id_nota_ingreso], references: [id_nota_ingreso], onDelete: NoAction, onUpdate: NoAction, map: "fk_detingprod_nota")
+  producto_almacen producto_almacen @relation(fields: [id_producto, id_almacen], references: [id_producto, id_almacen], onDelete: NoAction, onUpdate: NoAction, map: "fk_detingprod_stock")
+
+  @@id([id_nota_ingreso, id_producto, id_almacen])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model detalle_pedido {
+  id_pedido        Int
+  id_producto      Int
+  id_almacen       Int
+  cantidad         Int
+  precio_unitario  Decimal          @db.Decimal(10, 2)
+  pedido           pedido           @relation(fields: [id_pedido], references: [id_pedido], onDelete: NoAction, onUpdate: NoAction, map: "fk_detpedido_pedido")
+  producto_almacen producto_almacen @relation(fields: [id_producto, id_almacen], references: [id_producto, id_almacen], onDelete: NoAction, onUpdate: NoAction, map: "fk_detpedido_stock")
+
+  @@id([id_pedido, id_producto, id_almacen])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model detalle_receta {
+  id_receta          Int
+  id_ingrediente     Int
+  cantidad_requerida Decimal     @db.Decimal(10, 2)
+  ingrediente        ingrediente @relation(fields: [id_ingrediente], references: [id_ingrediente], onDelete: NoAction, onUpdate: NoAction, map: "fk_detreceta_ingrediente")
+  receta             receta      @relation(fields: [id_receta], references: [id_receta], onDelete: NoAction, onUpdate: NoAction, map: "fk_detreceta_receta")
+
+  @@id([id_receta, id_ingrediente])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model detalle_venta {
+  id_venta         Int
+  id_producto      Int
+  id_almacen       Int
+  cantidad         Int
+  precio_unitario  Decimal          @db.Decimal(10, 2)
+  producto_almacen producto_almacen @relation(fields: [id_producto, id_almacen], references: [id_producto, id_almacen], onDelete: NoAction, onUpdate: NoAction, map: "fk_detventa_stock")
+  venta            venta            @relation(fields: [id_venta], references: [id_venta], onDelete: NoAction, onUpdate: NoAction, map: "fk_detventa_venta")
+
+  @@id([id_venta, id_producto, id_almacen])
+}
+
+model empleado {
+  id_empleado      Int                @id
+  fecha_ingreso    DateTime           @default(dbgenerated("CURRENT_DATE")) @db.Date
+  id_cargo         Int
+  disponible       Boolean            @default(false)
+  cargo            cargo              @relation(fields: [id_cargo], references: [id_cargo], onDelete: NoAction, onUpdate: NoAction, map: "fk_empleado_cargo")
+  usuario          usuario            @relation(fields: [id_empleado], references: [id_usuario], onDelete: NoAction, onUpdate: NoAction, map: "fk_empleado_usuario")
+  nota_egreso      nota_egreso[]
+  nota_ingreso     nota_ingreso[]
+  orden_produccion orden_produccion[]
+  pedido           pedido[]
+  venta            venta[]
+}
+
+model ingrediente {
+  id_ingrediente       Int                   @id @default(autoincrement())
+  nombre               String                @db.VarChar(100)
+  stock_minimo         Decimal               @default(0) @db.Decimal(10, 2)
+  costo_unitario       Decimal               @default(0) @db.Decimal(10, 2)
+  activo               Boolean               @default(true)
+  id_unidad            Int
+  tipo_conservacion    String                @default("Seco") @db.VarChar(20)
+  controla_vencimiento Boolean               @default(false)
+  detalle_receta       detalle_receta[]
+  unidad_medida        unidad_medida         @relation(fields: [id_unidad], references: [id_unidad], onDelete: NoAction, onUpdate: NoAction, map: "fk_ingrediente_unidad")
+  ingrediente_almacen  ingrediente_almacen[]
+  lote                 lote[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model ingrediente_almacen {
+  id_ingrediente         Int
+  id_almacen             Int
+  stock_actual           Decimal                  @default(0) @db.Decimal(10, 2)
+  detalle_egreso_insumo  detalle_egreso_insumo[]
+  detalle_ingreso_insumo detalle_ingreso_insumo[]
+  almacen                almacen                  @relation(fields: [id_almacen], references: [id_almacen], onDelete: NoAction, onUpdate: NoAction, map: "fk_ingalm_almacen")
+  ingrediente            ingrediente              @relation(fields: [id_ingrediente], references: [id_ingrediente], onDelete: NoAction, onUpdate: NoAction, map: "fk_ingalm_ingrediente")
+
+  @@id([id_ingrediente, id_almacen])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model nota_egreso {
+  id_nota_egreso          Int                       @id @default(autoincrement())
+  fecha                   DateTime                  @default(now()) @db.Timestamp(6)
+  motivo                  String                    @db.VarChar(20)
+  observacion             String?                   @db.VarChar(200)
+  id_empleado             Int
+  detalle_egreso_insumo   detalle_egreso_insumo[]
+  detalle_egreso_producto detalle_egreso_producto[]
+  empleado                empleado                  @relation(fields: [id_empleado], references: [id_empleado], onDelete: NoAction, onUpdate: NoAction, map: "fk_notaegr_empleado")
+  orden_produccion        orden_produccion[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model nota_ingreso {
+  id_nota_ingreso          Int                        @id @default(autoincrement())
+  fecha                    DateTime                   @default(now()) @db.Timestamp(6)
+  motivo                   String                     @default("Compra") @db.VarChar(20)
+  proveedor                String?                    @db.VarChar(150)
+  numero_documento         String?                    @db.VarChar(50)
+  total                    Decimal                    @default(0) @db.Decimal(12, 2)
+  id_empleado              Int
+  detalle_ingreso_insumo   detalle_ingreso_insumo[]
+  detalle_ingreso_producto detalle_ingreso_producto[]
+  empleado                 empleado                   @relation(fields: [id_empleado], references: [id_empleado], onDelete: NoAction, onUpdate: NoAction, map: "fk_notaing_empleado")
+  orden_produccion         orden_produccion[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model orden_produccion {
+  id_orden_produccion Int           @id @default(autoincrement())
+  fecha               DateTime      @default(now()) @db.Timestamp(6)
+  id_receta           Int
+  cantidad            Int
+  estado              String        @default("Pendiente") @db.VarChar(15)
+  fecha_finalizacion  DateTime?     @db.Timestamp(6)
+  id_empleado         Int
+  id_nota_egreso      Int?
+  id_nota_ingreso     Int?
+  instantanea         Boolean       @default(false)
+  cantidad_obtenida   Int?
+  costo_total         Decimal?      @db.Decimal(10, 2)
+  nota_egreso         nota_egreso?  @relation(fields: [id_nota_egreso], references: [id_nota_egreso], onDelete: NoAction, onUpdate: NoAction, map: "fk_ordprod_egreso")
+  empleado            empleado      @relation(fields: [id_empleado], references: [id_empleado], onDelete: NoAction, onUpdate: NoAction, map: "fk_ordprod_empleado")
+  nota_ingreso        nota_ingreso? @relation(fields: [id_nota_ingreso], references: [id_nota_ingreso], onDelete: NoAction, onUpdate: NoAction, map: "fk_ordprod_ingreso")
+  receta              receta        @relation(fields: [id_receta], references: [id_receta], onDelete: NoAction, onUpdate: NoAction, map: "fk_ordprod_receta")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model pedido {
+  id_pedido       Int              @id @default(autoincrement())
+  fecha           DateTime         @default(now()) @db.Timestamp(6)
+  estado_pedido   String           @default("Recibido") @db.VarChar(20)
+  estado_pago     String           @default("Pendiente") @db.VarChar(20)
+  metodo_pago     String           @db.VarChar(20)
+  referencia_pago String?          @db.VarChar(100)
+  total           Decimal          @db.Decimal(12, 2)
+  fecha_entrega   DateTime?        @db.Timestamp(6)
+  id_cliente      Int
+  id_ubicacion    Int
+  id_repartidor   Int?
+  detalle_pedido  detalle_pedido[]
+  pago            pago[]
+  cliente         cliente          @relation(fields: [id_cliente], references: [id_cliente], onDelete: NoAction, onUpdate: NoAction, map: "fk_pedido_cliente")
+  empleado        empleado?        @relation(fields: [id_repartidor], references: [id_empleado], onDelete: NoAction, onUpdate: NoAction, map: "fk_pedido_repartidor")
+  ubicacion       ubicacion        @relation(fields: [id_ubicacion], references: [id_ubicacion], onDelete: NoAction, onUpdate: NoAction, map: "fk_pedido_ubicacion")
+}
+
+model permiso {
+  id_permiso  Int           @id @default(autoincrement())
+  nombre      String        @unique @db.VarChar(50)
+  rol_permiso rol_permiso[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model producto {
+  id_producto       Int                @id @default(autoincrement())
+  nombre            String             @db.VarChar(100)
+  descripcion       String?            @db.VarChar(250)
+  precio_venta      Decimal            @db.Decimal(10, 2)
+  activo            Boolean            @default(true)
+  id_categoria      Int
+  tipo_conservacion String             @default("Seco") @db.VarChar(20)
+  categoria         categoria          @relation(fields: [id_categoria], references: [id_categoria], onDelete: NoAction, onUpdate: NoAction, map: "fk_producto_categoria")
+  producto_almacen  producto_almacen[]
+  receta            receta?
+  valor_nutricional valor_nutricional?
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model producto_almacen {
+  id_producto              Int
+  id_almacen               Int
+  stock_actual             Int                        @default(0)
+  detalle_egreso_producto  detalle_egreso_producto[]
+  detalle_ingreso_producto detalle_ingreso_producto[]
+  detalle_pedido           detalle_pedido[]
+  detalle_venta            detalle_venta[]
+  almacen                  almacen                    @relation(fields: [id_almacen], references: [id_almacen], onDelete: NoAction, onUpdate: NoAction, map: "fk_prodalm_almacen")
+  producto                 producto                   @relation(fields: [id_producto], references: [id_producto], onDelete: NoAction, onUpdate: NoAction, map: "fk_prodalm_producto")
+
+  @@id([id_producto, id_almacen])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model receta {
+  id_receta                  Int                @id @default(autoincrement())
+  nombre                     String             @db.VarChar(100)
+  rendimiento                Int                @default(1)
+  tiempo_preparacion_minutos Int
+  instrucciones              String?            @db.VarChar(500)
+  activa                     Boolean            @default(true)
+  id_producto                Int                @unique(map: "ux_receta_activa", where: raw("activa"))
+  divisible                  Boolean            @default(true)
+  detalle_receta             detalle_receta[]
+  orden_produccion           orden_produccion[]
+  producto                   producto           @relation(fields: [id_producto], references: [id_producto], onDelete: NoAction, onUpdate: NoAction, map: "fk_receta_producto")
+}
+
+model rol {
+  id_rol      Int           @id @default(autoincrement())
+  nombre      String        @unique @db.VarChar(50)
+  rol_permiso rol_permiso[]
+  usuario     usuario[]
+}
+
+model rol_permiso {
+  id_rol_permiso      Int                   @id @default(autoincrement())
+  id_rol              Int
+  id_permiso          Int
+  permiso             permiso               @relation(fields: [id_permiso], references: [id_permiso], onDelete: NoAction, onUpdate: NoAction, map: "fk_rol_permiso_permiso")
+  rol                 rol                   @relation(fields: [id_rol], references: [id_rol], onDelete: NoAction, onUpdate: NoAction, map: "fk_rol_permiso_rol")
+  usuario_rol_permiso usuario_rol_permiso[]
+
+  @@unique([id_rol, id_permiso], map: "uq_rol_permiso")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model ubicacion {
+  id_ubicacion   Int      @id @default(autoincrement())
+  calle          String   @db.VarChar(150)
+  numero         String?  @db.VarChar(20)
+  referencia     String?  @db.VarChar(150)
+  latitud        Decimal? @db.Decimal(8, 6)
+  longitud       Decimal? @db.Decimal(9, 6)
+  etiqueta       String?  @db.VarChar(50)
+  id_cliente     Int?
+  vigente        Boolean  @default(true)
+  fecha_registro DateTime @default(now()) @db.Timestamp(6)
+  pedido         pedido[]
+  cliente        cliente? @relation(fields: [id_cliente], references: [id_cliente], onDelete: NoAction, onUpdate: NoAction, map: "fk_ubicacion_cliente")
+
+  @@index([id_cliente], map: "ix_ubicacion_cliente", where: raw("vigente"))
+}
+
+model unidad_medida {
+  id_unidad   Int           @id @default(autoincrement())
+  nombre      String        @unique @db.VarChar(20)
+  abreviatura String        @db.VarChar(5)
+  ingrediente ingrediente[]
+}
+
+model usuario {
+  id_usuario          Int                   @id @default(autoincrement())
+  nombre              String                @db.VarChar(100)
+  apellido            String                @db.VarChar(100)
+  email               String                @unique @db.VarChar(150)
+  telefono            String?               @db.VarChar(20)
+  nombre_usuario      String                @unique @db.VarChar(50)
+  contrasena_hash     String                @db.VarChar(255)
+  intentos_fallidos   Int                   @default(0)
+  bloqueado           Boolean               @default(false)
+  fecha_bloqueo       DateTime?             @db.Timestamp(6)
+  activo              Boolean               @default(true)
+  fecha_registro      DateTime              @default(now()) @db.Timestamp(6)
+  id_rol              Int
+  ultimo_acceso       DateTime?             @db.Timestamp(6)
+  cliente             cliente?
+  configuracion       configuracion[]
+  empleado            empleado?
+  rol                 rol                   @relation(fields: [id_rol], references: [id_rol], onDelete: NoAction, onUpdate: NoAction, map: "fk_usuario_rol")
+  usuario_rol_permiso usuario_rol_permiso[]
+}
+
+model usuario_rol_permiso {
+  id_usuario_rol_permiso Int         @id @default(autoincrement())
+  id_usuario             Int
+  id_rol_permiso         Int
+  rol_permiso            rol_permiso @relation(fields: [id_rol_permiso], references: [id_rol_permiso], onDelete: NoAction, onUpdate: NoAction, map: "fk_urp_rol_permiso")
+  usuario                usuario     @relation(fields: [id_usuario], references: [id_usuario], onDelete: NoAction, onUpdate: NoAction, map: "fk_urp_usuario")
+
+  @@unique([id_usuario, id_rol_permiso], map: "uq_usuario_rol_permiso")
+}
+
+model valor_nutricional {
+  id_producto     Int      @id
+  calorias        Int
+  proteinas_g     Decimal  @db.Decimal(6, 2)
+  carbohidratos_g Decimal  @db.Decimal(6, 2)
+  grasas_g        Decimal  @db.Decimal(6, 2)
+  fibra_g         Decimal? @db.Decimal(6, 2)
+  producto        producto @relation(fields: [id_producto], references: [id_producto], onDelete: Cascade, onUpdate: NoAction, map: "fk_valnut_producto")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model venta {
+  id_venta      Int             @id @default(autoincrement())
+  fecha         DateTime        @default(now()) @db.Timestamp(6)
+  tipo_venta    String          @default("Mesa") @db.VarChar(10)
+  metodo_pago   String          @db.VarChar(20)
+  total         Decimal         @db.Decimal(12, 2)
+  id_cliente    Int?
+  id_empleado   Int
+  estado_pago   String          @default("Pagado") @db.VarChar(20)
+  detalle_venta detalle_venta[]
+  pago          pago[]
+  cliente       cliente?        @relation(fields: [id_cliente], references: [id_cliente], onDelete: NoAction, onUpdate: NoAction, map: "fk_venta_cliente")
+  empleado      empleado        @relation(fields: [id_empleado], references: [id_empleado], onDelete: NoAction, onUpdate: NoAction, map: "fk_venta_empleado")
+}
+
+model visita {
+  id_visita Int      @id @default(autoincrement())
+  fecha     DateTime @default(now()) @db.Timestamp(6)
+  ruta      String?  @db.VarChar(200)
+}
+
+model lote {
+  id_lote           Int            @id @default(autoincrement())
+  codigo            String?        @db.VarChar(50)
+  fecha_vencimiento DateTime       @db.Date
+  fecha_registro    DateTime       @default(now()) @db.Timestamp(6)
+  id_ingrediente    Int
+  ingrediente       ingrediente    @relation(fields: [id_ingrediente], references: [id_ingrediente], onDelete: NoAction, onUpdate: NoAction, map: "fk_lote_ingrediente")
+  lote_almacen      lote_almacen[]
+
+  @@index([id_ingrediente], map: "ix_lote_ingrediente")
+  @@index([fecha_vencimiento], map: "ix_lote_vencimiento")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model lote_almacen {
+  id_lote      Int
+  id_almacen   Int
+  stock_actual Decimal @default(0) @db.Decimal(10, 2)
+  almacen      almacen @relation(fields: [id_almacen], references: [id_almacen], onDelete: NoAction, onUpdate: NoAction, map: "fk_lotealm_almacen")
+  lote         lote    @relation(fields: [id_lote], references: [id_lote], onDelete: NoAction, onUpdate: NoAction, map: "fk_lotealm_lote")
+
+  @@id([id_lote, id_almacen])
+  @@index([id_almacen], map: "ix_lotealm_almacen")
+}
+
+model configuracion {
+  clave          String   @id @db.VarChar(50)
+  valor          String   @db.VarChar(200)
+  descripcion    String?  @db.VarChar(200)
+  actualizado_en DateTime @default(now()) @db.Timestamp(6)
+  id_usuario     Int?
+  usuario        usuario? @relation(fields: [id_usuario], references: [id_usuario], onDelete: NoAction, onUpdate: NoAction, map: "fk_config_usuario")
+
+  @@index([id_usuario], map: "ix_config_usuario")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model evento_pago {
+  id_evento   Int      @id @default(autoincrement())
+  id_pago     Int
+  tipo        String   @db.VarChar(30)
+  origen      String   @db.VarChar(20)
+  cuerpo      String
+  recibido_en DateTime @default(now()) @db.Timestamp(6)
+  pago        pago     @relation(fields: [id_pago], references: [id_pago], onDelete: NoAction, onUpdate: NoAction, map: "fk_evento_pago")
+
+  @@index([id_pago], map: "ix_evento_pago")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model pago {
+  id_pago            Int           @id @default(autoincrement())
+  monto              Decimal       @db.Decimal(12, 2)
+  moneda             String        @default("BOB") @db.Char(3)
+  metodo             String        @db.VarChar(20)
+  estado             String        @default("Pendiente") @db.VarChar(20)
+  modo               String        @db.VarChar(10)
+  pasarela           String        @db.VarChar(30)
+  id_transaccion_ext String?       @db.VarChar(100)
+  datos_cobro        String?
+  fecha_creacion     DateTime      @default(now()) @db.Timestamp(6)
+  fecha_expiracion   DateTime?     @db.Timestamp(6)
+  fecha_confirmacion DateTime?     @db.Timestamp(6)
+  id_venta           Int?
+  id_pedido          Int?
+  evento_pago        evento_pago[]
+  pedido             pedido?       @relation(fields: [id_pedido], references: [id_pedido], onDelete: NoAction, onUpdate: NoAction, map: "fk_pago_pedido")
+  venta              venta?        @relation(fields: [id_venta], references: [id_venta], onDelete: NoAction, onUpdate: NoAction, map: "fk_pago_venta")
+
+  @@unique([pasarela, id_transaccion_ext], map: "ux_pago_transaccion_ext", where: raw("(id_transaccion_ext IS NOT NULL)"))
+  @@index([estado], map: "ix_pago_estado")
+  @@index([fecha_creacion(sort: Desc)], map: "ix_pago_fecha")
+  @@index([id_pedido], map: "ix_pago_pedido")
+  @@index([id_venta], map: "ix_pago_venta")
+}

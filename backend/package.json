@@ -1,0 +1,57 @@
+{
+  "name": "nutriexpress-backend",
+  "version": "1.0.0",
+  "description": "API REST del Sistema de Información Web para la Gestión de Ventas, Pedidos, Producción e Inventario - NutriExpress",
+  "main": "dist/server.js",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "typecheck": "tsc --noEmit",
+    "db:pull": "prisma db pull",
+    "db:generate": "prisma generate",
+    "db:studio": "prisma studio",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:db": "tsx tests/preparar-bd.ts"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.10.0",
+    "@prisma/client": "7.10.0",
+    "@types/nodemailer": "^8.0.1",
+    "@types/pdfkit": "^0.17.6",
+    "@types/qrcode": "^1.5.6",
+    "bcrypt": "6.0.0",
+    "cors": "2.8.6",
+    "dotenv": "17.4.2",
+    "express": "5.2.1",
+    "express-rate-limit": "^8.7.0",
+    "helmet": "^8.3.0",
+    "jsonwebtoken": "9.0.3",
+    "nodemailer": "^10.0.1",
+    "pdfkit": "^0.20.2",
+    "qrcode": "^1.5.4",
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "@types/bcrypt": "6.0.0",
+    "@types/cors": "2.8.19",
+    "@types/express": "5.0.6",
+    "@types/jsonwebtoken": "9.0.10",
+    "@types/node": "22.20.1",
+    "@types/pg": "^8.23.1",
+    "@types/supertest": "^7.2.1",
+    "prisma": "7.10.0",
+    "supertest": "^7.2.2",
+    "tsx": "4.23.13",
+    "typescript": "6.0.3",
+    "vitest": "^4.1.11"
+  },
+  "overrides": {
+    "deepmerge-ts": "8.0.2"
+  }
+}
