@@ -11,8 +11,16 @@
  */
 
 export interface Mensaje {
-  /** Destinatario. Una sola dirección: los avisos del sistema son personales. */
-  para: string;
+  /**
+   * Destinatarios.
+   *
+   * Es una lista y no una dirección suelta porque un reporte se manda **a
+   * quien lo necesita**, y eso suele ser más de una persona: gerencia y
+   * contabilidad quieren el mismo cierre de ventas. Los avisos de pedido
+   * siguen llevando un solo destinatario —son personales—, pero el contrato
+   * es uno solo para no tener dos formas de enviar.
+   */
+  para: string[];
   asunto: string;
   /** Cuerpo en texto plano. Es el que se lee si el cliente bloquea el HTML. */
   texto: string;

@@ -30,7 +30,7 @@ const rangoDeHoy = { desde: hoy(), hasta: hoy() };
  * plano y pueden depositarse después del reporte.
  */
 const correoPara = (destinatario: string) =>
-  MensajeroSimulado.enviados.filter((c) => c.para === destinatario).at(-1);
+  MensajeroSimulado.enviados.filter((c) => c.para.includes(destinatario)).at(-1);
 
 const consultar = (ruta: string, token: string, filtros: Record<string, unknown> = {}) =>
   request(app)

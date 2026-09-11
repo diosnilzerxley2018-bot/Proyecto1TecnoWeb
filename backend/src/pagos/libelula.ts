@@ -17,7 +17,13 @@ import type {
  * ─────────────────────────────────────────────────────────────────────────
  * Los extremos y los nombres de los campos de **envío** están tomados de la
  * guía de integración pública de Libélula. Lo que sigue marcado como
- * `CONFIRMAR` son los campos de **respuesta** y el detalle del aviso de pago,
+ * **Verificado contra la API real** (septiembre de 2026): el registro de deuda
+ * y los nombres de su respuesta. Queda marcado `CONFIRMAR` lo que no se pudo
+ * comprobar sin la guía de integración: el contenido exacto del aviso de pago
+ * y la consulta de estado, cuyo parámetro el servidor rechaza con todos los
+ * nombres probados.
+ *
+ * `CONFIRMAR` son el detalle del aviso de pago,
  * que la guía describe en tablas que no pudieron leerse del PDF público.
  *
  * No están rellenados a ojo a propósito: un nombre de campo adivinado da la
@@ -160,10 +166,18 @@ export class PasarelaLibelula implements PasarelaPago {
       ],
     };
 
+    /*
+     * Nombres verificados contra una respuesta real de `/rest/deuda/registrar`
+     * (ambiente de pruebas, septiembre de 2026). La respuesta completa trae
+     * además `codigo_recaudacion`, `qr_simple_url` y `monto_total`.
+     */
     const datos = (await this.pedir('/rest/deuda/registrar', cuerpo)) as {
-      // CONFIRMAR: nombres exactos de la respuesta contra la guía de integración.
       id_transaccion?: string;
-      url_pasarela?: string;
+      /** Dirección de la pasarela. Es `url_pasarela_pagos`, no `url_pasarela`. */
+      url_pasarela_pagos?: string;
+      /** El QR ya dibujado, en PNG base64. Libélula lo genera por su cuenta. */
+      qr_simple_base64?: string;
+      codigo_recaudacion?: string;
       error?: number;
       mensaje?: string;
     };
@@ -173,22 +187,30 @@ export class PasarelaLibelula implements PasarelaPago {
     }
 
     const idTransaccion = datos.id_transaccion;
-    const urlPago = datos.url_pasarela;
+    const urlPago = datos.url_pasarela_pagos;
 
     if (!idTransaccion || !urlPago) {
       throw new ErrorApp(
         502,
-        'Libélula no devolvió el identificador de la transacción o la dirección de pago. ' +
-          'Revise los nombres de campo marcados CONFIRMAR en libelula.ts.',
+        'Libélula no devolvió el identificador de la transacción o la dirección de pago: ' +
+          (datos.mensaje ?? 'respuesta inesperada'),
       );
     }
 
     testigos.set(idTransaccion, testigo);
 
+    /*
+     * Libélula devuelve el QR ya dibujado, así que se prefiere sobre la
+     * dirección: el cliente escanea desde la app de su banco sin salir del
+     * sistema. La dirección queda como respaldo para quien pague con tarjeta,
+     * que es lo que esa pantalla ofrece.
+     */
     return {
       idTransaccionExterna: idTransaccion,
-      datosCobro: urlPago,
-      tipoDatos: 'url',
+      datosCobro: datos.qr_simple_base64
+        ? `data:image/png;base64,${datos.qr_simple_base64}`
+        : urlPago,
+      tipoDatos: datos.qr_simple_base64 ? 'qr' : 'url',
       expiraEn: new Date(Date.now() + env.pago.minutosExpiracion * 60_000),
     };
   }

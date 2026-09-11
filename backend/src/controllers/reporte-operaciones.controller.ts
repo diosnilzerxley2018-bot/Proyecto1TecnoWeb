@@ -114,7 +114,8 @@ export const pdf = (nombre: NombreReporte) => async (req: Request, res: Response
 
 /** El PDF adjunto a un correo. */
 export const enviar = (nombre: NombreReporte) => async (req: Request, res: Response) => {
-  const { para, ...resto } = req.body as { para: string };
+  // `validarCuerpo` ya normalizó `para` a lista, venga como cadena o como arreglo.
+  const { para, ...resto } = req.body as { para: string[] };
 
   res.json(
     await entrega.porCorreo(

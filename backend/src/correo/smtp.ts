@@ -75,7 +75,7 @@ export class MensajeroSmtp implements Mensajero {
       return { enviado: true, referencia: info.messageId ?? null };
     } catch (error) {
       const motivo = error instanceof Error ? error.message : 'error desconocido';
-      console.error(`[correo] falló el envío a ${mensaje.para}: ${motivo}`);
+      console.error(`[correo] falló el envío a ${mensaje.para.join(', ')}: ${motivo}`);
       return { enviado: false, referencia: null, motivo };
     }
   }

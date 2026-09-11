@@ -41,7 +41,7 @@ afterEach(() => {
 });
 
 const mensaje = {
-  para: 'cliente@correo.bo',
+  para: ['cliente@correo.bo'],
   asunto: 'Pedido confirmado',
   texto: 'Su pedido fue recibido.',
 };

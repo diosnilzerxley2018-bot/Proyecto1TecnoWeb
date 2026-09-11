@@ -75,7 +75,8 @@ export class MensajeroBrevo implements Mensajero {
         signal: reloj,
         body: JSON.stringify({
           sender: separarRemitente(env.correo.remitente),
-          to: [{ email: mensaje.para }],
+          // La API recibe la lista completa: un solo envío con varios `To`.
+          to: mensaje.para.map((email) => ({ email })),
           subject: mensaje.asunto,
           textContent: mensaje.texto,
           ...(mensaje.html ? { htmlContent: mensaje.html } : {}),
@@ -98,7 +99,7 @@ export class MensajeroBrevo implements Mensajero {
         // El mensaje de Brevo dice qué pasó —cuota agotada, remitente sin
         // verificar, clave inválida—, y es lo único que permite corregirlo.
         const motivo = cuerpo.message ?? `Brevo respondió ${respuesta.status}`;
-        console.error(`[correo] falló el envío a ${mensaje.para}: ${motivo}`);
+        console.error(`[correo] falló el envío a ${mensaje.para.join(', ')}: ${motivo}`);
         return { enviado: false, referencia: null, motivo };
       }
 
@@ -111,7 +112,7 @@ export class MensajeroBrevo implements Mensajero {
             ? error.message
             : 'error desconocido';
 
-      console.error(`[correo] falló el envío a ${mensaje.para}: ${motivo}`);
+      console.error(`[correo] falló el envío a ${mensaje.para.join(', ')}: ${motivo}`);
       return { enviado: false, referencia: null, motivo };
     }
   }

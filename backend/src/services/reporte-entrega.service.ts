@@ -36,7 +36,7 @@ export async function descargable(
  * caído no invalida el reporte, y quien lo pidió merece saber qué pasó.
  */
 export async function porCorreo(
-  para: string,
+  para: string[],
   entrega: EntregaReporte,
 ): Promise<{ enviado: boolean; motivo?: string }> {
   return avisoService.reporte({

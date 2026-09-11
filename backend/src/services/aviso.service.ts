@@ -77,7 +77,8 @@ export async function pedidoConfirmado(datos: DatosPedidoAviso): Promise<void> {
   const numero = numeroDe(datos.id);
 
   await mensajero().enviar({
-    para: datos.correoCliente,
+    // Un aviso de pedido es personal: un solo destinatario.
+    para: [datos.correoCliente],
     asunto: `Recibimos su pedido ${numero}`,
     texto:
       `Hola ${datos.nombreCliente}:\n\n` +
@@ -109,7 +110,8 @@ export async function estadoDePedidoCambio(
   const numero = numeroDe(datos.id);
 
   await mensajero().enviar({
-    para: datos.correoCliente,
+    // Un aviso de pedido es personal: un solo destinatario.
+    para: [datos.correoCliente],
     asunto: `${aviso.asunto} · ${numero}`,
     texto: `Hola ${datos.nombreCliente}:\n\n${aviso.cuerpo}\n\nPedido ${numero}\n\n${NOMBRE}`,
     html: plantilla(
@@ -123,7 +125,8 @@ export async function estadoDePedidoCambio(
 
 /** Envía un reporte ya generado, como adjunto. */
 export async function reporte(datos: {
-  para: string;
+  /** Uno o varios: un reporte se manda a quien lo necesita. */
+  para: string[];
   titulo: string;
   descripcion: string;
   adjunto: Adjunto;

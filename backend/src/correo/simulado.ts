@@ -26,7 +26,7 @@ export class MensajeroSimulado implements Mensajero {
       MensajeroSimulado.MAXIMO,
     );
 
-    console.info(`[correo simulado] para ${mensaje.para} · ${mensaje.asunto}`);
+    console.info(`[correo simulado] para ${mensaje.para.join(', ')} · ${mensaje.asunto}`);
 
     return { enviado: true, referencia: `SIM-${Date.now()}` };
   }

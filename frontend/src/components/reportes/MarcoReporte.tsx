@@ -76,6 +76,18 @@ export function MarcoReporte<R>({
   const [dialogoCorreo, setDialogoCorreo] = useState(false);
   const [destino, setDestino] = useState('');
 
+  /**
+   * Cuántas direcciones se escribieron.
+   *
+   * Sirve para habilitar el botón y para decir en la ayuda qué va a pasar: sin
+   * eso, quien escribe dos correos no sabe si recibirá uno cada quien o si el
+   * segundo se ignora.
+   */
+  const cuantos = destino
+    .split(',')
+    .map((c) => c.trim())
+    .filter((c) => c.includes('@')).length;
+
   // Los filtros llegan como objeto nuevo en cada dibujo; se comparan por su
   // contenido para que la consulta se repita cuando cambian de verdad y no en
   // cada render.
@@ -132,12 +144,18 @@ export function MarcoReporte<R>({
           desde,
           hasta,
           ...(JSON.parse(claveFiltros) as FiltrosReporte),
+          // El servidor separa por coma y valida cada dirección.
           para: destino.trim(),
         },
       );
 
       if (r.enviado) {
-        notificar('exito', `Reporte enviado a ${destino.trim()}`);
+        notificar(
+          'exito',
+          cuantos > 1
+            ? `Reporte enviado a ${cuantos} cuentas`
+            : `Reporte enviado a ${destino.trim()}`,
+        );
         setDialogoCorreo(false);
         setDestino('');
       } else {
@@ -227,14 +245,23 @@ export function MarcoReporte<R>({
         ancho="max-w-md"
       >
         <div className="space-y-4">
+          {/*
+            Uno o varios destinatarios, separados por coma. El tipo es `text` y
+            no `email` a propósito: un campo `email` rechaza la coma y no
+            dejaría escribir más de una dirección.
+          */}
           <Campo
-            etiqueta="Correo del destinatario"
-            type="email"
+            etiqueta="Correo de los destinatarios"
+            type="text"
             required
             value={destino}
             onChange={(e) => setDestino(e.target.value)}
-            placeholder="gerencia@tecnologia.web"
-            ayuda="El reporte va adjunto en PDF"
+            placeholder="gerencia@tecnologia.web, contabilidad@tecnologia.web"
+            ayuda={
+              cuantos > 1
+                ? `El mismo PDF llegará a ${cuantos} cuentas, en un solo correo`
+                : 'Separe con comas para enviarlo a varias cuentas. Va adjunto en PDF'
+            }
           />
 
           <div className="flex justify-end gap-2">
@@ -244,7 +271,7 @@ export function MarcoReporte<R>({
             <Boton
               variante="primario"
               cargando={enviando}
-              disabled={!destino.includes('@')}
+              disabled={cuantos === 0}
               onClick={enviarPorCorreo}
               icono={<Send className="size-4" aria-hidden />}
             >

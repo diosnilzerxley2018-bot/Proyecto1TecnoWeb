@@ -57,7 +57,7 @@ describe('Aviso al confirmar el pedido', () => {
 
     const aviso = MensajeroSimulado.enviados[0];
     expect(aviso).toBeDefined();
-    expect(aviso.para).toBe(`${cliente.nombreUsuario}@correo.bo`);
+    expect(aviso.para).toEqual([`${cliente.nombreUsuario}@correo.bo`]);
     expect(aviso.asunto).toContain(String(pedido.body.id).padStart(5, '0'));
   });
 

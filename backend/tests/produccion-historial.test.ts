@@ -181,30 +181,52 @@ describe('H6 · Una orden finalizada conserva lo que consumió', () => {
     );
     expect(antesDeEditar.length).toBeGreaterThan(0);
 
-    // Se duplica la cantidad de cada insumo de la receta.
     const receta = await request(app).get(`/api/recetas/${idReceta}`).set(cabecera(staff));
-    const editada = await request(app)
-      .put(`/api/recetas/${idReceta}`)
-      .set(cabecera(staff))
-      .send({
-        nombre: receta.body.nombre,
-        rendimiento: receta.body.rendimiento,
-        idProducto,
-        insumos: receta.body.insumos.map(
-          (i: { idIngrediente: number; cantidadRequerida: number }) => ({
-            idIngrediente: i.idIngrediente,
-            cantidadRequerida: i.cantidadRequerida * 2,
-          }),
-        ),
-      });
-    expect(editada.status).toBe(200);
+    const original = receta.body.insumos as {
+      idIngrediente: number;
+      cantidadRequerida: number;
+    }[];
 
-    const despues = await request(app).get(`/api/ordenes/${id}`).set(cabecera(staff));
-    const despuesDeEditar = despues.body.insumosRequeridos.map(
-      (i: { nombre: string; cantidadRequerida: number }) => [i.nombre, i.cantidadRequerida],
-    );
+    /** Reescribe la receta con las cantidades que se le pasen. */
+    const reescribir = (
+      insumos: { idIngrediente: number; cantidadRequerida: number }[],
+    ) =>
+      request(app)
+        .put(`/api/recetas/${idReceta}`)
+        .set(cabecera(staff))
+        .send({
+          nombre: receta.body.nombre,
+          rendimiento: receta.body.rendimiento,
+          idProducto,
+          insumos,
+        });
 
-    expect(despuesDeEditar).toEqual(antesDeEditar);
+    try {
+      // Se duplica la cantidad de cada insumo de la receta.
+      const editada = await reescribir(
+        original.map((i) => ({
+          idIngrediente: i.idIngrediente,
+          cantidadRequerida: i.cantidadRequerida * 2,
+        })),
+      );
+      expect(editada.status).toBe(200);
+
+      const despues = await request(app).get(`/api/ordenes/${id}`).set(cabecera(staff));
+      const despuesDeEditar = despues.body.insumosRequeridos.map(
+        (i: { nombre: string; cantidadRequerida: number }) => [i.nombre, i.cantidadRequerida],
+      );
+
+      expect(despuesDeEditar).toEqual(antesDeEditar);
+    } finally {
+      /*
+       * La receta vuelve a como estaba, pase lo que pase.
+       *
+       * Toda la suite comparte una sola base y corre en serie: una receta que
+       * queda con el doble de insumos hace fallar a las pruebas de producción
+       * que corran después, y el fallo aparece lejos de su causa.
+       */
+      await reescribir(original);
+    }
   });
 
   /** Para una orden que aún no se ejecutó, la receta vigente sí es la respuesta. */

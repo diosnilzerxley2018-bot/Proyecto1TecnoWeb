@@ -20,8 +20,9 @@ Saltarse el orden obliga a volver atrás a corregir variables.
 
 En Railway: **New → Database → PostgreSQL**. No hay nada que configurar.
 
-Railway crea la variable `DATABASE_URL` y la comparte con los demás servicios
-del mismo proyecto, así que el backend la recibe sola.
+Railway crea `DATABASE_URL` **dentro del servicio Postgres**, y no la comparte
+sola con los demás. El backend la recibe con una *variable de referencia*, que
+se configura en el paso siguiente.
 
 ## 2. El backend
 
@@ -46,14 +47,22 @@ partir del esquema.
 En **Variables**, y como mínimo:
 
 ```
+DATABASE_URL=${{Postgres.DATABASE_URL}}
 JWT_SECRET=<una cadena larga y aleatoria, distinta de la de desarrollo>
 NODE_ENV=production
 CORREO_MODO=simulado
 CORS_ORIGIN=http://localhost:3000
 ```
 
-`DATABASE_URL` y `PORT` las pone Railway. `CORS_ORIGIN` se corrige en el paso 4,
-cuando exista la dirección de Vercel.
+Las llaves dobles de `DATABASE_URL` no son un ejemplo a rellenar: **se escriben
+tal cual**. Es una referencia a la variable del servicio Postgres, y así el día
+que Railway rote la contraseña de la base, el backend la sigue.
+
+`PORT` la pone Railway sola. `CORS_ORIGIN` se corrige en el paso 4, cuando
+exista la dirección de Vercel.
+
+> El nombre `Postgres` dentro de las llaves es el del servicio en tu proyecto.
+> Si lo renombraste, usa el nombre que tenga.
 
 > **`JWT_SECRET` tiene que ser distinta de la de desarrollo.** Con la misma, un
 > token firmado en cualquier máquina donde esté el `.env` abre la sesión en

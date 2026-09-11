@@ -42,12 +42,43 @@ export const esquemaReporteVentas = z
   .refine(rangoOrdenado, MENSAJE_ORDEN)
   .refine(rangoAcotado, MENSAJE_TOPE);
 
-/** Envío por correo: el mismo reporte, con el destinatario. */
+/**
+ * Destinatarios de un reporte: **uno o varios**.
+ *
+ * El requisito lo pide así, y tiene sentido de negocio: un cierre de ventas lo
+ * quieren gerencia y contabilidad a la vez, y obligar a repetir el envío haría
+ * que cada quien reciba un PDF distinto si alguien registró algo entre los dos
+ * clics.
+ *
+ * Se admite una cadena con las direcciones separadas por coma —que es como se
+ * escriben en un campo de texto— o una lista ya formada, y se normaliza a
+ * lista. Aceptar solo una de las dos formas obligaría a la interfaz a conocer
+ * un detalle del contrato que no le aporta nada.
+ */
+const TOPE_DESTINATARIOS = 5;
+
+export const destinatariosDeReporte = z
+  .union([z.string(), z.array(z.string())])
+  .transform((valor) =>
+    (Array.isArray(valor) ? valor : valor.split(','))
+      .map((c) => c.trim())
+      .filter(Boolean),
+  )
+  .pipe(
+    z
+      .array(z.email('indique correos válidos'))
+      .min(1, 'indique al menos un destinatario')
+      // Un tope, porque el reporte lleva un PDF y la cuota de envío es
+      // limitada: sin él, un envío puede agotarla para todo el día.
+      .max(TOPE_DESTINATARIOS, `No se puede enviar a más de ${TOPE_DESTINATARIOS} correos`),
+  );
+
+/** Envío por correo: el mismo reporte, con sus destinatarios. */
 export const esquemaEnviarReporte = z.object({
   desde: z.iso.date(),
   hasta: z.iso.date(),
   idProducto: z.coerce.number().int().positive().optional(),
-  para: z.email('indique un correo válido'),
+  para: destinatariosDeReporte,
 });
 
 export type DatosReporteVentas = z.infer<typeof esquemaReporteVentas>;
@@ -232,7 +263,7 @@ export interface ReporteInventarioDTO {
  * reporte sin filtrar.
  */
 export const esquemaDestinatarioReporte = z.looseObject({
-  para: z.email('indique un correo válido'),
+  para: destinatariosDeReporte,
 });
 
 export type DatosReportePedidos = z.infer<typeof esquemaReportePedidos>;

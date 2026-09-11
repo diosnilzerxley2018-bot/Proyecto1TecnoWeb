@@ -245,7 +245,7 @@ describe('Envío por correo', () => {
     expect(r.body.enviado).toBe(true);
 
     const correo = MensajeroSimulado.enviados[0];
-    expect(correo.para).toBe(destino);
+    expect(correo.para).toEqual([destino]);
     expect(correo.asunto).toContain('Reporte de ventas');
     expect(correo.adjuntos).toHaveLength(1);
     expect(correo.adjuntos![0].tipo).toBe('application/pdf');
@@ -277,4 +277,125 @@ describe('Envío por correo', () => {
 
     expect(r.status).toBe(400);
   });
+});
+
+describe('Envío a una o varias cuentas', () => {
+  /**
+   * El requisito lo pide literalmente: *"el resultado del reporte debe poderse
+   * enviar a **una o varias cuentas** del servidor de correo en formato pdf"*.
+   *
+   * Y tiene sentido de negocio: un cierre de ventas lo quieren gerencia y
+   * contabilidad a la vez. Obligar a repetir el envío haría que cada quien
+   * reciba un PDF distinto si alguien registró una venta entre los dos clics.
+   */
+  it('manda un solo correo a varios destinatarios', async () => {
+    const staff = await obtenerToken();
+    MensajeroSimulado.vaciar();
+
+    const destinos = [
+      `gerencia${sufijo()}@tecnologia.web`,
+      `contabilidad${sufijo()}@tecnologia.web`,
+      `ventas${sufijo()}@tecnologia.web`,
+    ];
+
+    const r = await request(app)
+      .post('/api/reportes/ventas/enviar')
+      .set(cabecera(staff))
+      .send({ desde: hoy(), hasta: hoy(), para: destinos });
+
+    expect(r.status).toBe(200);
+    expect(r.body.enviado).toBe(true);
+
+    // Un solo mensaje con los tres, no tres mensajes: así los tres reciben
+    // exactamente el mismo PDF.
+    expect(MensajeroSimulado.enviados).toHaveLength(1);
+    expect(MensajeroSimulado.enviados[0].para).toEqual(destinos);
+    expect(MensajeroSimulado.enviados[0].adjuntos?.[0].tipo).toBe('application/pdf');
+  });
+
+  /** Escribirlos separados por coma es lo natural en un campo de texto. */
+  it('acepta las direcciones separadas por coma', async () => {
+    const staff = await obtenerToken();
+    MensajeroSimulado.vaciar();
+
+    const uno = `uno${sufijo()}@tecnologia.web`;
+    const dos = `dos${sufijo()}@tecnologia.web`;
+
+    await request(app)
+      .post('/api/reportes/ventas/enviar')
+      .set(cabecera(staff))
+      .send({ desde: hoy(), hasta: hoy(), para: `${uno}, ${dos}` })
+      .expect(200);
+
+    expect(MensajeroSimulado.enviados[0].para).toEqual([uno, dos]);
+  });
+
+  it('una sola dirección sigue funcionando como antes', async () => {
+    const staff = await obtenerToken();
+    MensajeroSimulado.vaciar();
+    const destino = `solo${sufijo()}@tecnologia.web`;
+
+    await request(app)
+      .post('/api/reportes/ventas/enviar')
+      .set(cabecera(staff))
+      .send({ desde: hoy(), hasta: hoy(), para: destino })
+      .expect(200);
+
+    expect(MensajeroSimulado.enviados[0].para).toEqual([destino]);
+  });
+
+  it('rechaza una lista donde alguna dirección no es válida', async () => {
+    const staff = await obtenerToken();
+
+    const r = await request(app)
+      .post('/api/reportes/ventas/enviar')
+      .set(cabecera(staff))
+      .send({ desde: hoy(), hasta: hoy(), para: 'valido@tecnologia.web, esto-no-es-un-correo' });
+
+    expect(r.status).toBe(400);
+  });
+
+  it('exige al menos un destinatario', async () => {
+    const staff = await obtenerToken();
+
+    const r = await request(app)
+      .post('/api/reportes/ventas/enviar')
+      .set(cabecera(staff))
+      .send({ desde: hoy(), hasta: hoy(), para: '  ' });
+
+    expect(r.status).toBe(400);
+  });
+
+  /** Un tope, porque el reporte lleva un PDF y la cuota de envío es limitada. */
+  it('no deja convertir el envío en una lista de difusión', async () => {
+    const staff = await obtenerToken();
+    const muchos = Array.from({ length: 6 }, (_, i) => `d${i}${sufijo()}@tecnologia.web`);
+
+    const r = await request(app)
+      .post('/api/reportes/ventas/enviar')
+      .set(cabecera(staff))
+      .send({ desde: hoy(), hasta: hoy(), para: muchos });
+
+    expect(r.status).toBe(400);
+    expect(r.body.error).toContain('5');
+  });
+
+  /** Los otros tres reportes comparten el mismo contrato. */
+  it.each(['pedidos', 'produccion', 'inventario'])(
+    'el reporte de %s también admite varias cuentas',
+    async (ruta) => {
+      const staff = await obtenerToken();
+      MensajeroSimulado.vaciar();
+
+      const destinos = [`a${sufijo()}@tecnologia.web`, `b${sufijo()}@tecnologia.web`];
+
+      const r = await request(app)
+        .post(`/api/reportes/${ruta}/enviar`)
+        .set(cabecera(staff))
+        .send({ desde: hoy(), hasta: hoy(), para: destinos });
+
+      expect(r.status).toBe(200);
+      expect(MensajeroSimulado.enviados[0].para).toEqual(destinos);
+    },
+  );
 });
