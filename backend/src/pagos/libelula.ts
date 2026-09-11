@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { env } from '../config/env.js';
 import type { EstadoPago } from '../config/dominio.js';
 import { ErrorApp } from '../errors/error-app.js';
@@ -72,14 +72,22 @@ const ESTADO_EQUIVALENTE: Record<string, EstadoPago> = {
 };
 
 /**
- * Testigos vigentes, por cobro.
+ * El testigo que autentica un aviso de pago.
  *
- * Viven en memoria porque solo hacen falta entre que se abre el cobro y que
- * llega el aviso. Si el proceso se reinicia en ese lapso, el aviso se ignora y
- * el cobro se resuelve igual por consulta directa, que es la red de seguridad
- * de todo el diseño.
+ * Se **deriva** de la referencia del cobro en lugar de guardarse. La primera
+ * versión usaba un mapa en memoria, y eso falla justo cuando más importa: el
+ * servidor se reinicia en cada despliegue, el mapa queda vacío, y los avisos
+ * de los cobros abiertos antes del reinicio se rechazan por testigo
+ * desconocido. El cliente paga, el dinero sale de su cuenta y el pedido se
+ * queda esperando para siempre.
+ *
+ * Derivarlo con HMAC resuelve las dos cosas: no ocupa memoria y se puede
+ * recalcular en cualquier momento, incluso en otro proceso. Lo que lo hace
+ * infalsificable es que depende de `JWT_SECRET`, que solo conoce el servidor.
  */
-const testigos = new Map<string, string>();
+function testigoDe(referencia: string): string {
+  return createHmac('sha256', env.jwtSecret).update(referencia).digest('hex').slice(0, 32);
+}
 
 export class PasarelaLibelula implements PasarelaPago {
   readonly nombre = 'Libelula';
@@ -132,7 +140,7 @@ export class PasarelaLibelula implements PasarelaPago {
    * billetera— y donde el monto ya viene cargado. Por eso el tipo es `url`.
    */
   async crearCobro(solicitud: SolicitudCobro): Promise<CobroCreado> {
-    const testigo = randomUUID();
+    const testigo = testigoDe(solicitud.referenciaInterna);
     const base = env.pago.urlPublica;
 
     if (!base) {
@@ -166,7 +174,11 @@ export class PasarelaLibelula implements PasarelaPago {
       descripcion: solicitud.descripcion,
       // El testigo va dentro de la dirección: es lo que hace que el aviso no
       // pueda falsificarse conociendo solo el número de la venta.
-      callback_url: `${base}/api/pagos/notificacion?testigo=${testigo}`,
+      // La referencia viaja con el testigo porque es lo que permite
+      // recalcularlo al recibir el aviso, sin haber guardado nada.
+      callback_url:
+        `${base}/api/pagos/notificacion` +
+        `?testigo=${testigo}&ref=${encodeURIComponent(solicitud.referenciaInterna)}`,
       url_retorno: `${base}/ventas/registro`,
       nombre_cliente: nombre || 'Consumidor',
       apellido_cliente: apellido.join(' ') || 'Final',
@@ -212,8 +224,6 @@ export class PasarelaLibelula implements PasarelaPago {
       );
     }
 
-    testigos.set(idTransaccion, testigo);
-
     /*
      * Libélula devuelve el QR ya dibujado, así que se prefiere sobre la
      * dirección: el cliente escanea desde la app de su banco sin salir del
@@ -242,8 +252,16 @@ export class PasarelaLibelula implements PasarelaPago {
    */
   verificarFirma(_cuerpoCrudo: string, cabeceras: Record<string, string | undefined>): boolean {
     const testigo = cabeceras['x-testigo-pago'];
-    if (!testigo) return false;
-    return [...testigos.values()].includes(testigo);
+    const referencia = cabeceras['x-referencia-pago'];
+    if (!testigo || !referencia) return false;
+
+    const esperado = testigoDe(referencia);
+
+    // Comparación de tiempo constante: comparar con `===` filtra cuántos
+    // caracteres acertó quien lo intenta, y con eso se adivina uno a uno.
+    const a = Buffer.from(testigo);
+    const b = Buffer.from(esperado);
+    return a.length === b.length && timingSafeEqual(a, b);
   }
 
   interpretarAviso(cuerpo: unknown): AvisoPasarela {
@@ -281,7 +299,7 @@ export class PasarelaLibelula implements PasarelaPago {
       throw new ErrorApp(502, `Estado de pago no reconocido: ${String(datos.estado)}`);
     }
 
-    if (estado !== 'Pendiente') testigos.delete(idTransaccionExterna);
+    // Ya no hay nada que limpiar: el testigo se deriva, no se guarda.
     return estado;
   }
 }

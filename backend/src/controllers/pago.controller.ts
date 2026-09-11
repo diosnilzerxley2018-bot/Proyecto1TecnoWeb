@@ -44,15 +44,18 @@ export async function recibirAviso(req: Request, res: Response) {
     : JSON.stringify(req.body);
 
   /**
-   * Libélula no envía cabeceras propias: el dato que autentica el aviso viaja
-   * en la dirección misma, como `?testigo=...`. Se normaliza aquí para que la
-   * pasarela reciba siempre un solo mapa y no tenga que conocer Express.
+   * Libélula no envía cabeceras propias: lo que autentica el aviso viaja en la
+   * dirección misma, como `?testigo=...&ref=...`. Se normaliza aquí para que
+   * la pasarela reciba siempre un solo mapa y no tenga que conocer Express.
    */
   const testigo = typeof req.query.testigo === 'string' ? req.query.testigo : undefined;
+  // La referencia viaja junto al testigo: es lo que permite recalcularlo.
+  const referencia = typeof req.query.ref === 'string' ? req.query.ref : undefined;
 
   const resultado = await pagoService.procesarAviso(cuerpoCrudo, {
     ...(req.headers as Record<string, string | undefined>),
     ...(testigo ? { 'x-testigo-pago': testigo } : {}),
+    ...(referencia ? { 'x-referencia-pago': referencia } : {}),
   });
   res.json(resultado);
 }
