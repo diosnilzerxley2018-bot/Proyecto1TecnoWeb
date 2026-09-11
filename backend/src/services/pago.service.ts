@@ -108,8 +108,33 @@ function aDTO(pago: PagoConsultado): PagoDTO {
 }
 
 /** Añade el código dibujado, cuando lo hay. */
+/**
+ * Expuesto solo para las pruebas.
+ *
+ * La distinción entre «texto a codificar» y «código ya dibujado» es donde se
+ * escondió un fallo silencioso, y probarla a través de una venta completa
+ * exigiría una pasarela que devuelva imágenes.
+ */
+export const conQRParaPruebas = (dto: Partial<PagoDTO>) => conQR(dto as PagoDTO);
+
 async function conQR(dto: PagoDTO): Promise<PagoDTO> {
   if (dto.tipoDatos !== 'qr' || !dto.datosCobro) return dto;
+
+  /*
+   * Una pasarela puede devolver dos cosas distintas y ambas llegan por
+   * `datosCobro`: el **texto** a codificar —la simulada— o el **código ya
+   * dibujado** —Libélula, en `qr_simple_base64`—.
+   *
+   * Distinguirlas importa: intentar codificar una imagen de diez mil
+   * caracteres excede de largo la capacidad de un QR (unos 4.300), la
+   * librería lanza, el `catch` se lo traga y la pantalla se queda esperando
+   * un código que nunca llega.
+   */
+  if (dto.datosCobro.startsWith('data:image/')) {
+    dto.qrImagen = dto.datosCobro;
+    return dto;
+  }
+
   try {
     dto.qrImagen = await QRCode.toDataURL(dto.datosCobro, {
       margin: 1,

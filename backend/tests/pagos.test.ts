@@ -315,3 +315,55 @@ describe('Aviso de la pasarela', () => {
     expect(r.body.error).toContain('monto');
   });
 });
+
+describe('El QR que llega a la pantalla', () => {
+  /**
+   * Una pasarela puede devolver dos cosas por `datosCobro`: el **texto** a
+   * codificar, o el **código ya dibujado**.
+   *
+   * Confundirlas costó un fallo silencioso en producción: el adaptador de
+   * Libélula empezó a devolver la imagen (`qr_simple_base64`, unos diez mil
+   * caracteres) y el servicio intentó codificarla en un QR, que admite unos
+   * 4.300. La librería lanzaba, el `catch` se lo tragaba, y la pantalla se
+   * quedaba en «Preparando el cobro…» para siempre.
+   */
+  it('un texto corto se convierte en imagen de QR', async () => {
+    const staff = await obtenerToken();
+    const producto = await buscarProducto('Barra de avena');
+
+    const venta = await request(app)
+      .post('/api/ventas')
+      .set(cabecera(staff))
+      .send({ metodoPago: 'QR', items: [{ idProducto: producto.id, cantidad: 1 }] })
+      .expect(201);
+
+    const cobro = venta.body.cobro;
+    expect(cobro.tipoDatos).toBe('qr');
+    // La simulada devuelve texto; el servicio lo dibuja.
+    expect(cobro.datosCobro).not.toMatch(/^data:image\//);
+    expect(cobro.qrImagen).toMatch(/^data:image\/png;base64,/);
+  });
+
+  /**
+   * Y el caso que fallaba: cuando `datosCobro` **ya es** una imagen, se pasa
+   * tal cual en vez de intentar codificarla.
+   */
+  it('una imagen ya dibujada se entrega tal cual, sin recodificarla', async () => {
+    const { conQRParaPruebas } = await import('../src/services/pago.service.js');
+
+    const imagen = `data:image/png;base64,${'A'.repeat(9000)}`;
+    const dto = await conQRParaPruebas({
+      tipoDatos: 'qr',
+      datosCobro: imagen,
+    });
+
+    expect(dto.qrImagen).toBe(imagen);
+  });
+
+  it('sin datos de cobro no se inventa una imagen', async () => {
+    const { conQRParaPruebas } = await import('../src/services/pago.service.js');
+
+    const dto = await conQRParaPruebas({ tipoDatos: null, datosCobro: null });
+    expect(dto.qrImagen).toBeUndefined();
+  });
+});

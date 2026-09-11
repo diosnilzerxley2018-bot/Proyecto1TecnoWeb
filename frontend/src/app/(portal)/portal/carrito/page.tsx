@@ -68,7 +68,20 @@ export default function PaginaCarrito() {
         return;
       }
 
-      notificar('exito', `Pedido #${String(pedido.id).padStart(5, '0')} confirmado`);
+      /*
+       * Sin cobro pendiente el pedido ya está en firme: o se paga en efectivo
+       * al recibirlo, o la pasarela no pudo abrirlo. Lo segundo se avisa, en
+       * vez de dar por bueno un pago que no ocurrió.
+       */
+      if (pedido.cobro?.estado === 'Fallido') {
+        notificar(
+          'info',
+          `Pedido #${String(pedido.id).padStart(5, '0')} confirmado, pero no se pudo ` +
+            'generar el cobro en línea. Puede pagarlo al recibirlo.',
+        );
+      } else {
+        notificar('exito', `Pedido #${String(pedido.id).padStart(5, '0')} confirmado`);
+      }
       router.push('/portal/pedidos');
     } catch (e) {
       setError(e instanceof ErrorApi ? e.message : 'No se pudo confirmar el pedido');
@@ -77,7 +90,15 @@ export default function PaginaCarrito() {
     }
   }
 
-  if (lineas.length === 0) {
+  /*
+   * El carrito vacío no se muestra mientras haya un cobro en pantalla.
+   *
+   * Confirmar el pedido vacía el carrito —el pedido ya existe y reservó su
+   * stock—, y sin esta condición la pantalla de «carrito vacío» cortaba el
+   * render antes de llegar al diálogo del código de pago: el cliente pagaba a
+   * ciegas o no pagaba.
+   */
+  if (lineas.length === 0 && !cobro) {
     return (
       <EstadoVacio
         icono={<ShoppingBasket className="size-6" aria-hidden />}
