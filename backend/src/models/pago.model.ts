@@ -3,6 +3,20 @@ import type { ClientePrisma } from './stock.model.js';
 
 /** Capa Model — tablas `pago` y `evento_pago`. */
 
+/**
+ * El último evento del cobro.
+ *
+ * Un cobro fallido sin motivo obliga a ir a los registros del servidor para
+ * saber qué pasó, y eso no está al alcance de quien atiende el mostrador.
+ * Cuesta una consulta más y convierte «El cobro no se completó» en algo
+ * accionable.
+ */
+const ULTIMO_EVENTO = {
+  orderBy: { recibido_en: 'desc' },
+  take: 1,
+  select: { tipo: true, cuerpo: true, recibido_en: true },
+} as const;
+
 const CAMPOS = {
   id_pago: true,
   monto: true,
@@ -12,6 +26,7 @@ const CAMPOS = {
   modo: true,
   pasarela: true,
   id_transaccion_ext: true,
+  evento_pago: ULTIMO_EVENTO,
   datos_cobro: true,
   fecha_creacion: true,
   fecha_expiracion: true,

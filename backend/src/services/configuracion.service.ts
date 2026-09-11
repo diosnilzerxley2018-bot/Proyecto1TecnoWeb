@@ -82,11 +82,12 @@ export async function estadoCobro(): Promise<EstadoCobroDTO> {
     advertencia = error instanceof ErrorApp ? error.message : 'La pasarela no está disponible';
   }
 
-  if (modo === 'Real' && operativa && !credencialesCompletas()) {
+  const faltantes = modo === 'Real' && operativa ? variablesQueFaltan() : [];
+  if (faltantes.length > 0) {
     operativa = false;
     advertencia =
-      'El modo real está activo pero faltan credenciales de la pasarela. ' +
-      'Los cobros en línea van a fallar hasta configurarlas.';
+      `El modo real está activo pero falta configurar ${enumerar(faltantes)} ` +
+      'en el servidor. Los cobros en línea van a fallar hasta hacerlo.';
   }
 
   return {
@@ -101,9 +102,31 @@ export async function estadoCobro(): Promise<EstadoCobroDTO> {
   };
 }
 
-function credencialesCompletas(): boolean {
-  return Boolean(process.env.LIBELULA_URL_BASE && process.env.LIBELULA_API_KEY);
+/**
+ * Qué falta para que un cobro real pueda abrirse.
+ *
+ * Devuelve la lista y no un booleano porque el mensaje tiene que **nombrar lo
+ * que falta**: decir solo "faltan credenciales" obliga a adivinar cuál, y la
+ * que más se olvida no es ninguna de las dos de la pasarela sino
+ * `PAGO_URL_PUBLICA` —la dirección a la que la pasarela avisa—, que no es una
+ * credencial y por eso no se busca donde uno la buscaría.
+ */
+/** «A», «A y B», «A, B y C» — enumerar con «y» repetida se lee mal. */
+function enumerar(nombres: string[]): string {
+  if (nombres.length <= 1) return nombres[0] ?? '';
+  return `${nombres.slice(0, -1).join(', ')} y ${nombres.at(-1)}`;
 }
+
+function variablesQueFaltan(): string[] {
+  return [
+    ['LIBELULA_URL_BASE', process.env.LIBELULA_URL_BASE],
+    ['LIBELULA_API_KEY', process.env.LIBELULA_API_KEY],
+    ['PAGO_URL_PUBLICA', process.env.PAGO_URL_PUBLICA],
+  ]
+    .filter(([, valor]) => !valor)
+    .map(([nombre]) => nombre as string);
+}
+
 
 /**
  * Cambia el modo de cobro.
@@ -121,11 +144,12 @@ export async function cambiarModoCobro(
     // Levanta ErrorApp 503 si no hay adaptador para la pasarela configurada.
     pasarelaPara('Real');
 
-    if (!credencialesCompletas()) {
+    const faltantes = variablesQueFaltan();
+    if (faltantes.length > 0) {
       throw new ErrorApp(
         409,
-        'No se puede activar el cobro real sin las credenciales de la pasarela. ' +
-          'Configure LIBELULA_URL_BASE y LIBELULA_API_KEY en el servidor y vuelva a intentarlo.',
+        `No se puede activar el cobro real: falta configurar ${enumerar(faltantes)} ` +
+          'en el servidor. Configúrelas y vuelva a intentarlo.',
       );
     }
   }

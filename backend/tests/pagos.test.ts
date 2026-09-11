@@ -77,7 +77,11 @@ describe('Modo de cobro', () => {
       .send({ modo: 'Real' });
 
     expect(r.status).toBe(409);
-    expect(r.body.error).toContain('credenciales');
+    // El mensaje nombra qué falta: decir solo «faltan credenciales» obliga a
+    // adivinar cuál, y la que más se olvida —PAGO_URL_PUBLICA— ni siquiera lo
+    // es, así que nadie la busca donde buscaría una credencial.
+    expect(r.body.error).toContain('LIBELULA_API_KEY');
+    expect(r.body.error).toContain('PAGO_URL_PUBLICA');
 
     // Y el modo no cambió.
     const estado = await request(app).get('/api/configuracion/cobro').set(cabecera(admin));

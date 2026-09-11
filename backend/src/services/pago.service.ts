@@ -68,6 +68,14 @@ export interface PagoDTO {
   confirmadoEn: string | null;
   idVenta: number | null;
   idPedido: number | null;
+  /**
+   * Por qué falló, cuando falló.
+   *
+   * Sin esto, «El cobro no se completó» obliga a mirar los registros del
+   * servidor para saber si fue la pasarela, la red o una variable sin
+   * configurar —y eso no está al alcance de quien atiende el mostrador—.
+   */
+  motivo?: string | null;
   /** Atajo para que la interfaz avise, sin ambigüedad, que no se movió dinero. */
   simulado: boolean;
 }
@@ -92,6 +100,10 @@ function aDTO(pago: PagoConsultado): PagoDTO {
     idVenta: pago.id_venta,
     idPedido: pago.id_pedido,
     simulado: pago.modo === 'Simulado',
+    // Solo cuando falló: en un cobro que salió bien, el último evento es la
+    // confirmación y repetirla como «motivo» confundiría.
+    motivo:
+      pago.estado === 'Fallido' ? (pago.evento_pago[0]?.cuerpo ?? null) : null,
   };
 }
 
