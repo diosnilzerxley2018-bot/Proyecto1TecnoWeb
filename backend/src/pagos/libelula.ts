@@ -143,10 +143,25 @@ export class PasarelaLibelula implements PasarelaPago {
       );
     }
 
+    /*
+     * Libélula rechaza el cobro sin correo, y en una venta a «Consumidor
+     * final» no hay cliente de quien tomarlo. Se comprueba aquí para que el
+     * fallo diga qué configurar, en vez de llegar como un «Debe especificar el
+     * parámetro Email» que no señala a ninguna variable.
+     */
+    const correo = solicitud.cliente?.email || env.pago.libelula.emailComercio;
+    if (!correo) {
+      throw new ErrorApp(
+        503,
+        'Falta LIBELULA_EMAIL_COMERCIO: Libélula exige un correo en cada cobro, ' +
+          'y esta venta no tiene cliente del que tomarlo.',
+      );
+    }
+
     const [nombre, ...apellido] = (solicitud.cliente?.nombre ?? '').split(' ');
 
     const cuerpo = {
-      email_cliente: solicitud.cliente?.email ?? env.pago.libelula.emailComercio,
+      email_cliente: correo,
       identificador_deuda: solicitud.referenciaInterna,
       descripcion: solicitud.descripcion,
       // El testigo va dentro de la dirección: es lo que hace que el aviso no

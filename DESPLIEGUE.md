@@ -175,6 +175,35 @@ curl -s "https://api.brevo.com/v3/smtp/statistics/events?limit=20" \
 Cada envío aparece con su destinatario y su estado: `delivered`, `bounce`,
 `spam`, `blocked`.
 
+## 6. La pasarela de pago
+
+Con el modo de cobro en **Real**, el sistema necesita **cuatro** variables. Las
+cuatro, no dos: faltar una hace que todo cobro falle.
+
+```
+LIBELULA_URL_BASE=https://api.todotix.com
+LIBELULA_API_KEY=<la appkey del comercio>
+LIBELULA_EMAIL_COMERCIO=<un correo del comercio>
+PAGO_URL_PUBLICA=https://<tu-backend>.up.railway.app
+```
+
+Las dos últimas son las que se olvidan, porque **no parecen credenciales**:
+
+- `PAGO_URL_PUBLICA` es la dirección a la que Libélula avisa cuando alguien
+  paga. Sin ella el cobro ni se abre, y en desarrollo hace falta un túnel
+  (ngrok o similar) porque `localhost` no es alcanzable desde su servidor.
+- `LIBELULA_EMAIL_COMERCIO` es el correo que se usa cuando la venta es a
+  **«Consumidor final»** y no hay cliente de quien tomarlo. Libélula exige un
+  correo en cada cobro y rechaza el envío sin él.
+
+El ambiente de pruebas de Libélula (`http://www.todotix.com:10888`) **no
+responde** —comprobado, da tiempo de espera agotado—, así que `LIBELULA_URL_BASE`
+apunta a producción.
+
+> **El dinero llega a la cuenta del titular de la appkey.** Una appkey prestada
+> sirve para integrar y demostrar, no para cobrar: para que el dinero sea suyo
+> hace falta la propia, y esa exige NIT y contrato con Libélula.
+
 ---
 
 ## Lo que hay que saber de estos planes

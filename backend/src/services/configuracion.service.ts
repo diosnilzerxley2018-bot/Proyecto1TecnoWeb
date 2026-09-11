@@ -121,6 +121,12 @@ function variablesQueFaltan(): string[] {
   return [
     ['LIBELULA_URL_BASE', process.env.LIBELULA_URL_BASE],
     ['LIBELULA_API_KEY', process.env.LIBELULA_API_KEY],
+    /*
+     * Libélula exige un correo en cada cobro. Cuando la venta es a
+     * «Consumidor final» no hay cliente de quien tomarlo, así que se usa el
+     * del comercio: sin él, toda venta de mostrador con QR es rechazada.
+     */
+    ['LIBELULA_EMAIL_COMERCIO', process.env.LIBELULA_EMAIL_COMERCIO],
     ['PAGO_URL_PUBLICA', process.env.PAGO_URL_PUBLICA],
   ]
     .filter(([, valor]) => !valor)
