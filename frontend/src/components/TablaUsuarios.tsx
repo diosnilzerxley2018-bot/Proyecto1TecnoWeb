@@ -47,8 +47,16 @@ export function TablaUsuarios({
   const totalColumnas = COLUMNAS.length + 1;
 
   return (
-    <div className="overflow-hidden rounded-xl bg-superficie shadow-sm ring-1 ring-borde">
-      <table className="w-full text-left text-sm">
+    /*
+     * La tabla se desplaza dentro de su propia caja.
+     *
+     * Con seis columnas no entra en un teléfono, y sin esto el desborde lo
+     * hereda la página entera: se desplaza en horizontal completa, con la
+     * barra lateral y el encabezado incluidos. `min-w` mantiene las columnas
+     * legibles en vez de aplastarlas hasta partir cada palabra.
+     */
+    <div className="overflow-x-auto rounded-xl bg-superficie shadow-sm ring-1 ring-borde">
+      <table className="w-full min-w-[46rem] text-left text-sm">
         <thead className="border-b border-borde bg-white/[0.03] text-xs uppercase tracking-wide text-tinta-tenue">
           <tr>
             {COLUMNAS.map((c) => (

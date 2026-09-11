@@ -116,7 +116,7 @@ export function FormularioUsuario({
 
   return (
     <form onSubmit={enviar} className="space-y-3">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <CampoTexto id="nombre" etiqueta="Nombre" required
           value={datos.nombre} onChange={(e) => actualizar('nombre', e.target.value)} />
         <CampoTexto id="apellido" etiqueta="Apellido" required
@@ -126,7 +126,7 @@ export function FormularioUsuario({
       <CampoTexto id="email" etiqueta="Correo electrónico" type="email" required
         value={datos.email} onChange={(e) => actualizar('email', e.target.value)} />
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <CampoTexto id="telefono" etiqueta="Teléfono"
           value={datos.telefono} onChange={(e) => actualizar('telefono', e.target.value)} />
         <Selector<number>
@@ -139,7 +139,7 @@ export function FormularioUsuario({
       </div>
 
       {!editando && requiereCargo && (
-        <div className="grid grid-cols-2 gap-3 rounded-lg bg-white/[0.03] p-3 ring-1 ring-borde">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 rounded-lg bg-white/[0.03] p-3 ring-1 ring-borde">
           <Selector<number>
             etiqueta="Cargo"
             valor={datos.idCargo}
@@ -153,7 +153,7 @@ export function FormularioUsuario({
       )}
 
       {!editando && !requiereCargo && (
-        <div className="grid grid-cols-2 gap-3 rounded-lg bg-white/[0.03] p-3 ring-1 ring-borde">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 rounded-lg bg-white/[0.03] p-3 ring-1 ring-borde">
           <CampoTexto id="preferencia" etiqueta="Preferencia alimentaria"
             value={datos.preferenciaAlimentaria}
             onChange={(e) => actualizar('preferenciaAlimentaria', e.target.value)} />

@@ -85,14 +85,14 @@ export default function PaginaRegistro() {
         >
           <h2 className="text-lg font-semibold text-tinta">Registro de cliente</h2>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <CampoTexto id="nombre" etiqueta="Nombre" required autoComplete="given-name"
               value={datos.nombre} onChange={(e) => actualizar('nombre', e.target.value)} />
             <CampoTexto id="apellido" etiqueta="Apellido" required autoComplete="family-name"
               value={datos.apellido} onChange={(e) => actualizar('apellido', e.target.value)} />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <CampoTexto id="email" etiqueta="Correo electrónico" type="email" required
               autoComplete="email"
               value={datos.email} onChange={(e) => actualizar('email', e.target.value)} />
@@ -104,7 +104,7 @@ export default function PaginaRegistro() {
             autoComplete="username" placeholder="Con el que iniciará sesión"
             value={datos.nombreUsuario} onChange={(e) => actualizar('nombreUsuario', e.target.value)} />
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <CampoTexto id="contrasena" etiqueta="Contraseña" type="password" required
               autoComplete="new-password"
               value={datos.contrasena} onChange={(e) => actualizar('contrasena', e.target.value)}
@@ -118,7 +118,7 @@ export default function PaginaRegistro() {
             <legend className="px-1 text-xs font-medium text-tinta-suave">
               Sus preferencias (opcional)
             </legend>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <CampoTexto id="preferencia" etiqueta="Preferencia alimentaria"
                 placeholder="Ej.: Vegetariana"
                 value={datos.preferenciaAlimentaria}

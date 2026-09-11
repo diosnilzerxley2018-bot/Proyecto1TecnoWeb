@@ -75,7 +75,15 @@ function Cabecera({ nombre }: { nombre: string }) {
 
   return (
     <header className="sticky top-0 z-50 border-b border-borde vidrio">
-      <div className="mx-auto flex w-full max-w-6xl items-center gap-4 px-4 py-3 sm:px-6">
+      {/*
+        En un teléfono el buscador baja a su propia fila.
+        
+        Logo, buscador, cuatro enlaces, carrito, tema y salir no caben en 360
+        px: apretados en una sola línea, el buscador queda de unos pocos
+        píxeles y deja de servir. `flex-wrap` con `order` los reordena sin
+        duplicar el marcado.
+      */}
+      <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 sm:flex-nowrap sm:px-6">
         <Link href="/portal" className="flex shrink-0 items-center gap-2.5">
           <span className="grid size-9 place-items-center rounded-xl bg-gradient-to-br from-marca-400 to-marca-600 text-sobre-marca">
             <Sprout className="size-5" aria-hidden />
@@ -87,9 +95,11 @@ function Cabecera({ nombre }: { nombre: string }) {
         </Link>
 
         {/* RF-PED-03: buscar productos e informacion desde el encabezado. */}
-        <BuscadorSitio />
+        <div className="order-last w-full sm:order-none sm:w-auto sm:flex-1">
+          <BuscadorSitio />
+        </div>
 
-        <nav className="flex items-center gap-1">
+        <nav className="ml-auto flex items-center gap-1 sm:ml-0">
           {ENLACES.map((enlace) => {
             const activo = enlace.exacta
               ? rutaActual === enlace.ruta
@@ -101,7 +111,7 @@ function Cabecera({ nombre }: { nombre: string }) {
                 key={enlace.ruta}
                 href={enlace.ruta}
                 className={cn(
-                  'relative flex items-center gap-2 rounded-xl px-3 py-2 text-sm transition-colors duration-200',
+                  'relative flex items-center gap-2 rounded-xl px-2 py-2 text-sm transition-colors duration-200 sm:px-3',
                   activo ? 'text-tinta' : 'text-tinta-suave hover:text-tinta',
                 )}
               >
@@ -122,7 +132,7 @@ function Cabecera({ nombre }: { nombre: string }) {
             href="/portal/carrito"
             aria-label={`Carrito con ${cantidadTotal} artículo(s)`}
             className={cn(
-              'relative ml-1 flex items-center gap-2 rounded-xl border px-3 py-2 text-sm transition-colors duration-200',
+              'relative ml-1 flex items-center gap-2 rounded-xl border px-2 py-2 text-sm transition-colors duration-200 sm:px-3',
               cantidadTotal > 0
                 ? 'border-marca-500/40 bg-marca-500/12 text-marca-300'
                 : 'border-borde text-tinta-suave hover:border-borde-fuerte hover:text-tinta',

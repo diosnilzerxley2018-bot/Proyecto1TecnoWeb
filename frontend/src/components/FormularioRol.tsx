@@ -83,7 +83,7 @@ export function FormularioRol({
             ({seleccionados.length} de {permisosDisponibles.length})
           </span>
         </p>
-        <div className="grid max-h-64 grid-cols-2 gap-1 overflow-y-auto rounded-lg border border-borde p-2">
+        <div className="grid max-h-64 grid-cols-1 gap-1 sm:grid-cols-2 overflow-y-auto rounded-lg border border-borde p-2">
           {permisosDisponibles.map((p) => (
             <Casilla
               key={p.id}

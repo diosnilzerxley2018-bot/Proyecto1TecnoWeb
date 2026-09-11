@@ -143,7 +143,7 @@ function TableroOrdenes() {
         }
       />
 
-      <div className="mb-6 grid grid-cols-3 gap-3">
+      <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Estadistica
           indice={0}
           etiqueta="Pendientes"

@@ -82,7 +82,7 @@ export function BuscadorSitio() {
   const hayPanel = abierto && termino.trim() !== '';
 
   return (
-    <div ref={contenedor} className="relative min-w-0 flex-1 sm:max-w-sm">
+    <div ref={contenedor} className="relative w-full min-w-0 sm:max-w-sm">
       <label className="sr-only" htmlFor="buscador-sitio">
         Buscar productos e información
       </label>
