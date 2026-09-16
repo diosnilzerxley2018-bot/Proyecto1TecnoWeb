@@ -91,6 +91,25 @@ Al terminar existen dos cuentas: `admin / Admin1234!` y
 Comprobación: `https://<tu-backend>.up.railway.app/api/health` debe responder
 `{"estado":"ok","servicio":"nutriexpress-api"}`.
 
+### Actualizar una base que ya está en marcha
+
+`db:init` **no sirve** para esto: si encuentra tablas no toca nada, a propósito.
+Los cambios de esquema posteriores al primer despliegue van en otro script:
+
+```bash
+npm run db:actualizar
+```
+
+Aplica los ajustes de `prisma/actualizar.ts` —altas de columnas y de
+restricciones, nunca borrados— y se puede repetir sin consecuencias.
+
+**El orden importa y no es el que parece.** Hay que correrlo **antes o justo
+después** de que suba el código que necesita la columna, no cuando haya tiempo:
+entre un despliegue que ya escribe un campo nuevo y una base que todavía no lo
+tiene, las operaciones que lo usan fallan. Como los ajustes son aditivos y
+anulables, correrlo **antes** del despliegue es seguro y deja la ventana en
+cero: la columna existe sin que nadie la escriba todavía.
+
 ## 3. El frontend
 
 En Vercel: **Add New → Project →** el mismo repositorio.
@@ -235,5 +254,8 @@ limitaciones conocidas y no descuidos:
   `pg_dump`.
 
 - **El esquema no se gestiona con migraciones versionadas** (RNF-MAN-03,
-  hallazgo A5). `db:init` sirve para una base vacía. Un cambio de esquema sobre
-  una base con datos hay que aplicarlo a mano con `ALTER TABLE`.
+  hallazgo A5). `db:init` sirve para una base vacía y `db:actualizar` lleva los
+  cambios posteriores a una base con datos, pero siguen siendo dos scripts que
+  se ejecutan a mano: no hay historial de qué se aplicó ni cuándo, ni vuelta
+  atrás automática. `prisma/schema.sql` sigue siendo la fuente de verdad y cada
+  ajuste hay que escribirlo en los dos sitios.

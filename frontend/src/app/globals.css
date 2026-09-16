@@ -123,9 +123,21 @@ input[type="number"] {
   -moz-appearance: textfield;
 }
 
-input::placeholder,
-textarea::placeholder {
-  color: var(--color-tinta-tenue);
+/*
+ * Va en `@layer base` a propósito.
+ *
+ * En Tailwind 4 el CSS **sin capa le gana al CSS en capa**, sin importar la
+ * especificidad. Suelta, esta regla vencía a `placeholder:text-transparent`
+ * de la capa de utilidades, que es de lo que depende la etiqueta flotante de
+ * `ui/Campo` para esconder el placeholder: se pintaban los dos textos, la
+ * etiqueta y el placeholder, desfasados por el `pt-4` del input. Dentro de
+ * `base` sigue dando el color por defecto y cualquier utilidad puede taparla.
+ */
+@layer base {
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--color-tinta-tenue);
+  }
 }
 
 ::selection {

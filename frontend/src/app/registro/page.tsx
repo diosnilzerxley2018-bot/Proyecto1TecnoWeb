@@ -8,6 +8,7 @@ import { CampoTexto } from '@/components/CampoTexto';
 import { PieVisitas } from '@/components/ui/PieVisitas';
 import { SelectorTema } from '@/components/ui/SelectorTema';
 import { ErrorApi } from '@/lib/api';
+import { AYUDA_CONTRASENA } from '@/lib/dominio';
 
 /**
  * CU-VEN-02 — Autorregistro de cliente desde el portal web.
@@ -108,7 +109,7 @@ export default function PaginaRegistro() {
             <CampoTexto id="contrasena" etiqueta="Contraseña" type="password" required
               autoComplete="new-password"
               value={datos.contrasena} onChange={(e) => actualizar('contrasena', e.target.value)}
-              ayuda="Mínimo 8 caracteres, una letra y un número" />
+              ayuda={AYUDA_CONTRASENA} />
             <CampoTexto id="confirmacion" etiqueta="Repita la contraseña" type="password" required
               autoComplete="new-password"
               value={datos.confirmacion} onChange={(e) => actualizar('confirmacion', e.target.value)} />

@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { api, ErrorApi } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
+import { useNotificaciones } from '@/components/ui/Notificaciones';
 import { Modal } from '@/components/Modal';
 import { FormularioUsuario } from '@/components/FormularioUsuario';
 import { PanelPermisos } from '@/components/PanelPermisos';
@@ -33,6 +34,7 @@ export default function PaginaUsuarios() {
 
 function ContenidoUsuarios() {
   const { tienePermiso } = useAuth();
+  const { notificar } = useNotificaciones();
 
   const [usuarios, setUsuarios] = useState<UsuarioLista[]>([]);
   const [roles, setRoles] = useState<Rol[]>([]);
@@ -70,13 +72,25 @@ function ContenidoUsuarios() {
     void cargarDatos();
   }, [cargarDatos]);
 
-  /** Ejecuta una operación y refresca el listado si tuvo éxito. */
-  async function ejecutar(operacion: () => Promise<unknown>, mensajeError: string) {
+  /**
+   * Ejecuta una operación, avisa del resultado y refresca el listado.
+   *
+   * El aviso no es adorno: dar de baja o desbloquear no cambian nada visible
+   * en la fila más que un estado, y sin confirmación no hay forma de saber si
+   * la acción llegó al servidor o se perdió por el camino.
+   */
+  async function ejecutar(
+    operacion: () => Promise<unknown>,
+    mensajeError: string,
+    mensajeExito: string,
+  ) {
     try {
       await operacion();
       await cargarDatos();
+      notificar('exito', mensajeExito);
     } catch (e) {
       mostrarError(e, mensajeError);
+      notificar('error', e instanceof ErrorApi ? e.message : mensajeError);
     }
   }
 
@@ -91,14 +105,20 @@ function ContenidoUsuarios() {
 
   function confirmarBaja(usuario: UsuarioLista) {
     if (!confirm(`¿Dar de baja a ${usuario.nombreCompleto}?`)) return;
-    void ejecutar(() => api.del(`/usuarios/${usuario.id}`), 'No se pudo dar de baja');
+    void ejecutar(
+      () => api.del(`/usuarios/${usuario.id}`),
+      'No se pudo dar de baja',
+      `${usuario.nombreCompleto} quedó dado de baja`,
+    );
   }
 
   const cerrarDialogo = () => setDialogo({ tipo: 'ninguno' });
 
-  const alGuardar = () => {
+  /** Cada diálogo dice qué consiguió: «guardado» a secas no distingue qué. */
+  const alGuardar = (mensaje: string) => {
     cerrarDialogo();
     void cargarDatos();
+    notificar('exito', mensaje);
   };
 
   return (
@@ -139,7 +159,11 @@ function ContenidoUsuarios() {
         }}
         onEditar={abrirEdicion}
         onDesbloquear={(id) =>
-          void ejecutar(() => api.post(`/usuarios/${id}/desbloquear`), 'No se pudo desbloquear')
+          void ejecutar(
+            () => api.post(`/usuarios/${id}/desbloquear`),
+            'No se pudo desbloquear',
+            'Cuenta desbloqueada: ya puede volver a iniciar sesión',
+          )
         }
         onPermisos={(usuario) => setDialogo({ tipo: 'permisos', usuario })}
         onDarDeBaja={confirmarBaja}
@@ -159,7 +183,11 @@ function ContenidoUsuarios() {
 
       {dialogo.tipo === 'crear' && (
         <Modal titulo="Nuevo usuario" onCerrar={cerrarDialogo}>
-          <FormularioUsuario roles={roles} onListo={alGuardar} onCancelar={cerrarDialogo} />
+          <FormularioUsuario
+            roles={roles}
+            onListo={() => alGuardar('Usuario creado. Ya puede iniciar sesión')}
+            onCancelar={cerrarDialogo}
+          />
         </Modal>
       )}
 
@@ -168,7 +196,7 @@ function ContenidoUsuarios() {
           <FormularioUsuario
             roles={roles}
             usuario={dialogo.usuario}
-            onListo={alGuardar}
+            onListo={() => alGuardar('Cambios guardados')}
             onCancelar={cerrarDialogo}
           />
         </Modal>
@@ -179,7 +207,7 @@ function ContenidoUsuarios() {
           <PanelPermisos
             idUsuario={dialogo.usuario.id}
             nombreUsuario={dialogo.usuario.nombreCompleto}
-            onListo={alGuardar}
+            onListo={() => alGuardar('Permisos actualizados')}
             onCancelar={cerrarDialogo}
           />
         </Modal>

@@ -13,6 +13,34 @@ export function esPersonalInterno(nombreRol: string): boolean {
   return nombreRol !== ROL_CLIENTE;
 }
 
+/* --- Política de contraseñas (RF-SEG-03) --- */
+
+/**
+ * Espejo de `backend/src/dtos/contrasena.dto.ts`.
+ *
+ * Vive una sola vez porque la piden tres pantallas —el alta por el
+ * administrador, el autorregistro del cliente y el cambio desde el perfil— y
+ * escrita a mano en cada una ya había divergido: dos de las tres prometían
+ * «una letra y un número» mientras el servidor exigía mayúscula, minúscula,
+ * número y carácter especial, así que el formulario daba por buena una
+ * contraseña que el alta después rechazaba.
+ */
+export const REQUISITOS_CONTRASENA: { texto: string; cumple: (valor: string) => boolean }[] = [
+  { texto: 'Al menos 8 caracteres', cumple: (v) => v.length >= 8 },
+  { texto: 'Una mayúscula', cumple: (v) => /[A-Z]/.test(v) },
+  { texto: 'Una minúscula', cumple: (v) => /[a-z]/.test(v) },
+  { texto: 'Un número', cumple: (v) => /[0-9]/.test(v) },
+  { texto: 'Un carácter especial', cumple: (v) => /[^A-Za-z0-9]/.test(v) },
+];
+
+/** Resumen de una línea, para el pie de un campo. */
+export const AYUDA_CONTRASENA =
+  'Mínimo 8 caracteres, con mayúscula, minúscula, número y un carácter especial';
+
+export function cumpleLaPolitica(valor: string): boolean {
+  return REQUISITOS_CONTRASENA.every((r) => r.cumple(valor));
+}
+
 /* --- Ubicación de entrega (CU-PED-03) --- */
 
 export interface Coordenadas {

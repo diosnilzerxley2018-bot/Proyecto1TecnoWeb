@@ -7,6 +7,7 @@ import { api, ErrorApi } from '@/lib/api';
 import { useNotificaciones } from '@/components/ui/Notificaciones';
 import { Campo } from '@/components/ui/Campo';
 import { Boton } from '@/components/ui/Boton';
+import { REQUISITOS_CONTRASENA } from '@/lib/dominio';
 import { cn } from '@/lib/cn';
 
 /**
@@ -20,14 +21,8 @@ import { cn } from '@/lib/cn';
  * de enviar. Una política que solo se conoce al fallar obliga a adivinar.
  */
 
-/** RF-SEG-03. Se refleja aquí lo que el servidor exige, no algo más laxo. */
-const REQUISITOS: { texto: string; cumple: (v: string) => boolean }[] = [
-  { texto: 'Al menos 8 caracteres', cumple: (v) => v.length >= 8 },
-  { texto: 'Una mayúscula', cumple: (v) => /[A-Z]/.test(v) },
-  { texto: 'Una minúscula', cumple: (v) => /[a-z]/.test(v) },
-  { texto: 'Un número', cumple: (v) => /[0-9]/.test(v) },
-  { texto: 'Un carácter especial', cumple: (v) => /[^A-Za-z0-9]/.test(v) },
-];
+/** RF-SEG-03. La lista vive en `lib/dominio`, junto al resto de la política. */
+const REQUISITOS = REQUISITOS_CONTRASENA;
 
 export function CambiarContrasena() {
   const { notificar } = useNotificaciones();

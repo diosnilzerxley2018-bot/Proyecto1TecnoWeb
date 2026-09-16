@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { api, ErrorApi } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
+import { useNotificaciones } from '@/components/ui/Notificaciones';
 import { Modal } from '@/components/Modal';
 import { FormularioRol } from '@/components/FormularioRol';
 import { RequierePermiso } from '@/components/RequierePermiso';
@@ -22,6 +23,7 @@ export default function PaginaRoles() {
 
 function ContenidoRoles() {
   const { tienePermiso } = useAuth();
+  const { notificar } = useNotificaciones();
 
   const [roles, setRoles] = useState<Rol[]>([]);
   const [permisos, setPermisos] = useState<Permiso[]>([]);
@@ -51,9 +53,10 @@ function ContenidoRoles() {
 
   const cerrarDialogo = () => setDialogo({ tipo: 'ninguno' });
 
-  const alGuardar = () => {
+  const alGuardar = (mensaje: string) => {
     cerrarDialogo();
     void cargarDatos();
+    notificar('exito', mensaje);
   };
 
   const puedeGestionar = tienePermiso('ROL_GESTIONAR');
@@ -134,7 +137,7 @@ function ContenidoRoles() {
         <Modal titulo="Nuevo rol" onCerrar={cerrarDialogo} ancho="max-w-2xl">
           <FormularioRol
             permisosDisponibles={permisos}
-            onListo={alGuardar}
+            onListo={() => alGuardar('Rol creado')}
             onCancelar={cerrarDialogo}
           />
         </Modal>
@@ -145,7 +148,7 @@ function ContenidoRoles() {
           <FormularioRol
             permisosDisponibles={permisos}
             rol={dialogo.rol}
-            onListo={alGuardar}
+            onListo={() => alGuardar('Rol actualizado. Los permisos retirados se quitaron de sus usuarios')}
             onCancelar={cerrarDialogo}
           />
         </Modal>

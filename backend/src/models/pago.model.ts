@@ -28,6 +28,7 @@ const CAMPOS = {
   id_transaccion_ext: true,
   evento_pago: ULTIMO_EVENTO,
   datos_cobro: true,
+  tipo_datos: true,
   fecha_creacion: true,
   fecha_expiracion: true,
   fecha_confirmacion: true,
@@ -97,7 +98,12 @@ export const listar = (filtro: { estado?: string; modo?: string } = {}) =>
 /** Enlaza el cobro con la transacción que la pasarela acaba de abrir. */
 export const registrarTransaccionExterna = (
   id: number,
-  datos: { idTransaccionExterna: string; datosCobro: string; expiraEn: Date },
+  datos: {
+    idTransaccionExterna: string;
+    datosCobro: string;
+    tipoDatos: 'qr' | 'url';
+    expiraEn: Date;
+  },
   tx: ClientePrisma = prisma,
 ) =>
   tx.pago.update({
@@ -105,6 +111,7 @@ export const registrarTransaccionExterna = (
     data: {
       id_transaccion_ext: datos.idTransaccionExterna,
       datos_cobro: datos.datosCobro,
+      tipo_datos: datos.tipoDatos,
       fecha_expiracion: datos.expiraEn,
     },
     select: CAMPOS,

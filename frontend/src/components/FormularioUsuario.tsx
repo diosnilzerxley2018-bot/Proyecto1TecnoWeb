@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { api, ErrorApi } from '@/lib/api';
 import { CampoTexto } from '@/components/CampoTexto';
 import { Selector } from '@/components/ui/Selector';
-import { ROL_CLIENTE, esPersonalInterno } from '@/lib/dominio';
+import { AYUDA_CONTRASENA, ROL_CLIENTE, esPersonalInterno } from '@/lib/dominio';
 import type { Rol, UsuarioDetalle, Cargo } from '@/types';
 
 /**
@@ -165,11 +165,20 @@ export function FormularioUsuario({
 
       {!editando && (
         <>
+          {/*
+            El administrador está dando de alta la cuenta **de otra persona**,
+            no iniciando la suya. Sin estos `autoComplete` el navegador lee el
+            par usuario/contraseña como un formulario de acceso y rellena las
+            credenciales guardadas del alta anterior, que es como terminaban
+            apareciendo los datos de un usuario dentro del alta del siguiente.
+          */}
           <CampoTexto id="nombreUsuario" etiqueta="Nombre de usuario" required minLength={4}
+            autoComplete="off"
             value={datos.nombreUsuario} onChange={(e) => actualizar('nombreUsuario', e.target.value)} />
           <CampoTexto id="contrasena" etiqueta="Contraseña" type="password" required
+            autoComplete="new-password"
             value={datos.contrasena} onChange={(e) => actualizar('contrasena', e.target.value)}
-            ayuda="Mínimo 8 caracteres, con al menos una letra y un número" />
+            ayuda={AYUDA_CONTRASENA} />
         </>
       )}
 

@@ -108,6 +108,19 @@ export function DialogoCobro({
   const pagado = actual.estado === 'Pagado';
   const fallido = actual.estado === 'Fallido' || actual.estado === 'Vencido';
 
+  /**
+   * Enlace a la página de pago, **solo si de verdad lo es**.
+   *
+   * Que el cobro sea de tipo `url` no garantiza que su contenido sea una
+   * dirección navegable: la pasarela simulada declara `url` para todo lo que
+   * no es QR, pero devuelve un texto descriptivo. Pintarlo como `href` daba un
+   * botón que no llevaba a ninguna parte.
+   */
+  const enlacePago =
+    actual.tipoDatos === 'url' && /^https?:\/\//i.test(actual.datosCobro ?? '')
+      ? actual.datosCobro
+      : null;
+
   return (
     <Dialogo
       abierto
@@ -159,9 +172,9 @@ export function DialogoCobro({
             </motion.div>
           ) : (
             <motion.div key="esperando" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-              {actual.tipoDatos === 'url' && actual.datosCobro ? (
+              {enlacePago ? (
                 <a
-                  href={actual.datosCobro}
+                  href={enlacePago}
                   target="_blank"
                   rel="noreferrer"
                   className="flex items-center justify-center gap-2 rounded-xl border border-marca-500/40 bg-marca-500/10 px-4 py-6 text-sm text-marca-300 transition-colors hover:bg-marca-500/15"
@@ -182,6 +195,19 @@ export function DialogoCobro({
                   />
                   <p className="text-[11px] text-tinta-tenue">
                     Escanee con la aplicación de su banco
+                  </p>
+                </div>
+              ) : actual.simulado ? (
+                /* Cobro simulado sin código que escanear —tarjeta, por
+                   ejemplo—: no hay pasarela a la que ir, así que se dice y se
+                   espera a que se acredite solo. */
+                <div className="grid place-items-center gap-2 rounded-xl border border-borde bg-white/[0.02] px-3.5 py-6 text-center">
+                  <FlaskConical className="size-5 text-aviso" aria-hidden />
+                  <p className="text-xs text-tinta-suave">
+                    Cobro simulado con {actual.metodo.toLowerCase()}
+                  </p>
+                  <p className="text-[11px] leading-relaxed text-tinta-tenue">
+                    No hay página de pago real: se acreditará solo en unos segundos.
                   </p>
                 </div>
               ) : (

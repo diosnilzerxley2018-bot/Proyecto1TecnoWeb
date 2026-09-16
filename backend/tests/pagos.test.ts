@@ -131,6 +131,23 @@ describe('Cobro de una venta', () => {
   });
 
   /**
+   * El tipo lo declara la pasarela al abrir el cobro y desde entonces se
+   * guarda. Antes se adivinaba mirando si el contenido empezaba por «http», y
+   * como el texto de la pasarela simulada nunca empieza así, **todo** cobro
+   * salía como QR: quien elegía Tarjeta recibía un código para escanear.
+   */
+  it('un cobro con Tarjeta no se dibuja como QR', async () => {
+    const staff = await obtenerToken();
+    const venta = await ventaConPago(staff, 'Tarjeta');
+
+    expect(venta.status).toBe(201);
+    const cobro = venta.body.cobro;
+    expect(cobro.tipoDatos).toBe('url');
+    // Y sin tipo `qr` no se genera la imagen, que era lo que se veía en pantalla.
+    expect(cobro.qrImagen).toBeUndefined();
+  });
+
+  /**
    * El QR simulado tiene que ser reconocible como tal. Uno que pareciera
    * auténtico sería una forma involuntaria de estafa.
    */

@@ -144,4 +144,29 @@ describe('DialogoCobro', () => {
     const enlace = screen.getByRole('link', { name: /Abrir la página de pago/ });
     expect(enlace).toHaveAttribute('href', 'https://pasarela.example/pagar/abc');
   });
+
+  /**
+   * Un cobro con tarjeta en modo simulado es de tipo `url` pero su contenido
+   * no es una dirección: es el texto descriptivo de la pasarela de mentira.
+   * Pintarlo como enlace daba un botón que no llevaba a ninguna parte, así que
+   * se dice lo que es y se espera a que se acredite solo.
+   */
+  it('no ofrece enlace si el contenido del cobro no es una dirección', () => {
+    render(
+      <DialogoCobro
+        pago={pago({
+          metodo: 'Tarjeta',
+          tipoDatos: 'url',
+          datosCobro: 'NUTRIEXPRESS-SIMULADO|ref=VENTA-3|monto=48.00',
+          qrImagen: undefined,
+          simulado: true,
+        })}
+        onCerrar={vi.fn()}
+        onPagado={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByRole('link', { name: /Abrir la página de pago/ })).toBeNull();
+    expect(screen.getByText(/Cobro simulado con tarjeta/i)).toBeInTheDocument();
+  });
 });

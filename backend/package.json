@@ -20,6 +20,7 @@
     "test:db": "tsx tests/preparar-bd.ts",
     "postinstall": "prisma generate",
     "db:init": "tsx prisma/inicializar.ts",
+    "db:actualizar": "tsx prisma/actualizar.ts",
     "db:seed": "tsx prisma/seed.ts"
   },
   "dependencies": {

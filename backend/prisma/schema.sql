@@ -476,6 +476,10 @@ CREATE TABLE pago (
     -- Lo que hay que mostrarle al cliente: el contenido del QR o la URL
     -- del checkout alojado, segun lo devuelva la pasarela.
     datos_cobro         TEXT,
+    -- Como hay que mostrar `datos_cobro`. Lo dice la pasarela al abrir el
+    -- cobro y por eso se guarda: adivinarlo por la forma del texto daba un
+    -- QR a quien habia elegido Tarjeta. Nulo mientras el cobro no se abrio.
+    tipo_datos          VARCHAR(4),
     fecha_creacion      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     fecha_expiracion    TIMESTAMP,
     fecha_confirmacion  TIMESTAMP,
@@ -487,6 +491,7 @@ CREATE TABLE pago (
     CONSTRAINT ck_pago_metodo CHECK (metodo IN ('Efectivo','Tarjeta','QR')),
     CONSTRAINT ck_pago_estado CHECK (estado IN ('Pendiente','Pagado','Fallido','Vencido','Reembolsado')),
     CONSTRAINT ck_pago_modo   CHECK (modo   IN ('Simulado','Real')),
+    CONSTRAINT ck_pago_tipo_datos CHECK (tipo_datos IS NULL OR tipo_datos IN ('qr','url')),
     -- Un cobro paga una venta o un pedido, nunca los dos ni ninguno.
     CONSTRAINT ck_pago_origen CHECK ((id_venta IS NOT NULL) <> (id_pedido IS NOT NULL))
 );

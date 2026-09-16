@@ -80,6 +80,12 @@ export interface PagoDTO {
   simulado: boolean;
 }
 
+/** Respaldo para los cobros abiertos antes de que se guardara el tipo. */
+function tipoSegunElContenido(datos: string | null): 'qr' | 'url' | null {
+  if (datos === null) return null;
+  return datos.startsWith('http') ? 'url' : 'qr';
+}
+
 function aDTO(pago: PagoConsultado): PagoDTO {
   const datos = pago.datos_cobro;
   return {
@@ -92,9 +98,16 @@ function aDTO(pago: PagoConsultado): PagoDTO {
     pasarela: pago.pasarela,
     referenciaExterna: pago.id_transaccion_ext,
     datosCobro: datos,
-    // El tipo no se guarda: se deduce de la forma del contenido. Una pasarela
-    // devuelve un enlace o un texto para codificar en QR, y son distinguibles.
-    tipoDatos: datos === null ? null : datos.startsWith('http') ? 'url' : 'qr',
+    /*
+     * Lo dice la pasarela al abrir el cobro y aquí solo se repite.
+     *
+     * Antes se deducía de la forma del contenido —«¿empieza por http?»— y esa
+     * suposición no se sostiene: la pasarela simulada devuelve siempre el
+     * mismo texto con tuberías, así que un cobro con Tarjeta, que nace como
+     * `url`, terminaba dibujado como QR. El respaldo solo cubre los cobros
+     * anteriores a que la columna existiera.
+     */
+    tipoDatos: (pago.tipo_datos as 'qr' | 'url' | null) ?? tipoSegunElContenido(datos),
     expiraEn: pago.fecha_expiracion?.toISOString() ?? null,
     confirmadoEn: pago.fecha_confirmacion?.toISOString() ?? null,
     idVenta: pago.id_venta,
@@ -239,6 +252,7 @@ export async function abrirCobro(
         {
           idTransaccionExterna: cobro.idTransaccionExterna,
           datosCobro: cobro.datosCobro,
+          tipoDatos: cobro.tipoDatos,
           expiraEn: cobro.expiraEn,
         },
         tx,

@@ -183,6 +183,8 @@ model nota_egreso {
   detalle_egreso_producto detalle_egreso_producto[]
   empleado                empleado                  @relation(fields: [id_empleado], references: [id_empleado], onDelete: NoAction, onUpdate: NoAction, map: "fk_notaegr_empleado")
   orden_produccion        orden_produccion[]
+
+  @@index([fecha(sort: Desc)], map: "ix_notaegr_fecha")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -198,6 +200,8 @@ model nota_ingreso {
   detalle_ingreso_producto detalle_ingreso_producto[]
   empleado                 empleado                   @relation(fields: [id_empleado], references: [id_empleado], onDelete: NoAction, onUpdate: NoAction, map: "fk_notaing_empleado")
   orden_produccion         orden_produccion[]
+
+  @@index([fecha(sort: Desc)], map: "ix_notaing_fecha")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -218,6 +222,8 @@ model orden_produccion {
   empleado            empleado      @relation(fields: [id_empleado], references: [id_empleado], onDelete: NoAction, onUpdate: NoAction, map: "fk_ordprod_empleado")
   nota_ingreso        nota_ingreso? @relation(fields: [id_nota_ingreso], references: [id_nota_ingreso], onDelete: NoAction, onUpdate: NoAction, map: "fk_ordprod_ingreso")
   receta              receta        @relation(fields: [id_receta], references: [id_receta], onDelete: NoAction, onUpdate: NoAction, map: "fk_ordprod_receta")
+
+  @@index([fecha(sort: Desc)], map: "ix_ordprod_fecha")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -463,6 +469,7 @@ model pago {
   fecha_confirmacion DateTime?     @db.Timestamp(6)
   id_venta           Int?
   id_pedido          Int?
+  tipo_datos         String?       @db.VarChar(4)
   evento_pago        evento_pago[]
   pedido             pedido?       @relation(fields: [id_pedido], references: [id_pedido], onDelete: NoAction, onUpdate: NoAction, map: "fk_pago_pedido")
   venta              venta?        @relation(fields: [id_venta], references: [id_venta], onDelete: NoAction, onUpdate: NoAction, map: "fk_pago_venta")
