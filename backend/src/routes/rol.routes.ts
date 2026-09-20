@@ -13,5 +13,6 @@ router.get('/', requierePermiso('ROL_LEER'), ctrl.listar);
 router.get('/:id', validarIdParam, requierePermiso('ROL_LEER'), ctrl.obtener);
 router.post('/', requierePermiso('ROL_GESTIONAR'), validarCuerpo(ctrl.esquemaRol), ctrl.crear);
 router.put('/:id', validarIdParam, requierePermiso('ROL_GESTIONAR'), validarCuerpo(ctrl.esquemaRol), ctrl.actualizar);
+router.delete('/:id', validarIdParam, requierePermiso('ROL_GESTIONAR'), ctrl.eliminar);
 
 export default router;

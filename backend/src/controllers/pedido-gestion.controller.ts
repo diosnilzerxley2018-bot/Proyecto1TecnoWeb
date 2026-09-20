@@ -60,6 +60,11 @@ export async function misEntregas(req: Request, res: Response) {
   res.json(await gestionService.misEntregas(idUsuarioDeSesion(req)));
 }
 
+/** El turno declarado de quien consulta. */
+export async function consultarDisponibilidad(req: Request, res: Response) {
+  res.json(await gestionService.consultarDisponibilidad(idUsuarioDeSesion(req)));
+}
+
 /** El repartidor declara si está de turno. */
 export async function cambiarDisponibilidad(req: Request, res: Response) {
   res.json(

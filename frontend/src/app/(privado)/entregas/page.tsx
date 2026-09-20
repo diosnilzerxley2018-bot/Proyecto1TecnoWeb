@@ -12,7 +12,7 @@ import { EsqueletoFilas } from '@/components/ui/Esqueleto';
 import { Insignia } from '@/components/ui/Insignia';
 import { Boton } from '@/components/ui/Boton';
 import { MapaUbicacion } from '@/components/pedidos/MapaUbicacion';
-import type { PedidoGestion } from '@/types';
+import type { Disponibilidad, PedidoGestion } from '@/types';
 import { ETIQUETA_ESTADO, TONO_ESTADO } from '@/lib/pedidos';
 import { formatearBs, tiempoTranscurrido } from '@/lib/formato';
 import { cn } from '@/lib/cn';
@@ -42,10 +42,15 @@ function MisEntregas() {
 
   const [entregas, setEntregas] = useState<PedidoGestion[]>([]);
   const [cargando, setCargando] = useState(true);
-  const [deTurno, setDeTurno] = useState(false);
+  /**
+   * `null` mientras no se sabe. Antes arrancaba en `false`, y como nunca se
+   * leía del servidor, la pantalla decía «Fuera de turno» cada vez que se
+   * entraba aunque el turno siguiera abierto en la base.
+   */
+  const [deTurno, setDeTurno] = useState<boolean | null>(null);
   const [cambiando, setCambiando] = useState(false);
 
-  const cargar = useCallback(async () => {
+  const cargarEntregas = useCallback(async () => {
     try {
       setEntregas(await api.get<PedidoGestion[]>('/gestion/mis-entregas'));
     } catch (e) {
@@ -55,14 +60,31 @@ function MisEntregas() {
     }
   }, [notificar]);
 
+  /**
+   * Va aparte de las entregas: si una de las dos consultas falla, la otra
+   * igual tiene que verse. Perder la lista por no saber el turno —o al revés—
+   * dejaría al repartidor sin lo que sí se pudo cargar.
+   */
+  const cargarTurno = useCallback(async () => {
+    try {
+      const { disponible } = await api.get<Disponibilidad>('/gestion/disponibilidad');
+      setDeTurno(disponible);
+    } catch (e) {
+      notificar('error', e instanceof ErrorApi ? e.message : 'No se pudo consultar su turno');
+    }
+  }, [notificar]);
+
   useEffect(() => {
-    void cargar();
-  }, [cargar]);
+    void cargarEntregas();
+    void cargarTurno();
+  }, [cargarEntregas, cargarTurno]);
 
   async function cambiarTurno() {
+    // Sin saber el estado actual no hay a qué invertirlo.
+    if (deTurno === null) return;
     setCambiando(true);
     try {
-      const r = await api.put<{ disponible: boolean }>('/gestion/disponibilidad', {
+      const r = await api.put<Disponibilidad>('/gestion/disponibilidad', {
         disponible: !deTurno,
       });
       setDeTurno(r.disponible);
@@ -101,18 +123,25 @@ function MisEntregas() {
           {deTurno ? <Zap className="size-5" aria-hidden /> : <PowerOff className="size-5" aria-hidden />}
         </span>
 
-        <div className="min-w-0 flex-1">
-          <p className="text-sm text-tinta">{deTurno ? 'Está de turno' : 'Fuera de turno'}</p>
+        <div className="min-w-0 flex-1" aria-live="polite">
+          <p className="text-sm text-tinta">
+            {deTurno === null ? 'Consultando su turno…' : deTurno ? 'Está de turno' : 'Fuera de turno'}
+          </p>
           <p className="mt-0.5 text-[11px] text-tinta-tenue">
-            {deTurno
-              ? 'El sistema puede proponerlo para las entregas nuevas'
-              : 'No se le asignarán entregas hasta que active su turno'}
+            {deTurno === null
+              ? 'Un momento, se está leyendo lo que tiene declarado'
+              : deTurno
+                ? 'El sistema puede proponerlo para las entregas nuevas'
+                : 'No se le asignarán entregas hasta que active su turno'}
           </p>
         </div>
 
+        {/* Deshabilitado mientras no se sabe el turno: el botón invierte el
+            estado actual, y sin conocerlo ofrecería la acción equivocada. */}
         <Boton
           variante={deTurno ? 'contorno' : 'primario'}
           cargando={cambiando}
+          disabled={deTurno === null}
           onClick={cambiarTurno}
           className="shrink-0"
         >
@@ -127,9 +156,9 @@ function MisEntregas() {
           icono={<Bike className="size-6" aria-hidden />}
           titulo="Sin entregas asignadas"
           descripcion={
-            deTurno
-              ? 'Cuando le asignen un pedido va a aparecer acá.'
-              : 'Inicie su turno para que el sistema pueda asignarle entregas.'
+            deTurno === false
+              ? 'Inicie su turno para que el sistema pueda asignarle entregas.'
+              : 'Cuando le asignen un pedido va a aparecer acá.'
           }
         />
       ) : (

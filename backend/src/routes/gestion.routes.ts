@@ -24,7 +24,11 @@ router.get('/repartidores', requierePermiso('PEDIDO_LEER'), ctrl.listarRepartido
 /**
  * El repartidor declara su propio turno, así que no exige PEDIDO_GESTIONAR:
  * basta con ser empleado. Quien sabe si empezó su jornada es él.
+ *
+ * La lectura sigue la misma regla que la escritura: el alcance lo pone la
+ * sesión, y cada empleado solo ve —y solo cambia— el suyo.
  */
+router.get('/disponibilidad', ctrl.consultarDisponibilidad);
 router.put('/disponibilidad', validarCuerpo(esquemaDisponibilidad), ctrl.cambiarDisponibilidad);
 
 /**

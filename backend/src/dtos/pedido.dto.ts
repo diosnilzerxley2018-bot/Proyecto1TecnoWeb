@@ -110,10 +110,21 @@ export const esquemaAsignarRepartidor = z.object({
   idRepartidor: z.number().int().positive(),
 });
 
-/** Quien lleva el pedido. No es un candidato: ya fue elegido. */
 /** El repartidor declara si está de turno (RF-PED-07). */
 export const esquemaDisponibilidad = z.object({ disponible: z.boolean() });
 
+/**
+ * Turno del empleado, tal como está guardado.
+ *
+ * Lo devuelven tanto la consulta como el cambio: la pantalla de entregas
+ * necesita **leerlo** al abrirse, no solo escribirlo, o vuelve a mostrar
+ * «Fuera de turno» cada vez que se entra aunque la base diga lo contrario.
+ */
+export interface DisponibilidadDTO {
+  disponible: boolean;
+}
+
+/** Quien lleva el pedido. No es un candidato: ya fue elegido. */
 export interface RepartidorAsignadoDTO {
   id: number;
   nombreCompleto: string;

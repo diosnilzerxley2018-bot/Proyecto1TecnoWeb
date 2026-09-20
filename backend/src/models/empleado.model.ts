@@ -22,6 +22,13 @@ export const listarPorCargo = (nombreCargo: string) =>
     orderBy: { usuario: { apellido: 'asc' } },
   });
 
+/** Turno actual del empleado (RF-PED-07). */
+export const obtenerDisponibilidad = (idEmpleado: number) =>
+  prisma.empleado.findUniqueOrThrow({
+    where: { id_empleado: idEmpleado },
+    select: { disponible: true },
+  });
+
 /** Marca al empleado de turno o fuera de turno (RF-PED-07). */
 export const cambiarDisponibilidad = (idEmpleado: number, disponible: boolean) =>
   prisma.empleado.update({

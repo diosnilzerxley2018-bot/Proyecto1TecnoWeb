@@ -127,6 +127,11 @@ export interface UbicacionEntrega {
 }
 
 /** Quien lleva el pedido. Ya fue elegido: no es un candidato. */
+/** Turno declarado del empleado (RF-PED-07). */
+export interface Disponibilidad {
+  disponible: boolean;
+}
+
 export interface Repartidor {
   id: number;
   nombreCompleto: string;

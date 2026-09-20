@@ -4,6 +4,7 @@ import * as empleadoModel from '../models/empleado.model.js';
 import * as avisoService from './aviso.service.js';
 import type { PedidoParaGestion } from '../models/pedido.model.js';
 import type {
+  DisponibilidadDTO,
   EstadoPedido,
   FiltroPedidos,
   PedidoGestionDTO,
@@ -215,10 +216,24 @@ export async function misEntregas(idUsuario: number): Promise<PedidoGestionDTO[]
 export async function cambiarDisponibilidad(
   idUsuario: number,
   disponible: boolean,
-): Promise<{ disponible: boolean }> {
+): Promise<DisponibilidadDTO> {
   const idEmpleado = await exigirEmpleado(idUsuario, 'declarar su disponibilidad');
   const actualizado = await empleadoModel.cambiarDisponibilidad(idEmpleado, disponible);
   return { disponible: actualizado.disponible };
+}
+
+/**
+ * El turno que el empleado tiene declarado ahora.
+ *
+ * Existía la escritura pero no la lectura: la pantalla de entregas arrancaba
+ * siempre en «Fuera de turno» y, al volver a ella, mostraba lo contrario de lo
+ * guardado. El turno sí persistía —la sugerencia de reparto lo veía—; lo que
+ * mentía era la pantalla del propio repartidor, que además lo invitaba a
+ * «iniciar» un turno que ya tenía abierto.
+ */
+export async function consultarDisponibilidad(idUsuario: number): Promise<DisponibilidadDTO> {
+  const idEmpleado = await exigirEmpleado(idUsuario, 'consultar su turno');
+  return empleadoModel.obtenerDisponibilidad(idEmpleado);
 }
 
 /** Estados en los que todavía tiene sentido asignar o cambiar el repartidor. */

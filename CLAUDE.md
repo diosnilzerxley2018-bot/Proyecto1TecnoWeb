@@ -79,10 +79,13 @@ La dependencia **nunca** va al revés ni en diagonal (un controlador no toca `pr
 - **`/api/perfil` es la excepción deliberada al permiso.** `perfil.routes.ts` solo exige sesión iniciada: administrar la cuenta propia no es un privilegio que se conceda, y el alcance lo limita la sesión. Un único `perfil.service.ts` sirve a empleados y clientes (Usuario es el supertipo; lo que difiere entre subtipos se agrega al leer, no al escribir). Lo que el titular **no** puede decidir sobre sí mismo —rol, permisos, estado de la cuenta, nombre de usuario— no tiene puerta de entrada por ahí; se administra desde `usuario.service.ts` (CU-SEG-02/03/04). No duplicar edición de cuenta en `usuario.service` ni en `cliente.service`.
 - **La política de contraseñas vive una sola vez** en `src/dtos/contrasena.dto.ts` (`esquemaContrasena`, RF-SEG-03), y la comparten el alta por el administrador, el autorregistro del cliente y el cambio desde el perfil. `AYUDA_CONTRASENA` es el texto derivado para la interfaz.
 - **Los precios los pone el servidor**, tomados de la tabla; nunca se aceptan en el cuerpo de la petición.
+- **El rol `Cliente` es del sistema.** El autorregistro lo busca por nombre (`auth.service`) y `esPersonalInterno` compara contra ese nombre, así que `rol.service` impide eliminarlo o renombrarlo (sus permisos sí se editan). Un rol solo se elimina si no tiene usuarios.
 
 ### Base de datos
 
 `prisma/schema.sql` (36 tablas, con sus `CHECK`, FK e índices) es **la fuente de verdad**; corresponde a la sección 4.5.3 del informe. `prisma/schema.prisma` se genera por ingeniería inversa con `prisma db pull` — **no editarlo a mano**. Un cambio de esquema se escribe primero en SQL.
+
+No hay migraciones versionadas. `npm run db:init` solo carga una base **vacía** (si hay tablas no toca nada). Un cambio posterior se escribe en **dos** sitios: en `schema.sql` y, como ajuste idempotente y no destructivo, en `prisma/actualizar.ts` (`npm run db:actualizar`), que es lo que lo lleva a una base con datos como la de producción. Hay que aplicarlo **antes** de desplegar el código que usa la columna nueva (ver `DESPLIEGUE.md`).
 
 Prisma 7 requiere adaptador de driver (`PrismaPg`); el cliente único vive en `src/config/prisma.ts`.
 

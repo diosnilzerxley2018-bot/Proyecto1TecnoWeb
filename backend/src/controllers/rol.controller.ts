@@ -30,3 +30,8 @@ export async function actualizar(req: Request, res: Response) {
   const { nombre, idsPermiso } = req.body as z.infer<typeof esquemaRol>;
   res.json(await rolService.actualizar(Number(req.params.id), nombre, idsPermiso));
 }
+
+export async function eliminar(req: Request, res: Response) {
+  await rolService.eliminar(Number(req.params.id));
+  res.status(204).end();
+}

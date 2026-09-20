@@ -317,6 +317,74 @@ describe('RF-PED-07 · Sugerencia de repartidor', () => {
     expect(apagado.body.disponible).toBe(false);
   });
 
+  it('un empleado nuevo empieza fuera de turno', async () => {
+    const repartidor = await crearEmpleado('Repartidor');
+
+    const r = await request(app)
+      .get('/api/gestion/disponibilidad')
+      .set(cabecera(repartidor.token));
+
+    expect(r.status).toBe(200);
+    expect(r.body).toEqual({ disponible: false });
+  });
+
+  /**
+   * El turno se guardaba, pero no había forma de leerlo: la pantalla de
+   * entregas arrancaba siempre en «Fuera de turno» y, al volver a ella,
+   * contradecía a la base. Se lee con una sesión aparte, como la pantalla que
+   * se abre de nuevo.
+   */
+  it('el turno declarado se lee de vuelta, no solo se escribe', async () => {
+    const repartidor = await crearEmpleado('Repartidor');
+
+    await request(app)
+      .put('/api/gestion/disponibilidad')
+      .set(cabecera(repartidor.token))
+      .send({ disponible: true })
+      .expect(200);
+
+    const leido = await request(app)
+      .get('/api/gestion/disponibilidad')
+      .set(cabecera(repartidor.token));
+    expect(leido.body.disponible).toBe(true);
+
+    await request(app)
+      .put('/api/gestion/disponibilidad')
+      .set(cabecera(repartidor.token))
+      .send({ disponible: false })
+      .expect(200);
+
+    const releido = await request(app)
+      .get('/api/gestion/disponibilidad')
+      .set(cabecera(repartidor.token));
+    expect(releido.body.disponible).toBe(false);
+  });
+
+  it('cada empleado lee su propio turno, no el de otro', async () => {
+    const deTurno = await crearEmpleado('Repartidor');
+    const libre = await crearEmpleado('Repartidor');
+
+    await request(app)
+      .put('/api/gestion/disponibilidad')
+      .set(cabecera(deTurno.token))
+      .send({ disponible: true })
+      .expect(200);
+
+    const r = await request(app)
+      .get('/api/gestion/disponibilidad')
+      .set(cabecera(libre.token));
+    expect(r.body.disponible).toBe(false);
+  });
+
+  it('un cliente no tiene turno que consultar', async () => {
+    const cliente = await registrarCliente();
+    const r = await request(app)
+      .get('/api/gestion/disponibilidad')
+      .set(cabecera(cliente.token));
+
+    expect(r.status).toBe(403);
+  });
+
   it('un cliente no puede declararse repartidor de turno', async () => {
     const cliente = await registrarCliente();
     const r = await request(app)

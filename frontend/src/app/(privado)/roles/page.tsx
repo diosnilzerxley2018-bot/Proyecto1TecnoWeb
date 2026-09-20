@@ -7,11 +7,17 @@ import { useNotificaciones } from '@/components/ui/Notificaciones';
 import { Modal } from '@/components/Modal';
 import { FormularioRol } from '@/components/FormularioRol';
 import { RequierePermiso } from '@/components/RequierePermiso';
+import { Boton } from '@/components/ui/Boton';
+import { motivoParaNoEliminar } from '@/lib/roles';
 import type { Rol, Permiso } from '@/types';
 
 /** CU-SEG-03 Gestionar Rol y Permisos */
 
-type Dialogo = { tipo: 'ninguno' } | { tipo: 'crear' } | { tipo: 'editar'; rol: Rol };
+type Dialogo =
+  | { tipo: 'ninguno' }
+  | { tipo: 'crear' }
+  | { tipo: 'editar'; rol: Rol }
+  | { tipo: 'eliminar'; rol: Rol };
 
 export default function PaginaRoles() {
   return (
@@ -30,6 +36,7 @@ function ContenidoRoles() {
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [dialogo, setDialogo] = useState<Dialogo>({ tipo: 'ninguno' });
+  const [eliminando, setEliminando] = useState(false);
 
   const cargarDatos = useCallback(async () => {
     setError(null);
@@ -58,6 +65,25 @@ function ContenidoRoles() {
     void cargarDatos();
     notificar('exito', mensaje);
   };
+
+  /**
+   * El error se avisa y el diálogo se cierra igual: si el servidor lo rechazó
+   * —porque alguien le asignó el rol a un usuario mientras tanto, por
+   * ejemplo— la lista recargada muestra por qué.
+   */
+  async function eliminar(rol: Rol) {
+    setEliminando(true);
+    try {
+      await api.del(`/roles/${rol.id}`);
+      alGuardar(`Rol ${rol.nombre} eliminado`);
+    } catch (e) {
+      cerrarDialogo();
+      void cargarDatos();
+      notificar('error', e instanceof ErrorApi ? e.message : 'No se pudo eliminar el rol');
+    } finally {
+      setEliminando(false);
+    }
+  }
 
   const puedeGestionar = tienePermiso('ROL_GESTIONAR');
 
@@ -106,12 +132,15 @@ function ContenidoRoles() {
                   </p>
                 </div>
                 {puedeGestionar && (
-                  <button
-                    onClick={() => setDialogo({ tipo: 'editar', rol })}
-                    className="text-xs font-medium text-marca-300 hover:underline"
-                  >
-                    Editar
-                  </button>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <button
+                      onClick={() => setDialogo({ tipo: 'editar', rol })}
+                      className="text-xs font-medium text-marca-300 hover:underline"
+                    >
+                      Editar
+                    </button>
+                    <BotonEliminar rol={rol} onEliminar={() => setDialogo({ tipo: 'eliminar', rol })} />
+                  </div>
                 )}
               </div>
 
@@ -153,6 +182,53 @@ function ContenidoRoles() {
           />
         </Modal>
       )}
+
+      {dialogo.tipo === 'eliminar' && (
+        <Modal titulo="Eliminar rol" onCerrar={cerrarDialogo} ancho="max-w-md">
+          <p className="text-sm text-tinta-suave">
+            ¿Eliminar el rol <span className="font-medium text-tinta">{dialogo.rol.nombre}</span>?
+          </p>
+          <p className="mt-2 text-xs text-tinta-tenue">
+            {dialogo.rol.permisos.length > 0
+              ? `Se quitan también los ${dialogo.rol.permisos.length} permiso(s) que definía. `
+              : ''}
+            No se puede deshacer.
+          </p>
+          <div className="mt-6 flex justify-end gap-2">
+            <Boton variante="fantasma" onClick={cerrarDialogo} disabled={eliminando}>
+              Cancelar
+            </Boton>
+            <Boton
+              variante="peligro"
+              cargando={eliminando}
+              onClick={() => void eliminar(dialogo.rol)}
+            >
+              Eliminar rol
+            </Boton>
+          </div>
+        </Modal>
+      )}
     </div>
+  );
+}
+
+/**
+ * Deshabilitado —no escondido— cuando el rol no se puede borrar: así el
+ * administrador ve que la acción existe y el motivo por el que ahora no
+ * aplica, en vez de preguntarse dónde está.
+ */
+function BotonEliminar({ rol, onEliminar }: { rol: Rol; onEliminar: () => void }) {
+  const motivo = motivoParaNoEliminar(rol);
+
+  return (
+    <button
+      onClick={onEliminar}
+      disabled={motivo !== null}
+      title={motivo ?? `Eliminar el rol ${rol.nombre}`}
+      aria-label={motivo ? `No se puede eliminar: ${motivo}` : `Eliminar el rol ${rol.nombre}`}
+      className="text-xs font-medium text-peligro hover:underline disabled:cursor-not-allowed disabled:text-tinta-tenue disabled:no-underline"
+    >
+      Eliminar
+    </button>
   );
 }
