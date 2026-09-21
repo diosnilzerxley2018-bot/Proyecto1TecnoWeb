@@ -17,6 +17,9 @@ const PERMISOS = [
   'VENTA_REGISTRAR', 'VENTA_LEER', 'CLIENTE_GESTIONAR',
   // Pedidos
   'PEDIDO_GESTIONAR', 'PEDIDO_LEER',
+  // Cerrar un pedido ajeno: entregarlo o darlo por no entregado sin ser el
+  // repartidor asignado. Solo el administrador, para destrabar casos.
+  'PEDIDO_CERRAR_AJENO',
   // Producción
   'PRODUCTO_GESTIONAR', 'ORDEN_PRODUCCION_GESTIONAR',
   // Inventario

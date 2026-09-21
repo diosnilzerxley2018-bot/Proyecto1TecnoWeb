@@ -1,7 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import { app } from '../src/app.js';
-import { obtenerToken, registrarCliente, crearEmpleado, crearPedido } from './ayudantes.js';
+import {
+  obtenerToken,
+  registrarCliente,
+  crearEmpleado,
+  crearPedido,
+  buscarProducto,
+} from './ayudantes.js';
 
 /**
  * CU-PED-02 — Gestionar Pedido, lado del empleado.
@@ -358,5 +364,122 @@ describe('RF-PED-07 Asignación de repartidor', () => {
       .send({ idRepartidor: repartidor.id });
 
     expect(r.status).toBe(403);
+  });
+});
+
+/**
+ * CU-PED-02 — quién cierra la entrega, y qué arrastra cerrarla.
+ *
+ * Marcar «Entregado» dejó de ser un cambio de estado: en un pedido en efectivo
+ * es la afirmación de que el repartidor recibió el dinero. Por eso solo puede
+ * hacerlo quien estuvo en la puerta, y por eso el cobro se cierra con el
+ * pedido y no por separado.
+ */
+describe('CU-PED-02 · Cerrar la entrega', () => {
+  /** Deja el pedido en la calle, con su repartidor asignado. */
+  async function pedidoEnCamino() {
+    const staff = await obtenerToken();
+    const cliente = await registrarCliente();
+    const idPedido = await crearPedido(cliente.token, 'Jugo verde');
+    const repartidor = await crearEmpleado('Repartidor');
+
+    await request(app)
+      .patch(`/api/gestion/pedidos/${idPedido}/estado`)
+      .set(cabecera(staff))
+      .send({ estado: 'En preparacion' })
+      .expect(200);
+    await request(app)
+      .put(`/api/gestion/pedidos/${idPedido}/repartidor`)
+      .set(cabecera(staff))
+      .send({ idRepartidor: repartidor.id })
+      .expect(200);
+    await request(app)
+      .patch(`/api/gestion/pedidos/${idPedido}/estado`)
+      .set(cabecera(staff))
+      .send({ estado: 'En camino' })
+      .expect(200);
+
+    return { staff, cliente, idPedido, repartidor };
+  }
+
+  const cerrar = (token: string, idPedido: number, estado: string) =>
+    request(app)
+      .patch(`/api/gestion/pedidos/${idPedido}/estado`)
+      .set(cabecera(token))
+      .send({ estado });
+
+  it('un empleado que no es el repartidor asignado no puede marcarla entregada', async () => {
+    const { idPedido } = await pedidoEnCamino();
+    const otro = await crearEmpleado('Vendedor');
+
+    const r = await cerrar(otro.token, idPedido, 'Entregado');
+
+    expect(r.status).toBe(403);
+    expect(r.body.error).toContain('repartidor asignado');
+  });
+
+  it('el repartidor asignado la entrega, y el pedido en efectivo queda cobrado', async () => {
+    const { cliente, idPedido, repartidor } = await pedidoEnCamino();
+
+    const r = await cerrar(repartidor.token, idPedido, 'Entregado');
+    expect(r.status).toBe(200);
+    expect(r.body.estadoPedido).toBe('Entregado');
+    expect(r.body.estadoPago).toBe('Pagado');
+
+    // Y el cobro, que nació pendiente, se cerró con la entrega.
+    const detalle = await request(app)
+      .get(`/api/pedidos/${idPedido}`)
+      .set(cabecera(cliente.token));
+    expect(detalle.body.cobro.estado).toBe('Pagado');
+  });
+
+  /** La llave para destrabar un pedido cuyo repartidor no aparece. */
+  it('el administrador puede cerrar una entrega ajena', async () => {
+    const { staff, idPedido } = await pedidoEnCamino();
+
+    const r = await cerrar(staff, idPedido, 'Entregado');
+    expect(r.status).toBe(200);
+    expect(r.body.estadoPedido).toBe('Entregado');
+  });
+
+  it('nadie en la puerta: el repartidor lo da por no entregado y la comida vuelve', async () => {
+    const { cliente, idPedido, repartidor } = await pedidoEnCamino();
+    const antes = await buscarProducto('Jugo verde');
+
+    const r = await cerrar(repartidor.token, idPedido, 'Cancelado');
+    expect(r.status).toBe(200);
+    expect(r.body.estadoPedido).toBe('Cancelado');
+
+    // El producto terminado vuelve al inventario, listo para venderse.
+    const despues = await buscarProducto('Jugo verde');
+    expect(despues.stockDisponible).toBe(antes.stockDisponible + 1);
+
+    // Y el cobro se cierra como fallido: nunca se cobró.
+    const detalle = await request(app)
+      .get(`/api/pedidos/${idPedido}`)
+      .set(cabecera(cliente.token));
+    expect(detalle.body.cobro.estado).toBe('Fallido');
+    expect(detalle.body.estadoPago).toBe('Pendiente');
+  });
+
+  it('un empleado ajeno tampoco puede darla por no entregada', async () => {
+    const { idPedido } = await pedidoEnCamino();
+    const otro = await crearEmpleado('Cocinero');
+
+    const r = await cerrar(otro.token, idPedido, 'Cancelado');
+    expect(r.status).toBe(403);
+  });
+
+  /** C3: el efectivo de un pedido se cobra en la puerta, no al confirmarlo. */
+  it('el cobro en efectivo de un pedido nace pendiente, no pagado', async () => {
+    const cliente = await registrarCliente();
+    const idPedido = await crearPedido(cliente.token, 'Limonada');
+
+    const r = await request(app)
+      .get(`/api/pedidos/${idPedido}`)
+      .set(cabecera(cliente.token));
+
+    expect(r.body.cobro.estado).toBe('Pendiente');
+    expect(r.body.estadoPago).toBe('Pendiente');
   });
 });

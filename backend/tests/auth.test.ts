@@ -183,3 +183,68 @@ describe('CU-SEG-02 · El usuario creado nace con los permisos de su rol', () =>
     expect(r.status).toBe(200);
   });
 });
+
+/**
+ * RNF-SEG — el rol es lo que manda, también al cambiarlo.
+ *
+ * `requierePermiso` consulta `usuario_rol_permiso` sin mirar el rol actual, así
+ * que las habilitaciones del rol anterior seguían valiendo después de un
+ * cambio: se podía degradar a un administrador y **conservaba sus permisos de
+ * administrador**. Como Administrador y Empleado son los dos personal interno,
+ * el cambio entre ellos está permitido y el agujero era alcanzable.
+ */
+describe('CU-SEG-02 · Al cambiar de rol, cambian los permisos', () => {
+  it('pierde los del rol anterior y recibe los del nuevo', async () => {
+    const admin = await obtenerToken();
+    const cabeceraAdmin = { Authorization: `Bearer ${admin}` };
+
+    const permisos = (await request(app).get('/api/roles/permisos').set(cabeceraAdmin)).body;
+    const usuarioLeer = permisos.find((p: { nombre: string }) => p.nombre === 'USUARIO_LEER');
+
+    const alto = (
+      await request(app)
+        .post('/api/roles')
+        .set(cabeceraAdmin)
+        .send({ nombre: `Supervisor ${sufijo()}`, idsPermiso: [usuarioLeer.id] })
+    ).body;
+
+    const cargos = (await request(app).get('/api/cargos').set(cabeceraAdmin)).body;
+    const nombreUsuario = `sup${sufijo()}`;
+    const creado = await request(app)
+      .post('/api/usuarios')
+      .set(cabeceraAdmin)
+      .send({
+        nombre: 'Sup',
+        apellido: 'Ervisor',
+        email: `${nombreUsuario}@nutriexpress.bo`,
+        nombreUsuario,
+        contrasena: 'Clave1234!',
+        idRol: alto.id,
+        idCargo: cargos[0].id,
+      })
+      .expect(201);
+
+    const token = await obtenerToken(nombreUsuario, 'Clave1234!');
+    const cabecera = { Authorization: `Bearer ${token}` };
+
+    // Con el rol alto entra al listado de usuarios.
+    await request(app).get('/api/usuarios').set(cabecera).expect(200);
+
+    const roles = (await request(app).get('/api/roles').set(cabeceraAdmin)).body;
+    const empleado = roles.find((r: { nombre: string }) => r.nombre === 'Empleado');
+    expect(empleado.permisos.some((p: { nombre: string }) => p.nombre === 'USUARIO_LEER')).toBe(false);
+
+    await request(app)
+      .put(`/api/usuarios/${creado.body.id}`)
+      .set(cabeceraAdmin)
+      .send({ idRol: empleado.id })
+      .expect(200);
+
+    // Ya no: el permiso era del rol que dejó de tener.
+    const despues = await request(app).get('/api/usuarios').set(cabecera);
+    expect(despues.status).toBe(403);
+
+    // Y sí puede lo del rol nuevo, que hereda como si lo acabaran de dar de alta.
+    await request(app).get('/api/gestion/pedidos').set(cabecera).expect(200);
+  });
+});

@@ -229,8 +229,13 @@ export const listarDeRepartidor = (idRepartidor: number, estados: string[]) =>
  * Avanza el estado y, cuando corresponde, sella la fecha de entrega
  * (CU-PED-02: "El sistema registra la fecha de entrega").
  */
-export const actualizarEstado = (idPedido: number, estado: string, fechaEntrega: Date | null) =>
-  prisma.pedido.update({
+export const actualizarEstado = (
+  idPedido: number,
+  estado: string,
+  fechaEntrega: Date | null,
+  tx: ClientePrisma = prisma,
+) =>
+  tx.pedido.update({
     where: { id_pedido: idPedido },
     data: { estado_pedido: estado, ...(fechaEntrega ? { fecha_entrega: fechaEntrega } : {}) },
   });

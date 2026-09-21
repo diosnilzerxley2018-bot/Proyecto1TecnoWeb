@@ -12,8 +12,8 @@ import { EsqueletoFilas } from '@/components/ui/Esqueleto';
 import { Insignia } from '@/components/ui/Insignia';
 import { Boton } from '@/components/ui/Boton';
 import { MapaUbicacion } from '@/components/pedidos/MapaUbicacion';
-import type { Disponibilidad, PedidoGestion } from '@/types';
-import { ETIQUETA_ESTADO, TONO_ESTADO } from '@/lib/pedidos';
+import type { Disponibilidad, EstadoPedido, PedidoGestion } from '@/types';
+import { ACCION_HACIA, ETIQUETA_ESTADO, TONO_ESTADO, separarTransiciones } from '@/lib/pedidos';
 import { formatearBs, tiempoTranscurrido } from '@/lib/formato';
 import { cn } from '@/lib/cn';
 
@@ -49,6 +49,7 @@ function MisEntregas() {
    */
   const [deTurno, setDeTurno] = useState<boolean | null>(null);
   const [cambiando, setCambiando] = useState(false);
+  const [cerrando, setCerrando] = useState<{ idPedido: number; estado: EstadoPedido } | null>(null);
 
   const cargarEntregas = useCallback(async () => {
     try {
@@ -78,6 +79,32 @@ function MisEntregas() {
     void cargarEntregas();
     void cargarTurno();
   }, [cargarEntregas, cargarTurno]);
+
+  /**
+   * Cierra una entrega: la registra como hecha, o como no realizada.
+   *
+   * Tras el cambio se recarga la lista en vez de retocarla en memoria: el
+   * pedido cerrado sale de «mis entregas» —ya no ocupa al repartidor— y
+   * reconstruirlo a mano correría el riesgo de mostrar algo distinto de lo que
+   * quedó guardado.
+   */
+  async function cerrarEntrega(idPedido: number, estado: EstadoPedido) {
+    setCerrando({ idPedido, estado });
+    try {
+      await api.patch<PedidoGestion>(`/gestion/pedidos/${idPedido}/estado`, { estado });
+      notificar(
+        'exito',
+        estado === 'Entregado'
+          ? 'Entrega registrada'
+          : 'Registrado como no entregado. La comida vuelve al inventario',
+      );
+      await cargarEntregas();
+    } catch (e) {
+      notificar('error', e instanceof ErrorApi ? e.message : 'No se pudo cerrar la entrega');
+    } finally {
+      setCerrando(null);
+    }
+  }
 
   async function cambiarTurno() {
     // Sin saber el estado actual no hay a qué invertirlo.
@@ -174,7 +201,11 @@ function MisEntregas() {
                 transition={{ duration: 0.25, delay: Math.min(indice * 0.04, 0.25) }}
                 className="superficie-tarjeta overflow-hidden rounded-2xl"
               >
-                <TarjetaEntrega pedido={pedido} />
+                <TarjetaEntrega
+                  pedido={pedido}
+                  enCurso={cerrando?.idPedido === pedido.id ? cerrando.estado : null}
+                  onCerrar={(estado) => void cerrarEntrega(pedido.id, estado)}
+                />
               </motion.li>
             ))}
           </AnimatePresence>
@@ -184,8 +215,18 @@ function MisEntregas() {
   );
 }
 
-function TarjetaEntrega({ pedido }: { pedido: PedidoGestion }) {
+function TarjetaEntrega({
+  pedido,
+  enCurso,
+  onCerrar,
+}: {
+  pedido: PedidoGestion;
+  /** Estado cuyo cambio se está enviando, para señalar cuál botón espera. */
+  enCurso: EstadoPedido | null;
+  onCerrar: (estado: EstadoPedido) => void;
+}) {
   const { ubicacion, cliente } = pedido;
+  const { avance, salidas } = separarTransiciones(pedido.transicionesPosibles);
   const punto =
     ubicacion.latitud !== null && ubicacion.longitud !== null
       ? { lat: ubicacion.latitud, lon: ubicacion.longitud }
@@ -236,6 +277,38 @@ function TarjetaEntrega({ pedido }: { pedido: PedidoGestion }) {
             </a>
           )}
         </div>
+
+        {/*
+          El cierre de la entrega se hace acá y no en el tablero general: es el
+          repartidor asignado quien estuvo en la puerta, y desde esta semana el
+          único que puede afirmarlo. Mandarlo a buscar su pedido entre los de
+          todos para cerrarlo sería trabajo de más en el peor momento.
+        */}
+        {(avance || salidas.length > 0) && (
+          <div className="flex flex-col gap-2 border-t border-borde px-4 py-3">
+            {avance && (
+              <Boton
+                variante="primario"
+                className="w-full justify-center"
+                cargando={enCurso === avance}
+                onClick={() => onCerrar(avance)}
+              >
+                {ACCION_HACIA[avance] ?? `Pasar a ${ETIQUETA_ESTADO[avance]}`}
+              </Boton>
+            )}
+            {salidas.map((salida) => (
+              <Boton
+                key={salida}
+                variante="peligro"
+                className="w-full justify-center"
+                cargando={enCurso === salida}
+                onClick={() => onCerrar(salida)}
+              >
+                {ACCION_HACIA[salida] ?? `Pasar a ${ETIQUETA_ESTADO[salida]}`}
+              </Boton>
+            ))}
+          </div>
+        )}
       </div>
     </>
   );

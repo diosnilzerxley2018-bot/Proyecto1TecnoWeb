@@ -44,6 +44,26 @@ export const ACCION_HACIA: Record<string, string> = {
   'En preparacion': 'Poner en preparación',
   'En camino': 'Marcar en camino',
   Entregado: 'Registrar entrega',
+  Cancelado: 'No se pudo entregar',
 };
+
+/**
+ * Separa las transiciones que devuelve el servidor en las dos cosas distintas
+ * que son: seguir el flujo, o salirse de él.
+ *
+ * Un pedido en camino admite las dos —se entrega, o no había nadie y vuelve— y
+ * no pueden dibujarse igual: una es la acción esperada y la otra el desenlace
+ * que se registra cuando algo salió mal. Quién puede hacerlas lo decide el
+ * servidor; esto solo resuelve cómo se ven.
+ */
+export function separarTransiciones(posibles: EstadoPedido[]): {
+  avance: EstadoPedido | null;
+  salidas: EstadoPedido[];
+} {
+  return {
+    avance: posibles.find((estado) => ORDEN_FLUJO.includes(estado)) ?? null,
+    salidas: posibles.filter((estado) => !ORDEN_FLUJO.includes(estado)),
+  };
+}
 
 export { formatearBs, formatearFecha, tiempoTranscurrido } from './formato';

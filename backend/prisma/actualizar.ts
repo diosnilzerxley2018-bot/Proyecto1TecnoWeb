@@ -41,6 +41,35 @@ const AJUSTES: Ajuste[] = [
          CHECK (tipo_datos IS NULL OR tipo_datos IN ('qr','url'))`,
     ],
   },
+  {
+    nombre: 'PEDIDO_CERRAR_AJENO — el administrador puede cerrar una entrega ajena',
+    sentencias: [
+      `INSERT INTO permiso (nombre) VALUES ('PEDIDO_CERRAR_AJENO')
+         ON CONFLICT (nombre) DO NOTHING`,
+
+      `INSERT INTO rol_permiso (id_rol, id_permiso)
+         SELECT r.id_rol, p.id_permiso
+           FROM rol r, permiso p
+          WHERE r.nombre = 'Administrador' AND p.nombre = 'PEDIDO_CERRAR_AJENO'
+         ON CONFLICT (id_rol, id_permiso) DO NOTHING`,
+
+      /*
+       * Y se lo habilita a los administradores que ya existen.
+       *
+       * Un permiso agregado a un rol no baja solo a sus usuarios --esa es la
+       * regla del sistema y no se cambia aqui--, asi que sin esta sentencia la
+       * llave quedaria definida y en manos de nadie: el administrador tendria
+       * que habilitarsela a si mismo antes de poder usarla.
+       */
+      `INSERT INTO usuario_rol_permiso (id_usuario, id_rol_permiso)
+         SELECT u.id_usuario, rp.id_rol_permiso
+           FROM usuario u
+           JOIN rol r  ON r.id_rol = u.id_rol AND r.nombre = 'Administrador'
+           JOIN permiso p ON p.nombre = 'PEDIDO_CERRAR_AJENO'
+           JOIN rol_permiso rp ON rp.id_rol = r.id_rol AND rp.id_permiso = p.id_permiso
+         ON CONFLICT (id_usuario, id_rol_permiso) DO NOTHING`,
+    ],
+  },
 ];
 
 const url = process.env.DATABASE_URL;

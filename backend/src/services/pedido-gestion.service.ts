@@ -1,7 +1,12 @@
+import { prisma } from '../config/prisma.js';
 import * as pedidoModel from '../models/pedido.model.js';
 import { pagina, type Pagina } from '../dtos/paginacion.dto.js';
 import * as empleadoModel from '../models/empleado.model.js';
+import * as permisoModel from '../models/permiso.model.js';
 import * as avisoService from './aviso.service.js';
+import * as pagoService from './pago.service.js';
+import { reponerAsignaciones } from './stock.service.js';
+import type { ClientePrisma } from '../models/stock.model.js';
 import type { PedidoParaGestion } from '../models/pedido.model.js';
 import type {
   DisponibilidadDTO,
@@ -20,6 +25,12 @@ import {
 } from '../config/dominio.js';
 import { ErrorApp } from '../errors/error-app.js';
 import { exigirEmpleado } from './actor.service.js';
+
+/**
+ * Permite cerrar la entrega de un pedido ajeno. Lo tiene solo el
+ * administrador: es la llave para destrabar un pedido cuyo repartidor no está.
+ */
+const PERMISO_CERRAR_AJENO = 'PEDIDO_CERRAR_AJENO';
 
 /**
  * CU-PED-02 — Gestionar Pedido, lado del empleado.
@@ -242,6 +253,43 @@ function esAsignable(estado: EstadoPedido): boolean {
 }
 
 /**
+ * Cerrar la entrega es afirmar qué pasó en la puerta: que se entregó y se
+ * cobró, o que no se pudo entregar. Las dos salidas de «En camino».
+ */
+function esCierreDeEntrega(destino: EstadoPedido): boolean {
+  return destino === 'Entregado' || destino === 'Cancelado';
+}
+
+/**
+ * CU-PED-02 — solo el repartidor asignado cierra su propia entrega.
+ *
+ * Es él quien estuvo en la puerta y quien recibió el dinero del pedido en
+ * efectivo, así que es el único que puede afirmarlo. Que otro empleado pudiera
+ * cerrarlo por él convertía `id_repartidor` en una intención —quién *iba* a
+ * entregar— en lugar de un registro de quién entregó y cobró.
+ *
+ * `PEDIDO_CERRAR_AJENO` es la salida para cuando el repartidor no está
+ * disponible: se queda sin batería, se enferma, renuncia con un pedido en la
+ * calle. Sin ella ese pedido no tendría forma de terminar.
+ */
+async function exigirQuePuedaCerrar(
+  idUsuario: number,
+  idEmpleado: number,
+  pedido: PedidoParaGestion,
+): Promise<void> {
+  if (pedido.id_repartidor === idEmpleado) return;
+
+  const permisos = await permisoModel.permisosDeUsuario(idUsuario);
+  if (permisos.includes(PERMISO_CERRAR_AJENO)) return;
+
+  throw new ErrorApp(
+    403,
+    'Solo el repartidor asignado puede cerrar esta entrega. ' +
+      'Si no está disponible, debe hacerlo un administrador.',
+  );
+}
+
+/**
  * RF-PED-08 — hace avanzar el pedido un paso del flujo.
  *
  * No se permite saltar etapas ni retroceder: la tabla de transiciones del
@@ -252,7 +300,7 @@ export async function avanzarEstado(
   idPedido: number,
   destino: EstadoPedido,
 ): Promise<PedidoGestionDTO> {
-  await exigirEmpleado(idUsuario, 'gestionar los pedidos');
+  const idEmpleado = await exigirEmpleado(idUsuario, 'gestionar los pedidos');
   const pedido = await obtenerPedido(idPedido);
   const origen = pedido.estado_pedido as EstadoPedido;
 
@@ -269,8 +317,53 @@ export async function avanzarEstado(
     throw new ErrorApp(409, 'Asigne un repartidor antes de marcar el pedido en camino');
   }
 
+  if (esCierreDeEntrega(destino)) {
+    await exigirQuePuedaCerrar(idUsuario, idEmpleado, pedido);
+  }
+
   const fechaEntrega = destino === 'Entregado' ? new Date() : null;
-  await pedidoModel.actualizarEstado(idPedido, destino, fechaEntrega);
+
+  /**
+   * El estado del pedido, su stock y su cobro se mueven juntos.
+   *
+   * Entregar un pedido en efectivo es también cobrarlo, y darlo por no
+   * entregado es devolver la comida al inventario y cerrar el cobro que nunca
+   * se hizo. Separar esos efectos dejaría pedidos entregados sin cobrar o
+   * comida descontada que nadie recibió.
+   */
+  await prisma.$transaction(async (tx: ClientePrisma) => {
+    await pedidoModel.actualizarEstado(idPedido, destino, fechaEntrega, tx);
+
+    if (destino === 'Entregado') {
+      await pagoService.cerrarCobroDePedidoEnTransaccion(
+        tx,
+        idPedido,
+        'Pagado',
+        `Cobrado contra entrega por el empleado ${idUsuario}`,
+      );
+      return;
+    }
+
+    if (destino === 'Cancelado') {
+      const completo = await pedidoModel.buscarConDetalle(idPedido, tx);
+      if (completo) {
+        await reponerAsignaciones(
+          completo.detalle_pedido.map((d) => ({
+            idProducto: d.id_producto,
+            idAlmacen: d.id_almacen,
+            cantidad: d.cantidad,
+          })),
+          tx,
+        );
+      }
+      await pagoService.cerrarCobroDePedidoEnTransaccion(
+        tx,
+        idPedido,
+        'Fallido',
+        `No entregado, informado por el empleado ${idUsuario}`,
+      );
+    }
+  });
 
   // CU-PED-02: el sistema notifica al cliente el cambio de estado. Se dispara
   // en segundo plano: quien mueve el pedido en el mostrador no tiene por qué

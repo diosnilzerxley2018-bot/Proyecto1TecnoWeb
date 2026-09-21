@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import PaginaEntregas from '@/app/(privado)/entregas/page';
+import { separarTransiciones } from '@/lib/pedidos';
 import { api } from '@/lib/api';
 
 /**
@@ -14,8 +15,16 @@ import { api } from '@/lib/api';
  */
 
 vi.mock('@/lib/api', () => ({
-  api: { get: vi.fn(), put: vi.fn() },
-  ErrorApi: class extends Error {},
+  api: { get: vi.fn(), put: vi.fn(), patch: vi.fn() },
+  // Misma firma que la real: el estado HTTP primero y el mensaje después.
+  ErrorApi: class extends Error {
+    constructor(
+      public readonly estado: number,
+      mensaje: string,
+    ) {
+      super(mensaje);
+    }
+  },
 }));
 
 // El permiso lo verifica el servidor; aquí interesa solo el contenido.
@@ -32,13 +41,37 @@ const pedir = vi.mocked(api.get);
 const enviar = vi.mocked(api.put);
 
 /** Responde según la ruta, como el servidor. */
-function servidorCon(turno: Promise<{ disponible: boolean }>) {
+function servidorCon(turno: Promise<{ disponible: boolean }>, entregas: unknown[] = []) {
   pedir.mockImplementation((ruta: string) => {
     if (ruta === '/gestion/disponibilidad') return turno as Promise<never>;
-    if (ruta === '/gestion/mis-entregas') return Promise.resolve([] as never);
+    if (ruta === '/gestion/mis-entregas') return Promise.resolve(entregas as never);
     return Promise.reject(new Error(`ruta inesperada: ${ruta}`));
   });
 }
+
+/** Una entrega en la calle. Sin coordenadas, para no montar el mapa. */
+const enCamino = {
+  id: 11,
+  fecha: new Date().toISOString(),
+  estadoPedido: 'En camino',
+  estadoPago: 'Pendiente',
+  metodoPago: 'Efectivo',
+  total: 44.1,
+  fechaEntrega: null,
+  cancelable: false,
+  referenciaPago: null,
+  ubicacion: {
+    calle: 'Avenida Banzer',
+    numero: '1200',
+    referencia: 'Puerta verde',
+    latitud: null,
+    longitud: null,
+  },
+  items: [],
+  cliente: { id: 3, nombreCompleto: 'Camila Cliente', telefono: null },
+  repartidor: { id: 9, nombreCompleto: 'David Martinez' },
+  transicionesPosibles: ['Entregado', 'Cancelado'],
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -95,5 +128,87 @@ describe('Mis entregas · turno', () => {
 
     expect(await screen.findByText('Sin entregas asignadas')).toBeInTheDocument();
     expect(notificar).toHaveBeenCalledWith('error', 'No se pudo consultar su turno');
+  });
+});
+
+/**
+ * CU-PED-02 — el repartidor cierra su entrega desde su propia pantalla.
+ *
+ * Es el único que puede hacerlo, así que el botón tiene que estar donde él
+ * mira, no en el tablero general entre los pedidos de todos.
+ */
+describe('Mis entregas · cerrar la entrega', () => {
+  it('ofrece las dos salidas de un pedido en camino', async () => {
+    servidorCon(Promise.resolve({ disponible: true }), [enCamino]);
+    render(<PaginaEntregas />);
+
+    expect(await screen.findByRole('button', { name: 'Registrar entrega' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'No se pudo entregar' })).toBeInTheDocument();
+  });
+
+  it('registrar la entrega la informa al servidor y recarga la lista', async () => {
+    servidorCon(Promise.resolve({ disponible: true }), [enCamino]);
+    vi.mocked(api.patch).mockResolvedValue({} as never);
+    render(<PaginaEntregas />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Registrar entrega' }));
+
+    expect(api.patch).toHaveBeenCalledWith('/gestion/pedidos/11/estado', { estado: 'Entregado' });
+    await waitFor(() => expect(notificar).toHaveBeenCalledWith('exito', 'Entrega registrada'));
+  });
+
+  it('si no había nadie, lo registra como no entregado y avisa que la comida vuelve', async () => {
+    servidorCon(Promise.resolve({ disponible: true }), [enCamino]);
+    vi.mocked(api.patch).mockResolvedValue({} as never);
+    render(<PaginaEntregas />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'No se pudo entregar' }));
+
+    expect(api.patch).toHaveBeenCalledWith('/gestion/pedidos/11/estado', { estado: 'Cancelado' });
+    await waitFor(() =>
+      expect(notificar).toHaveBeenCalledWith(
+        'exito',
+        'Registrado como no entregado. La comida vuelve al inventario',
+      ),
+    );
+  });
+
+  /** El servidor rechaza a quien no es el repartidor asignado; se muestra tal cual. */
+  it('muestra el motivo cuando el servidor rechaza el cierre', async () => {
+    const { ErrorApi } = await import('@/lib/api');
+    servidorCon(Promise.resolve({ disponible: true }), [enCamino]);
+    vi.mocked(api.patch).mockRejectedValue(
+      new ErrorApi(403, 'Solo el repartidor asignado puede cerrar esta entrega.'),
+    );
+    render(<PaginaEntregas />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Registrar entrega' }));
+
+    await waitFor(() =>
+      expect(notificar).toHaveBeenCalledWith(
+        'error',
+        'Solo el repartidor asignado puede cerrar esta entrega.',
+      ),
+    );
+  });
+});
+
+describe('separarTransiciones', () => {
+  it('distingue el avance del flujo de la salida que lo interrumpe', () => {
+    expect(separarTransiciones(['Entregado', 'Cancelado'])).toEqual({
+      avance: 'Entregado',
+      salidas: ['Cancelado'],
+    });
+  });
+
+  it('un pedido que solo avanza no ofrece salidas', () => {
+    expect(separarTransiciones(['En preparacion'])).toEqual({
+      avance: 'En preparacion',
+      salidas: [],
+    });
+  });
+
+  it('un pedido terminado no ofrece nada', () => {
+    expect(separarTransiciones([])).toEqual({ avance: null, salidas: [] });
   });
 });

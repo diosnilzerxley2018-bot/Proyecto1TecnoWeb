@@ -12,7 +12,15 @@ import { MapaUbicacion } from './MapaUbicacion';
 import type { Coordenadas } from '@/lib/dominio';
 import type { CandidatoRepartidor, EstadoPedido, PedidoGestion } from '@/types';
 import { SugerenciaReparto } from './SugerenciaReparto';
-import { ACCION_HACIA, ETIQUETA_ESTADO, TONO_ESTADO, formatearBs, formatearFecha } from '@/lib/pedidos';
+import { useAuth } from '@/context/AuthContext';
+import {
+  ACCION_HACIA,
+  ETIQUETA_ESTADO,
+  TONO_ESTADO,
+  formatearBs,
+  formatearFecha,
+  separarTransiciones,
+} from '@/lib/pedidos';
 
 /**
  * Detalle y operación de un pedido.
@@ -21,6 +29,10 @@ import { ACCION_HACIA, ETIQUETA_ESTADO, TONO_ESTADO, formatearBs, formatearFecha
  * `transicionesPosibles`, que decide el servidor. Así la interfaz nunca ofrece
  * un botón que la API vaya a rechazar.
  */
+/** Las dos salidas de «En camino»: entregarlo, o darlo por no entregado. */
+const esCierre = (estado: EstadoPedido | null): boolean =>
+  estado === 'Entregado' || estado === 'Cancelado';
+
 export function PanelPedido({
   pedido,
   repartidores,
@@ -34,6 +46,7 @@ export function PanelPedido({
   onAvanzar: (estado: EstadoPedido) => Promise<void>;
   onAsignar: (idRepartidor: number) => Promise<void>;
 }) {
+  const { sesion, tienePermiso } = useAuth();
   const [enCurso, setEnCurso] = useState<string | null>(null);
   const [elegido, setElegido] = useState<number | null>(null);
 
@@ -43,8 +56,19 @@ export function PanelPedido({
 
   if (!pedido) return null;
 
-  const siguiente = pedido.transicionesPosibles[0] ?? null;
+  const { avance: siguiente, salidas } = separarTransiciones(pedido.transicionesPosibles);
   const necesitaRepartidor = siguiente === 'En camino' && !pedido.repartidor;
+
+  /**
+   * CU-PED-02: cerrar la entrega es del repartidor asignado.
+   *
+   * Se comprueba también acá para no ofrecer un botón que el servidor va a
+   * rechazar. **No es la seguridad**: la regla la aplica `avanzarEstado`; esto
+   * solo evita el 403 evitable.
+   */
+  const puedeCerrar =
+    pedido.repartidor?.id === sesion?.usuario.id || tienePermiso('PEDIDO_CERRAR_AJENO');
+  const cierreBloqueado = esCierre(siguiente) && !puedeCerrar;
   const puedeAsignar = pedido.estadoPedido !== 'Entregado' && pedido.estadoPedido !== 'Cancelado';
 
   async function ejecutar(clave: string, accion: () => Promise<void>) {
@@ -71,24 +95,47 @@ export function PanelPedido({
       titulo={`Pedido #${String(pedido.id).padStart(5, '0')}`}
       descripcion={formatearFecha(pedido.fecha)}
       pie={
-        siguiente ? (
+        siguiente || salidas.length > 0 ? (
           <div className="space-y-2">
             {necesitaRepartidor && (
               <p className="text-xs text-aviso">
                 Asigne un repartidor antes de marcar el pedido en camino.
               </p>
             )}
-            <Boton
-              variante="primario"
-              tamano="lg"
-              className="w-full justify-center"
-              cargando={enCurso === 'estado'}
-              disabled={necesitaRepartidor}
-              onClick={() => ejecutar('estado', () => onAvanzar(siguiente))}
-            >
-              {ACCION_HACIA[siguiente] ?? `Pasar a ${ETIQUETA_ESTADO[siguiente]}`}
-              <ArrowRight className="size-4" aria-hidden />
-            </Boton>
+            {!puedeCerrar && (siguiente || salidas.length > 0) && esCierre(siguiente ?? salidas[0]) && (
+              <p className="text-xs text-aviso">
+                Esta entrega la cierra {pedido.repartidor?.nombreCompleto ?? 'su repartidor'}, que
+                es quien está en la puerta.
+              </p>
+            )}
+            {siguiente && (
+              <Boton
+                variante="primario"
+                tamano="lg"
+                className="w-full justify-center"
+                cargando={enCurso === 'estado'}
+                disabled={necesitaRepartidor || cierreBloqueado}
+                onClick={() => ejecutar('estado', () => onAvanzar(siguiente))}
+              >
+                {ACCION_HACIA[siguiente] ?? `Pasar a ${ETIQUETA_ESTADO[siguiente]}`}
+                <ArrowRight className="size-4" aria-hidden />
+              </Boton>
+            )}
+
+            {/* La salida del flujo va discreta: es el desenlace que se registra
+                cuando la entrega no se pudo hacer, no una acción habitual. */}
+            {salidas.map((salida) => (
+              <Boton
+                key={salida}
+                variante="peligro"
+                className="w-full justify-center"
+                cargando={enCurso === `estado-${salida}`}
+                disabled={!puedeCerrar}
+                onClick={() => ejecutar(`estado-${salida}`, () => onAvanzar(salida))}
+              >
+                {ACCION_HACIA[salida] ?? `Pasar a ${ETIQUETA_ESTADO[salida]}`}
+              </Boton>
+            ))}
           </div>
         ) : (
           <p className="text-center text-xs text-tinta-tenue">

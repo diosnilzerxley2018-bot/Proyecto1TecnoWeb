@@ -154,6 +154,42 @@ export const actualizar = (
     include: { rol: true },
   });
 
+/**
+ * Cambia el rol de un usuario y **rehace sus permisos** en una sola operación.
+ *
+ * `requierePermiso` consulta `usuario_rol_permiso` sin mirar el rol actual, de
+ * modo que las habilitaciones del rol anterior seguían valiendo después del
+ * cambio: a un administrador degradado a empleado le quedaban los permisos de
+ * administrador. Rol y permisos son el mismo hecho y por eso viajan juntos;
+ * aplicarlos por separado dejaría, entre una consulta y la otra, un usuario
+ * con el rol nuevo y los poderes del viejo.
+ *
+ * Recibe los permisos del rol nuevo, igual que un alta (CU-SEG-02). Lo que se
+ * le haya habilitado o quitado a mano en el rol anterior no sobrevive: eran
+ * decisiones sobre un rol que ya no tiene.
+ */
+export const cambiarRol = (id: number, idRol: number) =>
+  prisma.$transaction(async (tx) => {
+    await tx.usuario_rol_permiso.deleteMany({ where: { id_usuario: id } });
+
+    const permisosDelRol = await tx.rol_permiso.findMany({
+      where: { id_rol: idRol },
+      select: { id_rol_permiso: true },
+    });
+
+    if (permisosDelRol.length > 0) {
+      await tx.usuario_rol_permiso.createMany({
+        data: permisosDelRol.map((rp) => ({ id_usuario: id, id_rol_permiso: rp.id_rol_permiso })),
+      });
+    }
+
+    return tx.usuario.update({
+      where: { id_usuario: id },
+      data: { id_rol: idRol },
+      include: { rol: true },
+    });
+  });
+
 /** Baja lógica: RF-SEG-05 exige dar de baja, no eliminar. */
 export const darDeBaja = (id: number) =>
   prisma.usuario.update({ where: { id_usuario: id }, data: { activo: false } });

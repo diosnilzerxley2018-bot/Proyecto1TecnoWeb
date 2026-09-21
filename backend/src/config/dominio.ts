@@ -61,7 +61,14 @@ export const FLUJO_DE_ESTADOS: Record<EstadoPedido, EstadoPedido[]> = {
   'Pendiente de pago': [],
   Recibido: ['En preparacion'],
   'En preparacion': ['En camino'],
-  'En camino': ['Entregado'],
+  /**
+   * Un pedido en la calle termina de dos maneras, y las dos son finales: se
+   * entrega, o no se pudo entregar —no había nadie en la dirección— y vuelve.
+   * La segunda reutiliza `Cancelado` en lugar de un estado propio: para el
+   * negocio la consecuencia es la misma, el pedido no se cobró y la comida
+   * regresa al inventario.
+   */
+  'En camino': ['Entregado', 'Cancelado'],
   Entregado: [],
   Cancelado: [],
 };

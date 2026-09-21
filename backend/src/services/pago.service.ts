@@ -195,26 +195,82 @@ export async function registrarCobroEnTransaccion(
   const enLinea = requiereCobroEnLinea(datos.metodo);
   const pasarela = enLinea ? pasarelaPara(datos.modo).nombre : 'Mostrador';
 
+  /**
+   * El efectivo de una venta ya está cobrado; el de un pedido, no.
+   *
+   * En el mostrador «no es en línea» significa *el cliente acaba de pagar, lo
+   * tengo delante*. En un pedido a domicilio significa *me van a pagar en la
+   * puerta*, que puede no ocurrir nunca. Tratarlos igual hacía que el cobro
+   * naciera Pagado y el pedido dijera «Pago pendiente»: los dos registros se
+   * contradecían desde el primer momento, y un pedido en efectivo que se
+   * cancelaba quedaba contado como dinero recaudado.
+   */
+  const cobradoAlCrearse = !enLinea && datos.idPedido === undefined;
+
   const pago = await pagoModel.crear(tx, {
     monto: datos.monto,
     moneda: MONEDA,
     metodo: datos.metodo,
-    estado: enLinea ? 'Pendiente' : 'Pagado',
+    estado: cobradoAlCrearse ? 'Pagado' : 'Pendiente',
     modo: datos.modo,
     pasarela,
     idVenta: datos.idVenta ?? null,
     idPedido: datos.idPedido ?? null,
-    fechaConfirmacion: enLinea ? null : new Date(),
+    fechaConfirmacion: cobradoAlCrearse ? new Date() : null,
   });
 
   await pagoModel.registrarEvento(tx, {
     idPago: pago.id_pago,
-    tipo: enLinea ? 'Creado' : 'Cobrado en mostrador',
+    tipo: cobradoAlCrearse ? 'Cobrado en mostrador' : enLinea ? 'Creado' : 'A cobrar contra entrega',
     origen: 'Sistema',
     cuerpo: JSON.stringify({ monto: datos.monto, metodo: datos.metodo, modo: datos.modo }),
   });
 
   return pago.id_pago;
+}
+
+/**
+ * Cierra el cobro de un pedido **dentro de la transacción que lo mueve**.
+ *
+ * El desenlace del cobro contra entrega y el del pedido son el mismo hecho: el
+ * repartidor recibió la plata, o no entregó. Resolverlos en dos transacciones
+ * dejaría la ventana en la que el pedido ya está entregado y el cobro todavía
+ * pendiente, que es justo la contradicción que se quiso eliminar.
+ *
+ * No toca un cobro que ya tenga desenlace —el pedido pagado en línea llega
+ * aquí con el suyo cerrado— ni un pedido sin cobro registrado.
+ *
+ * Al fallar **no** se marca el pedido como «Vencido»: nunca se cobró, así que
+ * su pago sigue siendo «Pendiente» y lo que cuenta la historia es el estado
+ * Cancelado del pedido.
+ */
+export async function cerrarCobroDePedidoEnTransaccion(
+  tx: ClientePrisma,
+  idPedido: number,
+  estado: Extract<EstadoPago, 'Pagado' | 'Fallido'>,
+  detalle: string,
+): Promise<void> {
+  const pago = await pagoModel.buscarDePedido(idPedido, tx);
+  if (!pago || pago.estado !== 'Pendiente') return;
+
+  const aplicado = await pagoModel.cerrarSiPendiente(
+    tx,
+    pago.id_pago,
+    estado,
+    estado === 'Pagado' ? new Date() : null,
+  );
+  if (!aplicado) return;
+
+  await pagoModel.registrarEvento(tx, {
+    idPago: pago.id_pago,
+    tipo: `Cerrado: ${estado}`,
+    origen: 'Empleado',
+    cuerpo: detalle,
+  });
+
+  if (estado === 'Pagado') {
+    await pedidoModel.marcarEstadoPago(tx, idPedido, 'Pagado');
+  }
 }
 
 /**

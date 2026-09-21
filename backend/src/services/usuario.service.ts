@@ -141,15 +141,22 @@ export async function actualizar(
   }
 
   const { idRol, ...camposSimples } = datos;
+  const cambiaDeRol = Boolean(idRol && idRol !== actual.id_rol);
 
-  if (idRol && idRol !== actual.id_rol) {
+  if (idRol && cambiaDeRol) {
     await validarCambioDeRol(actual.rol.nombre, idRol);
   }
 
-  await usuarioModel.actualizar(id, {
-    ...camposSimples,
-    ...(idRol ? { id_rol: idRol } : {}),
-  });
+  await usuarioModel.actualizar(id, camposSimples);
+
+  /**
+   * El rol se cambia aparte porque arrastra los permisos: quien baja de rol
+   * tiene que perder los del anterior, no acumularlos (ver `cambiarRol`).
+   */
+  if (idRol && cambiaDeRol) {
+    await usuarioModel.cambiarRol(id, idRol);
+  }
+
   return obtener(id);
 }
 
