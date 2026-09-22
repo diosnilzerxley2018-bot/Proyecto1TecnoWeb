@@ -39,8 +39,15 @@ export interface CobroCreado {
 export interface AvisoPasarela {
   idTransaccionExterna: string;
   estado: EstadoPago;
-  /** Monto que la pasarela dice haber cobrado, para contrastarlo con el nuestro. */
-  monto: number;
+  /**
+   * Monto que la pasarela dice haber cobrado, para contrastarlo con el nuestro.
+   *
+   * `undefined` cuando la pasarela **no lo informa**, que no es lo mismo que
+   * cero: Libélula avisa con `transaction_id`, `error` y `message`, sin monto.
+   * Tomar la ausencia por un cobro de cero convertía cada aviso legítimo en un
+   * pago insuficiente y lo rechazaba.
+   */
+  monto?: number;
 }
 
 export interface PasarelaPago {

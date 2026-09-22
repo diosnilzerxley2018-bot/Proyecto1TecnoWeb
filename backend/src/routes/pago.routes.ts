@@ -13,6 +13,13 @@ import { esquemaCambiarModo } from '../dtos/pago.dto.js';
  */
 export const avisos = Router();
 
+/**
+ * `GET` además de `POST`: Libélula devuelve al cliente a esta dirección con el
+ * desenlace en los parámetros, que es una navegación del navegador y por tanto
+ * un `GET`. Registrada solo como `POST`, el aviso moría en un 404 y el cobro
+ * se quedaba pendiente para siempre.
+ */
+avisos.get('/notificacion', ctrl.recibirAviso);
 avisos.post('/notificacion', ctrl.recibirAviso);
 
 /* --- Consulta y gestión de cobros, para el personal --- */

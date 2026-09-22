@@ -520,9 +520,21 @@ async function resolverPedido(tx: ClientePrisma, idPedido: number, estado: Estad
  * que vale la venta no la paga. Sin esta comprobación, manipular el monto
  * sería la forma evidente de llevarse el producto por menos dinero.
  */
+/** Cuerpo del aviso, o vacío si no trae ninguno. Nunca lanza. */
+function analizarCuerpo(cuerpoCrudo: string): Record<string, unknown> {
+  if (!cuerpoCrudo.trim()) return {};
+  try {
+    const cuerpo: unknown = JSON.parse(cuerpoCrudo);
+    return cuerpo && typeof cuerpo === 'object' ? (cuerpo as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
 export async function procesarAviso(
   cuerpoCrudo: string,
   cabeceras: Record<string, string | undefined>,
+  parametros: Record<string, unknown> = {},
 ): Promise<{ procesado: boolean }> {
   const modo = await modoCobro();
   const pasarela = pasarelaPara(modo);
@@ -531,12 +543,15 @@ export async function procesarAviso(
     throw new ErrorApp(401, 'La firma del aviso no es válida');
   }
 
-  let cuerpo: unknown;
-  try {
-    cuerpo = JSON.parse(cuerpoCrudo);
-  } catch {
-    throw new ErrorApp(400, 'El cuerpo del aviso no es JSON válido');
-  }
+  /**
+   * El aviso puede venir en el cuerpo, en la dirección, o repartido.
+   *
+   * Libélula llama a la `callback_url` con los datos **en la dirección** y sin
+   * cuerpo: exigir JSON válido rechazaba con 400 todo aviso suyo antes de
+   * mirarlo. Los del cuerpo pesan más que los de la dirección porque un
+   * cuerpo firmado es más difícil de manipular que una URL.
+   */
+  const cuerpo = { ...parametros, ...analizarCuerpo(cuerpoCrudo) };
 
   const aviso = pasarela.interpretarAviso(cuerpo);
   const pago = await pagoModel.buscarPorTransaccionExterna(
@@ -548,7 +563,11 @@ export async function procesarAviso(
   // de otro ambiente. Se responde que se recibió y no se hace nada.
   if (!pago) return { procesado: false };
 
-  if (aviso.estado === 'Pagado' && Number(pago.monto) - aviso.monto > TOLERANCIA_MONTO) {
+  if (
+    aviso.estado === 'Pagado' &&
+    aviso.monto !== undefined &&
+    Number(pago.monto) - aviso.monto > TOLERANCIA_MONTO
+  ) {
     await prisma.$transaction((tx: ClientePrisma) =>
       pagoModel.registrarEvento(tx, {
         idPago: pago.id_pago,

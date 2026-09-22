@@ -58,6 +58,23 @@ const EXTREMOS = {
 } as const;
 
 /** Traduce el vocabulario de la pasarela al del sistema. CONFIRMAR con la guía. */
+/**
+ * Desenlace del aviso, según lo que Libélula manda de verdad.
+ *
+ * El orden importa: primero la cancelación explícita, después el código de
+ * error —«0» es el único éxito— y solo al final el campo `estado`, que su
+ * plugin no usa pero que se admite por si alguna variante lo envía.
+ */
+function estadoDelAviso(datos: {
+  error?: string | number;
+  cancel_order?: string | number;
+  estado?: string;
+}): EstadoPago | undefined {
+  if (String(datos.cancel_order ?? '') === '1') return 'Fallido';
+  if (datos.error !== undefined) return String(datos.error) === '0' ? 'Pagado' : 'Fallido';
+  return ESTADO_EQUIVALENTE[String(datos.estado ?? '').toUpperCase()];
+}
+
 const ESTADO_EQUIVALENTE: Record<string, EstadoPago> = {
   PENDIENTE: 'Pendiente',
   PAGADO: 'Pagado',
@@ -264,23 +281,49 @@ export class PasarelaLibelula implements PasarelaPago {
     return a.length === b.length && timingSafeEqual(a, b);
   }
 
+  /**
+   * Traduce el aviso de Libélula.
+   *
+   * La forma está tomada de su propio plugin de WooCommerce (`woo.zip`,
+   * `check_ipn_response`), que es la única descripción pública del contrato:
+   * Libélula llama a la `callback_url` con `transaction_id`, `error`,
+   * `message` y `cancel_order` **como parámetros de la dirección**, no como un
+   * cuerpo JSON, y el éxito se señala con `error=0`.
+   *
+   * No hay campo `estado`: esperarlo hacía que todo aviso legítimo se
+   * rechazara con «Estado de pago no reconocido: undefined». Se sigue
+   * admitiendo por si alguna variante lo envía.
+   */
   interpretarAviso(cuerpo: unknown): AvisoPasarela {
     const datos = cuerpo as {
-      // CONFIRMAR: qué envía Libélula en el aviso.
       transaction_id?: string;
       id_transaccion?: string;
+      /** «0» es éxito. Cualquier otro valor es un cobro que no se hizo. */
+      error?: string | number;
+      message?: string;
+      /** «1» cuando el cliente abandonó el pago. */
+      cancel_order?: string | number;
       estado?: string;
       monto?: number | string;
     };
 
     const id = datos.transaction_id ?? datos.id_transaccion ?? '';
-    const estado = ESTADO_EQUIVALENTE[String(datos.estado ?? '').toUpperCase()];
+    const estado = estadoDelAviso(datos);
 
     if (!estado) {
-      throw new ErrorApp(400, `Estado de pago no reconocido: ${String(datos.estado)}`);
+      throw new ErrorApp(
+        400,
+        'Aviso de pago no reconocido: no trae ni «error» ni «estado». ' +
+          `Recibido: ${JSON.stringify(datos).slice(0, 200)}`,
+      );
     }
 
-    return { idTransaccionExterna: id, estado, monto: Number(datos.monto ?? 0) };
+    return {
+      idTransaccionExterna: id,
+      estado,
+      // Solo si lo informó. Ausente ≠ cobrado cero.
+      ...(datos.monto === undefined ? {} : { monto: Number(datos.monto) }),
+    };
   }
 
   /**

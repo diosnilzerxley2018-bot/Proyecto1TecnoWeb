@@ -52,11 +52,17 @@ export async function recibirAviso(req: Request, res: Response) {
   // La referencia viaja junto al testigo: es lo que permite recalcularlo.
   const referencia = typeof req.query.ref === 'string' ? req.query.ref : undefined;
 
-  const resultado = await pagoService.procesarAviso(cuerpoCrudo, {
-    ...(req.headers as Record<string, string | undefined>),
-    ...(testigo ? { 'x-testigo-pago': testigo } : {}),
-    ...(referencia ? { 'x-referencia-pago': referencia } : {}),
-  });
+  const resultado = await pagoService.procesarAviso(
+    cuerpoCrudo,
+    {
+      ...(req.headers as Record<string, string | undefined>),
+      ...(testigo ? { 'x-testigo-pago': testigo } : {}),
+      ...(referencia ? { 'x-referencia-pago': referencia } : {}),
+    },
+    // Libélula manda el desenlace en la dirección —`transaction_id`, `error`,
+    // `message`, `cancel_order`— y no en el cuerpo.
+    req.query as Record<string, unknown>,
+  );
   res.json(resultado);
 }
 
