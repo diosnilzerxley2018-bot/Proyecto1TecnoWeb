@@ -362,22 +362,53 @@ export async function obtener(idPago: number): Promise<PagoDTO> {
   const pago = await exigirPago(idPago);
   if (pago.estado !== 'Pendiente') return conQR(aDTO(pago));
 
+  /*
+   * Se pregunta **antes** de mirar el plazo, y el orden no es un detalle.
+   *
+   * Nuestro plazo (PAGO_MINUTOS_EXPIRACION, 15 minutos) es mucho más corto que
+   * el del QR que entrega la pasarela, que dura días. Con el vencimiento
+   * primero, un cliente que pagaba pasado ese cuarto de hora veía su pedido
+   * cancelado y el stock devuelto **con el dinero ya cobrado**. Preguntar
+   * primero cuesta una llamada y evita repudiar un pago recibido.
+   */
+  const estado = await estadoSegunLaPasarela(pago);
+  if (estado && estado !== 'Pendiente') {
+    return aplicarResultado(idPago, estado, 'Pasarela', 'Consulta directa de estado');
+  }
+
   if (pago.fecha_expiracion && pago.fecha_expiracion < new Date()) {
     return aplicarResultado(idPago, 'Vencido', 'Sistema', 'Expiró el plazo del cobro');
   }
 
-  if (!pago.id_transaccion_ext) return conQR(aDTO(pago));
+  return conQR(aDTO(pago));
+}
+
+/**
+ * Le pregunta a la pasarela en qué quedó el cobro.
+ *
+ * Devuelve `null` cuando no se pudo saber —la pasarela no respondió, el cobro
+ * nunca llegó a abrirse, la respuesta no se entendió—, que es distinto de
+ * «sigue pendiente»: quien llama no debe tomar el silencio por una respuesta.
+ *
+ * **El fallo se registra.** Antes se descartaba sin dejar rastro, y por eso una
+ * consulta que fallaba en todas y cada una de las llamadas —el parámetro que
+ * se le enviaba no era el que la pasarela espera— se veía en la pantalla como
+ * un cobro que simplemente no terminaba de confirmarse. Un cobro que nunca se
+ * resuelve y un error que nadie ve son el mismo síntoma; el registro es lo
+ * único que los separa.
+ */
+async function estadoSegunLaPasarela(pago: PagoConsultado): Promise<EstadoPago | null> {
+  if (!pago.id_transaccion_ext) return null;
 
   try {
-    const estado = await pasarelaPara(pago.modo as ModoCobro).consultarEstado(
-      pago.id_transaccion_ext,
+    return await pasarelaPara(pago.modo as ModoCobro).consultarEstado(pago.id_transaccion_ext);
+  } catch (error) {
+    console.error(
+      `[pagos] No se pudo consultar el cobro ${pago.id_pago} ` +
+        `(transacción ${pago.id_transaccion_ext}) en ${pago.pasarela}:`,
+      error instanceof Error ? error.message : error,
     );
-    if (estado === 'Pendiente') return conQR(aDTO(pago));
-    return aplicarResultado(idPago, estado, 'Pasarela', 'Consulta directa de estado');
-  } catch {
-    // Que la pasarela no responda no es motivo para romper la pantalla: el
-    // cobro sigue pendiente y se volverá a preguntar en la siguiente consulta.
-    return conQR(aDTO(pago));
+    return null;
   }
 }
 
@@ -651,8 +682,35 @@ export async function dePedido(idPedido: number): Promise<PagoDTO | null> {
  */
 export async function vencerPendientes(): Promise<number> {
   const vencidos = await pagoModel.pendientesVencidos();
+  let cerrados = 0;
+
   for (const pago of vencidos) {
+    /*
+     * También aquí se pregunta antes de vencer, por la misma razón que en
+     * `obtener` y con más motivo: este barrido corre solo, colgado del
+     * tránsito de la API, sin que nadie esté mirando. Vencer a ciegas
+     * cancelaba pedidos ya pagados —el plazo propio es de minutos y el del QR
+     * de la pasarela, de días— y devolvía al inventario comida que el cliente
+     * había comprado.
+     */
+    const estado = await estadoSegunLaPasarela(pago);
+
+    if (estado && estado !== 'Pendiente') {
+      await aplicarResultado(pago.id_pago, estado, 'Pasarela', 'Consulta al vencer el plazo');
+      cerrados++;
+      continue;
+    }
+
+    /*
+     * Si la pasarela no contesta, el cobro **no se vence**: se deja pendiente
+     * y se reintenta en el barrido siguiente. Es preferible un pedido que
+     * tarda en resolverse a uno cancelado por una caída ajena.
+     */
+    if (estado === null && pago.id_transaccion_ext) continue;
+
     await aplicarResultado(pago.id_pago, 'Vencido', 'Sistema', 'Expiró el plazo del cobro');
+    cerrados++;
   }
-  return vencidos.length;
+
+  return cerrados;
 }

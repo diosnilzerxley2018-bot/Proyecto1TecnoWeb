@@ -1,6 +1,7 @@
 import { describe, it, expect, afterAll } from 'vitest';
 import request from 'supertest';
 import { app } from '../src/app.js';
+import { prisma } from '../src/config/prisma.js';
 import { obtenerToken, registrarCliente, buscarProducto } from './ayudantes.js';
 import { invalidarCache } from '../src/services/configuracion.service.js';
 
@@ -382,5 +383,60 @@ describe('El QR que llega a la pantalla', () => {
 
     const dto = await conQRParaPruebas({ tipoDatos: null, datosCobro: null });
     expect(dto.qrImagen).toBeUndefined();
+  });
+});
+
+/**
+ * El plazo propio es de minutos; el del QR de la pasarela, de dias. Un cliente
+ * que pagaba pasado ese cuarto de hora veia su pedido cancelado y el stock
+ * devuelto **con el dinero ya cobrado**: el sistema miraba el reloj antes de
+ * preguntar. Ahora pregunta primero, y el plazo solo decide cuando la pasarela
+ * dice que no hubo pago.
+ */
+describe('Un cobro vencido que si se pago', () => {
+  it('se da por pagado, no por vencido', async () => {
+    const cliente = await registrarCliente();
+    const pedido = await pedidoConPago(cliente.token, 'QR');
+    const idPago = pedido.body.cobro.id as number;
+
+    // Se atrasa el plazo a mano: es la unica forma de reproducir al cliente
+    // que paga tarde sin esperar un cuarto de hora en la suite.
+    await prisma.pago.update({
+      where: { id_pago: idPago },
+      data: { fecha_expiracion: new Date(Date.now() - 60_000) },
+    });
+
+    const r = await request(app)
+      .get(`/api/pagos/${idPago}`)
+      .set(cabecera(cliente.token));
+
+    expect(r.status).toBe(200);
+    // La pasarela simulada da el cobro por pagado en cuanto se le pregunta.
+    expect(r.body.estado).toBe('Pagado');
+
+    // Y el pedido entro a preparacion en vez de cancelarse.
+    const detalle = await request(app)
+      .get(`/api/pedidos/${pedido.body.id}`)
+      .set(cabecera(cliente.token));
+    expect(detalle.body.estadoPedido).toBe('Recibido');
+    expect(detalle.body.estadoPago).toBe('Pagado');
+  });
+
+  /** El barrido automatico corre solo: con mas razon pregunta antes. */
+  it('el barrido tampoco lo vence a ciegas', async () => {
+    const cliente = await registrarCliente();
+    const pedido = await pedidoConPago(cliente.token, 'QR');
+    const idPago = pedido.body.cobro.id as number;
+
+    await prisma.pago.update({
+      where: { id_pago: idPago },
+      data: { fecha_expiracion: new Date(Date.now() - 60_000) },
+    });
+
+    const admin = await obtenerToken();
+    await request(app).post('/api/pagos/vencer').set(cabecera(admin)).expect(200);
+
+    const r = await request(app).get(`/api/pagos/${idPago}`).set(cabecera(cliente.token));
+    expect(r.body.estado).toBe('Pagado');
   });
 });
