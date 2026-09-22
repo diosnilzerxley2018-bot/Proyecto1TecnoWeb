@@ -44,6 +44,25 @@ export async function recibirAviso(req: Request, res: Response) {
     : JSON.stringify(req.body);
 
   /**
+   * Se deja constancia de **cada** aviso, antes de validarlo.
+   *
+   * La aplicación no registra las peticiones que recibe, así que no había forma
+   * de distinguir «la pasarela nunca avisó» de «avisó y lo rechazamos»: las dos
+   * se ven igual desde afuera, como un cobro que no se confirma. Sin esta
+   * línea, los registros del servidor no dicen nada sobre un pago que el
+   * cliente jura haber hecho.
+   *
+   * El testigo no se escribe: es lo que autentica el aviso y no tiene por qué
+   * quedar en un registro que mucha gente puede leer.
+   */
+  const { testigo: _testigo, ...visibles } = req.query as Record<string, unknown>;
+  console.log(
+    `[pagos] Aviso recibido por ${req.method}:`,
+    JSON.stringify(visibles),
+    cuerpoCrudo.trim() ? `cuerpo: ${cuerpoCrudo.slice(0, 300)}` : '(sin cuerpo)',
+  );
+
+  /**
    * Libélula no envía cabeceras propias: lo que autentica el aviso viaja en la
    * dirección misma, como `?testigo=...&ref=...`. Se normaliza aquí para que
    * la pasarela reciba siempre un solo mapa y no tenga que conocer Express.
