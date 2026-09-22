@@ -15,6 +15,11 @@ import type { Mensaje, Mensajero, ResultadoEnvio } from './mensajero.js';
  * `mynetworks`, que es como está configurado el laboratorio. Un servidor en la
  * nube sí las exige, y por eso las variables existen.
  */
+/** El relay que corre en la misma máquina, al que se llega sin salir de ella. */
+export function esRelayLocal(servidor: string): boolean {
+  return ['localhost', '127.0.0.1', '::1'].includes(servidor.trim().toLowerCase());
+}
+
 export class MensajeroSmtp implements Mensajero {
   readonly nombre = 'SMTP';
   readonly enviaDeVerdad = true;
@@ -38,6 +43,19 @@ export class MensajeroSmtp implements Mensajero {
       // nodemailer negocia TLS por su cuenta.
       secure: puerto === 465,
       ...(usuario ? { auth: { user: usuario, pass: contrasena } } : {}),
+      /**
+       * Contra el relay local no se verifica el certificado.
+       *
+       * Postfix anuncia STARTTLS con el certificado autofirmado que trae
+       * Ubuntu, y nodemailer cortaba el envío con «self-signed certificate».
+       * Verificarlo no protegería de nada: la conexión no sale de la máquina,
+       * y si alguien pudiera intervenir el bucle local ya tendría el servidor.
+       *
+       * **Solo aplica al relay local.** Contra un servidor remoto el
+       * certificado se sigue verificando, que es donde sí hay red de por
+       * medio y la verificación significa algo.
+       */
+      ...(esRelayLocal(servidor) ? { tls: { rejectUnauthorized: false } } : {}),
       // Un aviso que tarda más que esto ya no le sirve a nadie.
       connectionTimeout: 10_000,
       greetingTimeout: 10_000,
