@@ -39,9 +39,19 @@ export async function vencerPendientes(_req: Request, res: Response) {
  * reintento no es el problema.
  */
 export async function recibirAviso(req: Request, res: Response) {
+  /**
+   * Un aviso puede no traer cuerpo, y eso es lo normal cuando llega por `GET`.
+   *
+   * `express.raw` no toca `req.body` si la petición no trae contenido, así que
+   * queda `undefined`, y `JSON.stringify(undefined)` devuelve `undefined` —el
+   * valor, no una cadena—. Todo lo que siguiera tratándolo como texto reventaba
+   * con un 500 antes de mirar el aviso.
+   */
   const cuerpoCrudo = Buffer.isBuffer(req.body)
     ? req.body.toString('utf8')
-    : JSON.stringify(req.body);
+    : req.body === undefined
+      ? ''
+      : JSON.stringify(req.body);
 
   /**
    * Se deja constancia de **cada** aviso, antes de validarlo.

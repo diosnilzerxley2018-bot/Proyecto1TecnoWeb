@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import request from 'supertest';
+import { app } from '../src/app.js';
 import { PasarelaLibelula } from '../src/pagos/libelula.js';
 
 /**
@@ -62,5 +64,32 @@ describe('Aviso de Libélula', () => {
 
   it('un aviso sin desenlace se rechaza, y el mensaje dice qué llegó', () => {
     expect(() => pasarela.interpretarAviso({ transaction_id: 'x' })).toThrow(/no reconocido/);
+  });
+});
+
+/**
+ * El aviso que llega por `GET`, sin cuerpo.
+ *
+ * Es la forma en que Libélula devuelve al cliente con el desenlace. Express no
+ * toca `req.body` cuando la petición no trae contenido, así que queda
+ * `undefined`; tratarlo como texto reventaba con un 500 antes de mirar el
+ * aviso, y la pasarela recibía un error del servidor en vez de una respuesta.
+ */
+describe('Aviso recibido por GET', () => {
+  it('no revienta por venir sin cuerpo', async () => {
+    const r = await request(app)
+      .get('/api/pagos/notificacion')
+      .query({ testigo: 'cualquiera', ref: 'PEDIDO-1', transaction_id: 'abc', error: '0' });
+
+    // Lo que importa es que lo procese: cualquier respuesta menos un 500.
+    expect(r.status).not.toBe(500);
+  });
+
+  it('el POST sin cuerpo tampoco', async () => {
+    const r = await request(app)
+      .post('/api/pagos/notificacion')
+      .query({ testigo: 'cualquiera', ref: 'PEDIDO-1', transaction_id: 'abc', error: '0' });
+
+    expect(r.status).not.toBe(500);
   });
 });
