@@ -63,7 +63,7 @@ export async function requiereAutenticacion(req: Request, _res: Response, next: 
 
     // Cumplido el plazo se apaga la bandera, para no repetir esta cuenta en
     // cada petición y para que la base refleje el estado real.
-    await usuarioModel.desbloquear(sesion.idUsuario);
+    await usuarioModel.levantarBloqueoCumplido(sesion.idUsuario);
   }
 
   req.sesion = sesion;

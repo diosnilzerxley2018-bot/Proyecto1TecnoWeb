@@ -5,7 +5,7 @@ import { hashearContrasena } from '../utils/hash.js';
 import { ROL_CLIENTE } from '../config/dominio.js';
 import { verificarContrasena } from '../utils/hash.js';
 import { firmarToken } from '../utils/jwt.js';
-import { estadoDelBloqueo, mensajeDeBloqueo } from './bloqueo.service.js';
+import { duracionDelBloqueo, estadoDelBloqueo, mensajeDeBloqueo } from './bloqueo.service.js';
 import { ErrorApp } from '../errors/error-app.js';
 import { env } from '../config/env.js';
 import type { SesionDTO } from '../dtos/auth.dto.js';
@@ -27,15 +27,18 @@ export async function iniciarSesion(nombreUsuario: string, contrasena: string): 
      *
      * Un bloqueo sin salida automática convierte un ataque de un minuto en una
      * interrupción de un día, y cuando le toca al administrador —el único que
-     * puede desbloquear— deja al sistema sin nadie capaz de reabrirlo. La
-     * espera sigue frenando la fuerza bruta: quien prueba contraseñas al azar
-     * avanza tres intentos por cada quince minutos.
+     * puede desbloquear— deja al sistema sin nadie capaz de reabrirlo.
+     *
+     * Por eso el plazo **escala** en vez de ser fijo: un minuto, cinco, y al
+     * tercero ya no caduca. Al dueño distraído apenas lo demora; a quien
+     * insiste lo deja fuera. Sin escalada había que elegir entre un plazo
+     * corto, que no frena a nadie, y uno largo, que castiga al dueño.
      */
     const bloqueo = estadoDelBloqueo(usuario);
     if (bloqueo.vigente) throw new ErrorApp(423, mensajeDeBloqueo(bloqueo));
 
     // Cumplido el plazo, la cuenta vuelve a estar disponible por sí sola.
-    await usuarioModel.desbloquear(usuario.id_usuario);
+    await usuarioModel.levantarBloqueoCumplido(usuario.id_usuario);
     usuario.bloqueado = false;
     usuario.intentos_fallidos = 0;
   }
@@ -52,7 +55,18 @@ export async function iniciarSesion(nombreUsuario: string, contrasena: string): 
     await usuarioModel.registrarIntentoFallido(usuario.id_usuario, intentos, bloquear);
 
     if (bloquear) {
-      throw new ErrorApp(423, 'Cuenta bloqueada por superar los intentos permitidos.');
+      /*
+       * El aviso dice cuánto dura **este** bloqueo, que no es siempre el
+       * mismo: escala con la insistencia. Un «cuenta bloqueada» a secas deja
+       * al dueño sin saber si esperar un minuto o llamar al administrador.
+       */
+      const minutos = duracionDelBloqueo(usuario.veces_bloqueado + 1);
+      throw new ErrorApp(
+        423,
+        minutos === null
+          ? 'Cuenta bloqueada tras varios bloqueos seguidos. Solo el administrador puede reabrirla.'
+          : `Cuenta bloqueada por superar los intentos permitidos. Vuelva a intentarlo en ${minutos} minuto(s).`,
+      );
     }
     const restantes = env.maxIntentosFallidos - intentos;
     throw new ErrorApp(401, `Credenciales incorrectas. Le quedan ${restantes} intento(s).`);

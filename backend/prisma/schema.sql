@@ -28,6 +28,11 @@ CREATE TABLE usuario (
     intentos_fallidos   INT     NOT NULL DEFAULT 0,
     bloqueado           BOOLEAN NOT NULL DEFAULT FALSE,
     fecha_bloqueo       TIMESTAMP,
+    -- Cuantas veces se bloqueo esta cuenta desde el ultimo acceso correcto.
+    -- Es lo que hace que el bloqueo escale: el primero dura un minuto, el
+    -- segundo cinco y el tercero ya no caduca (CU-SEG-05). Entrar bien lo
+    -- devuelve a cero: quien demuestra ser el dueno no arrastra la escalada.
+    veces_bloqueado     INT     NOT NULL DEFAULT 0,
     activo              BOOLEAN NOT NULL DEFAULT TRUE,
     fecha_registro      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     -- Ultimo inicio de sesion correcto. Se le muestra al titular en su perfil:

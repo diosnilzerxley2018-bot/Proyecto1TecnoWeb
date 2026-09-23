@@ -3,6 +3,7 @@ import { prisma } from '../config/prisma.js';
 import * as pagoModel from '../models/pago.model.js';
 import * as ventaModel from '../models/venta.model.js';
 import * as pedidoModel from '../models/pedido.model.js';
+import * as repartoService from './reparto.service.js';
 import type { PagoConsultado } from '../models/pago.model.js';
 import type { ClientePrisma } from '../models/stock.model.js';
 import { reponerAsignaciones } from './stock.service.js';
@@ -429,6 +430,8 @@ export async function aplicarResultado(
     throw new ErrorApp(400, `"${estado}" no es un desenlace válido para un cobro`);
   }
 
+  let idPedidoResuelto: number | null = null;
+
   await prisma.$transaction(async (tx: ClientePrisma) => {
     const pago = await pagoModel.buscarPorId(idPago, tx);
     if (!pago) throw new ErrorApp(404, 'El cobro no existe');
@@ -452,7 +455,18 @@ export async function aplicarResultado(
 
     if (pago.id_venta !== null) await resolverVenta(tx, pago.id_venta, estado);
     if (pago.id_pedido !== null) await resolverPedido(tx, pago.id_pedido, estado);
+    idPedidoResuelto = pago.id_pedido;
   });
+
+  /*
+   * El pedido pagado en línea entra recién ahora a la cola de reparto, así que
+   * es acá donde se le busca repartidor (RF-PED-07). Va **fuera** de la
+   * transacción: asignar es una comodidad y no debe poder deshacer un cobro ya
+   * confirmado si algo sale mal.
+   */
+  if (estado === 'Pagado' && idPedidoResuelto !== null) {
+    await repartoService.asignarSinRomper(idPedidoResuelto);
+  }
 
   return conQR(aDTO(await exigirPago(idPago)));
 }

@@ -20,6 +20,7 @@ import { exigirCliente } from './actor.service.js';
 import * as ubicacionService from './ubicacion.service.js';
 import * as pagoService from './pago.service.js';
 import * as avisoService from './aviso.service.js';
+import * as repartoService from './reparto.service.js';
 import * as usuarioModel from '../models/usuario.model.js';
 import { modoCobro } from './configuracion.service.js';
 import { aDetalleDTO, calcularTotal } from './pedido.mapper.js';
@@ -156,6 +157,13 @@ export async function confirmar(
     pedido.cobro = await abrirCobroDelPedido(resultado.idPago, resultado.idPedido);
   } else {
     pedido.cobro = await pagoService.dePedido(resultado.idPedido);
+    /*
+     * El pedido en efectivo nace listo para repartir, así que se le busca
+     * repartidor ahora mismo (RF-PED-07). El pagado en línea no: entra a la
+     * cola recién cuando el cobro se confirma, y de eso se encarga el
+     * servicio de pagos.
+     */
+    await repartoService.asignarSinRomper(resultado.idPedido);
   }
 
   // El aviso se manda aunque el cobro siga pendiente: el cliente necesita

@@ -355,6 +355,7 @@ model usuario {
   fecha_registro      DateTime              @default(now()) @db.Timestamp(6)
   id_rol              Int
   ultimo_acceso       DateTime?             @db.Timestamp(6)
+  veces_bloqueado     Int                   @default(0)
   cliente             cliente?
   configuracion       configuracion[]
   empleado            empleado?

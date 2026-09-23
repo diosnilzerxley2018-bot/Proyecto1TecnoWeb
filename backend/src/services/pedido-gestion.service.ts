@@ -5,6 +5,7 @@ import * as empleadoModel from '../models/empleado.model.js';
 import * as permisoModel from '../models/permiso.model.js';
 import * as avisoService from './aviso.service.js';
 import * as pagoService from './pago.service.js';
+import * as repartoService from './reparto.service.js';
 import { reponerAsignaciones } from './stock.service.js';
 import type { ClientePrisma } from '../models/stock.model.js';
 import type { PedidoParaGestion } from '../models/pedido.model.js';
@@ -134,8 +135,10 @@ export async function listarRepartidores(idUsuario: number): Promise<RepartidorD
  * más. El sistema no sabe eso; quien está en el mostrador, sí.
  *
  * El criterio es el reparto equitativo: **el repartidor de turno con menos
- * entregas en curso**, y a igualdad de carga el de identificador menor, que es
- * arbitrario pero estable —la sugerencia no cambia sola entre dos consultas—.
+ * entregas en curso**; a igualdad de carga, el que antes se va a liberar —el
+ * que lleva más tiempo con su pedido más viejo—, y si aun así empatan, el de
+ * identificador menor: arbitrario pero estable, de modo que la sugerencia no
+ * cambia sola entre dos consultas.
  *
  * Devuelve `null`, y no un error, cuando no hay nadie de turno: quedarse sin
  * repartidores disponibles es una situación normal de la operación, no una
@@ -153,10 +156,9 @@ export async function sugerirRepartidor(
     throw new ErrorApp(409, `No se puede asignar un repartidor a un pedido ${estado}`);
   }
 
-  const repartidores = await empleadoModel.repartidoresPorCarga(
-    CARGO_REPARTIDOR,
-    ESTADOS_OCUPAN_REPARTIDOR,
-  );
+  // El mismo orden que usa la asignación automática: lo que se sugiere y lo
+  // que el sistema elige solo tienen que ser la misma cosa.
+  const repartidores = await repartoService.repartidoresPorPrioridad();
   const deTurno = repartidores.filter((r) => r.disponible);
 
   if (deTurno.length === 0) {

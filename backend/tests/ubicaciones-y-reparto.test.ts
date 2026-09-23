@@ -1,7 +1,14 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import request from 'supertest';
 import { app } from '../src/app.js';
-import { crearEmpleado, obtenerToken, registrarCliente, buscarProducto } from './ayudantes.js';
+import { prisma } from '../src/config/prisma.js';
+import {
+  crearEmpleado,
+  obtenerToken,
+  registrarCliente,
+  buscarProducto,
+  crearPedido,
+} from './ayudantes.js';
 
 /**
  * CU-PED-03 — direcciones del cliente, y RF-PED-07 — reparto equitativo.
@@ -200,6 +207,12 @@ describe('Pedir con dirección guardada o escrita en el momento', () => {
 });
 
 describe('RF-PED-07 · Sugerencia de repartidor', () => {
+  /**
+   * El turno arranca vacio en cada prueba. Todas comparten una base y corren
+   * en serie, y desde que la asignacion es automatica un repartidor de turno
+   * que otra prueba dejo encendido se lleva los pedidos de esta.
+   */
+  beforeEach(() => prisma.empleado.updateMany({ data: { disponible: false } }));
   async function pedidoEnCurso() {
     const cliente = await registrarCliente();
     const pedido = await pedir(cliente.token, {
@@ -228,7 +241,16 @@ describe('RF-PED-07 · Sugerencia de repartidor', () => {
     const uno = await crearEmpleado('Repartidor');
     const dos = await crearEmpleado('Repartidor');
 
-    // Ambos declaran su turno.
+    /*
+     * Los pedidos se crean **antes** de que nadie declare turno: asi nacen sin
+     * repartidor y la prueba controla quien queda cargado. Creandolos despues,
+     * la asignacion automatica los repartiria sola y ya no habria nada que
+     * sugerir.
+     */
+    const ocupado = await pedidoEnCurso();
+    const idPedido = await pedidoEnCurso();
+
+    // Ahora si, ambos declaran su turno.
     for (const r of [uno, dos]) {
       await request(app)
         .put('/api/gestion/disponibilidad')
@@ -238,7 +260,6 @@ describe('RF-PED-07 · Sugerencia de repartidor', () => {
     }
 
     // Al primero se le carga una entrega.
-    const ocupado = await pedidoEnCurso();
     await request(app)
       .put(`/api/gestion/pedidos/${ocupado}/repartidor`)
       .set(cabecera(staff))
@@ -249,7 +270,6 @@ describe('RF-PED-07 · Sugerencia de repartidor', () => {
       .set(cabecera(staff))
       .send({ estado: 'En preparacion' });
 
-    const idPedido = await pedidoEnCurso();
     const r = await request(app)
       .get(`/api/gestion/pedidos/${idPedido}/sugerencia-repartidor`)
       .set(cabecera(staff));
@@ -279,8 +299,15 @@ describe('RF-PED-07 · Sugerencia de repartidor', () => {
     expect(candidato.disponible).toBe(false);
   });
 
-  /** La sugerencia propone; asignar sigue siendo una acción de la persona. */
-  it('sugerir no asigna: el pedido sigue sin repartidor', async () => {
+  /**
+   * La sugerencia propone; no decide.
+   *
+   * Antes esto se comprobaba viendo que el pedido siguiera sin repartidor,
+   * pero desde que la asignación es automática el pedido ya llega con uno. Lo
+   * que sigue teniendo que ser cierto —y es lo que la prueba dice ahora— es
+   * que **consultar la sugerencia no cambia nada**.
+   */
+  it('sugerir no cambia la asignación del pedido', async () => {
     const staff = await obtenerToken();
     const repartidor = await crearEmpleado('Repartidor');
     await request(app)
@@ -289,15 +316,19 @@ describe('RF-PED-07 · Sugerencia de repartidor', () => {
       .send({ disponible: true });
 
     const idPedido = await pedidoEnCurso();
+    const antes = await request(app)
+      .get(`/api/gestion/pedidos/${idPedido}`)
+      .set(cabecera(staff));
+
     await request(app)
       .get(`/api/gestion/pedidos/${idPedido}/sugerencia-repartidor`)
       .set(cabecera(staff))
       .expect(200);
 
-    const detalle = await request(app)
+    const despues = await request(app)
       .get(`/api/gestion/pedidos/${idPedido}`)
       .set(cabecera(staff));
-    expect(detalle.body.repartidor).toBeNull();
+    expect(despues.body.repartidor).toEqual(antes.body.repartidor);
   });
 
   it('el repartidor declara su propio turno', async () => {
@@ -489,5 +520,91 @@ describe('RF-PED-07 · Las entregas del repartidor', () => {
     const cliente = await registrarCliente();
     const r = await request(app).get('/api/gestion/mis-entregas').set(cabecera(cliente.token));
     expect(r.status).toBe(403);
+  });
+});
+
+/**
+ * RF-PED-07 — el pedido sale con repartidor puesto.
+ *
+ * Antes entraba a la cola y se quedaba esperando a que alguien del mostrador se
+ * acordara de asignarlo, aunque hubiera un repartidor libre y de turno. El
+ * criterio es el mismo que ya usaba la sugerencia: de turno, el menos cargado,
+ * y entre iguales el que antes se libera.
+ */
+describe('RF-PED-07 · Asignacion automatica al entrar el pedido', () => {
+  /**
+   * Todas las pruebas comparten una base y corren en serie, asi que los
+   * repartidores que otras dejaron de turno competirian por estos pedidos y el
+   * resultado dependeria del orden de ejecucion. Se empieza con el turno
+   * vacio y cada prueba enciende solo a quien necesita.
+   */
+  beforeEach(() => prisma.empleado.updateMany({ data: { disponible: false } }));
+
+  const ponerDeTurno = (token: string, disponible = true) =>
+    request(app)
+      .put('/api/gestion/disponibilidad')
+      .set(cabecera(token))
+      .send({ disponible })
+      .expect(200);
+
+  const repartidorDe = async (staff: string, idPedido: number) => {
+    const r = await request(app).get(`/api/gestion/pedidos/${idPedido}`).set(cabecera(staff));
+    return r.body.repartidor as { id: number } | null;
+  };
+
+  it('se lo asigna al repartidor de turno', async () => {
+    const staff = await obtenerToken();
+    const repartidor = await crearEmpleado('Repartidor');
+    await ponerDeTurno(repartidor.token);
+
+    const cliente = await registrarCliente();
+    const idPedido = await crearPedido(cliente.token, 'Limonada');
+
+    expect(await repartidorDe(staff, idPedido)).toMatchObject({ id: repartidor.id });
+  });
+
+  it('no se lo asigna a quien esta fuera de turno', async () => {
+    const staff = await obtenerToken();
+    const deFranco = await crearEmpleado('Repartidor');
+    await ponerDeTurno(deFranco.token, false);
+
+    const cliente = await registrarCliente();
+    const idPedido = await crearPedido(cliente.token, 'Limonada');
+
+    const asignado = await repartidorDe(staff, idPedido);
+    // Puede quedar sin nadie, o con otro de turno de una prueba anterior;
+    // lo que no puede es tocarle al que declaro estar de franco.
+    expect(asignado?.id).not.toBe(deFranco.id);
+  });
+
+  /** Con dos de turno, el que no tiene nada en curso va primero. */
+  it('prefiere al que esta libre antes que al ocupado', async () => {
+    const staff = await obtenerToken();
+    const ocupado = await crearEmpleado('Repartidor');
+    const libre = await crearEmpleado('Repartidor');
+    await ponerDeTurno(ocupado.token);
+    await ponerDeTurno(libre.token, false);
+
+    // Al primero le entra un pedido y queda ocupado.
+    const primerCliente = await registrarCliente();
+    const primero = await crearPedido(primerCliente.token, 'Limonada');
+    expect(await repartidorDe(staff, primero)).toMatchObject({ id: ocupado.id });
+
+    // Ahora entra el segundo, sin entregas: le toca a el.
+    await ponerDeTurno(libre.token);
+    const segundoCliente = await registrarCliente();
+    const segundo = await crearPedido(segundoCliente.token, 'Limonada');
+
+    expect(await repartidorDe(staff, segundo)).toMatchObject({ id: libre.id });
+  });
+
+  /** Sin nadie de turno el pedido entra igual; se asigna a mano, como antes. */
+  it('si no hay nadie de turno el pedido entra sin repartidor', async () => {
+    const staff = await obtenerToken();
+    // Nadie de turno: lo deja asi el `beforeEach` de este bloque.
+    const cliente = await registrarCliente();
+    const idPedido = await crearPedido(cliente.token, 'Limonada');
+
+    expect(await repartidorDe(staff, idPedido)).toBeNull();
   });
 });

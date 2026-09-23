@@ -27,7 +27,8 @@ export const estadoDeCuenta = (id: number) =>
     // `fecha_bloqueo` viaja con los dos booleanos porque sin ella no se puede
     // saber si el bloqueo ya caducó, y quien pregunta por el estado de la
     // cuenta necesita esa respuesta, no la del momento en que se bloqueó.
-    select: { activo: true, bloqueado: true, fecha_bloqueo: true },
+    // `veces_bloqueado` decide cuánto dura: el plazo ya no es fijo.
+    select: { activo: true, bloqueado: true, fecha_bloqueo: true, veces_bloqueado: true },
   });
 
 /** Una página de usuarios y cuántos hay en total (H7). */
@@ -194,6 +195,12 @@ export const cambiarRol = (id: number, idRol: number) =>
 export const darDeBaja = (id: number) =>
   prisma.usuario.update({ where: { id_usuario: id }, data: { activo: false } });
 
+/**
+ * Anota el intento fallido y, si toca, bloquea la cuenta.
+ *
+ * Al bloquear se **suma uno** a `veces_bloqueado`: es el contador del que sale
+ * la duración del castigo, que crece con la insistencia (CU-SEG-05).
+ */
 export const registrarIntentoFallido = (id: number, intentos: number, bloquear: boolean) =>
   prisma.usuario.update({
     where: { id_usuario: id },
@@ -201,6 +208,7 @@ export const registrarIntentoFallido = (id: number, intentos: number, bloquear: 
       intentos_fallidos: intentos,
       bloqueado: bloquear,
       fecha_bloqueo: bloquear ? new Date() : null,
+      ...(bloquear ? { veces_bloqueado: { increment: 1 } } : {}),
     },
   });
 
@@ -210,11 +218,17 @@ export const registrarIntentoFallido = (id: number, intentos: number, bloquear: 
  * Reinicia el contador de intentos y sella la fecha en un solo `UPDATE`: son
  * dos consecuencias del mismo hecho, y separarlas abriría la posibilidad de
  * que una se aplique y la otra no.
+ *
+ * También reinicia la escalada del bloqueo. Quien acierta la contraseña
+ * demostró ser el dueño, y no tiene por qué arrastrar los bloqueos de sus
+ * despistes anteriores: sin esto, olvidarla tres veces en meses distintos
+ * terminaba cerrando la cuenta de forma definitiva. Al atacante no lo
+ * beneficia, porque para reiniciarlo hay que acertar.
  */
 export const registrarAccesoExitoso = (id: number) =>
   prisma.usuario.update({
     where: { id_usuario: id },
-    data: { intentos_fallidos: 0, ultimo_acceso: new Date() },
+    data: { intentos_fallidos: 0, veces_bloqueado: 0, ultimo_acceso: new Date() },
   });
 
 /** Cambia el hash de la contraseña. No toca ningún otro campo. */
@@ -225,10 +239,31 @@ export const cambiarContrasena = (id: number, hash: string) =>
     select: { id_usuario: true },
   });
 
-export const desbloquear = (id: number) =>
+/**
+ * Levanta un bloqueo **cuyo plazo se cumplió**.
+ *
+ * No toca `veces_bloqueado`: ese contador es justamente lo que hace que el
+ * siguiente bloqueo dure más. Reiniciarlo aquí dejaría al castigo congelado en
+ * un minuto para siempre, y bastaría esperar ese minuto entre tandas de tres
+ * intentos para probar contraseñas sin límite.
+ */
+export const levantarBloqueoCumplido = (id: number) =>
   prisma.usuario.update({
     where: { id_usuario: id },
     data: { bloqueado: false, fecha_bloqueo: null, intentos_fallidos: 0 },
+  });
+
+/**
+ * Desbloqueo por el administrador (CU-SEG-05).
+ *
+ * Aquí sí se reinicia la escalada: alguien con nombre y apellido revisó el
+ * caso y respondió por la cuenta. Dejarle el contador encima significaría que
+ * el próximo tropiezo la cierra de nuevo, y de forma definitiva.
+ */
+export const desbloquear = (id: number) =>
+  prisma.usuario.update({
+    where: { id_usuario: id },
+    data: { bloqueado: false, fecha_bloqueo: null, intentos_fallidos: 0, veces_bloqueado: 0 },
   });
 
 export const existeNombreUsuarioOEmail = (nombreUsuario: string, email: string, excluirId?: number) =>

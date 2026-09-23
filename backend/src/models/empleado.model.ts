@@ -58,7 +58,7 @@ export const repartidoresPorCarga = async (nombreCargo: string, enCurso: string[
       usuario: { select: { nombre: true, apellido: true, telefono: true } },
       pedido: {
         where: { estado_pedido: { in: enCurso } },
-        select: { id_pedido: true },
+        select: { id_pedido: true, fecha: true },
       },
     },
     orderBy: { usuario: { apellido: 'asc' } },
@@ -71,8 +71,24 @@ export const repartidoresPorCarga = async (nombreCargo: string, enCurso: string[
       telefono: r.usuario.telefono,
       disponible: r.disponible,
       entregasEnCurso: r.pedido.length,
+      /**
+       * Cuándo entró el más viejo de sus pedidos en curso.
+       *
+       * Es la aproximación a «cuál se libera antes»: el sistema no sabe a qué
+       * hora llegará cada repartidor —no hay rastreo ni tiempos estimados—,
+       * pero el que empezó primero es el que más camino lleva recorrido.
+       * `Infinity` para quien no tiene ninguno, que va antes que todos.
+       */
+      ocupadoDesde: r.pedido.length
+        ? Math.min(...r.pedido.map((p) => p.fecha.getTime()))
+        : Infinity,
     }))
-    .sort((a, b) => a.entregasEnCurso - b.entregasEnCurso || a.idEmpleado - b.idEmpleado);
+    .sort(
+      (a, b) =>
+        a.entregasEnCurso - b.entregasEnCurso ||
+        a.ocupadoDesde - b.ocupadoDesde ||
+        a.idEmpleado - b.idEmpleado,
+    );
 };
 
 export type EmpleadoConCargo = NonNullable<Awaited<ReturnType<typeof buscarPorId>>>;

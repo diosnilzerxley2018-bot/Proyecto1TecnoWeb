@@ -70,6 +70,12 @@ const AJUSTES: Ajuste[] = [
          ON CONFLICT (id_usuario, id_rol_permiso) DO NOTHING`,
     ],
   },
+  {
+    nombre: 'usuario.veces_bloqueado — el bloqueo por intentos fallidos escala',
+    sentencias: [
+      `ALTER TABLE usuario ADD COLUMN IF NOT EXISTS veces_bloqueado INT NOT NULL DEFAULT 0`,
+    ],
+  },
 ];
 
 const url = process.env.DATABASE_URL;

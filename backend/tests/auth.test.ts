@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import { app } from '../src/app.js';
+import { prisma } from '../src/config/prisma.js';
 import { crearEmpleado, obtenerToken, registrarCliente, sufijo } from './ayudantes.js';
 
 describe('CU-SEG-01 Iniciar sesión', () => {
@@ -246,5 +247,145 @@ describe('CU-SEG-02 · Al cambiar de rol, cambian los permisos', () => {
 
     // Y sí puede lo del rol nuevo, que hereda como si lo acabaran de dar de alta.
     await request(app).get('/api/gestion/pedidos').set(cabecera).expect(200);
+  });
+});
+
+/**
+ * CU-SEG-05 — el bloqueo escala: 1 minuto, 5 minutos, y despues definitivo.
+ *
+ * Sin escalada habia que elegir entre un plazo corto, que no frena a quien
+ * prueba contrasenas, y uno largo, que castiga al dueno que se equivoco. La
+ * progresion resuelve las dos: al distraido apenas lo demora, al insistente lo
+ * deja fuera. La prueba adelanta el reloj tocando `fecha_bloqueo` en vez de
+ * esperar los minutos de verdad.
+ */
+describe('CU-SEG-05 · La escalada del bloqueo', () => {
+  /** Crea una cuenta propia para no interferir con otras pruebas. */
+  async function cuentaNueva(tokenAdmin: string) {
+    const usuario = `escal${sufijo()}`;
+    const creado = await request(app)
+      .post('/api/usuarios')
+      .set('Authorization', `Bearer ${tokenAdmin}`)
+      .send({
+        nombre: 'Prueba', apellido: 'Escalada',
+        email: `${usuario}@correo.bo`,
+        nombreUsuario: usuario, contrasena: 'Correcta123!',
+        idRol: 2, idCargo: 2,
+      })
+      .expect(201);
+    return { usuario, id: creado.body.id as number };
+  }
+
+  /** Gasta los tres intentos y devuelve la respuesta del que bloquea. */
+  async function agotarIntentos(usuario: string) {
+    let ultima;
+    for (let i = 0; i < 3; i++) {
+      ultima = await request(app)
+        .post('/api/auth/login')
+        .send({ nombreUsuario: usuario, contrasena: 'incorrecta' });
+    }
+    return ultima!;
+  }
+
+  /** Da por cumplido el plazo sin esperarlo. */
+  const vencerElPlazo = (id: number) =>
+    prisma.usuario.update({
+      where: { id_usuario: id },
+      data: { fecha_bloqueo: new Date(Date.now() - 60 * 60_000) },
+    });
+
+  it('el primer bloqueo dura un minuto y se levanta solo', async () => {
+    const admin = await obtenerToken();
+    const { usuario, id } = await cuentaNueva(admin);
+
+    const bloqueo = await agotarIntentos(usuario);
+    expect(bloqueo.status).toBe(423);
+    expect(bloqueo.body.error).toContain('1 minuto');
+
+    await vencerElPlazo(id);
+
+    const despues = await request(app)
+      .post('/api/auth/login')
+      .send({ nombreUsuario: usuario, contrasena: 'Correcta123!' });
+    expect(despues.status).toBe(200);
+  });
+
+  it('el segundo dura cinco minutos', async () => {
+    const admin = await obtenerToken();
+    const { usuario, id } = await cuentaNueva(admin);
+
+    await agotarIntentos(usuario);
+    await vencerElPlazo(id);
+    // Entrar bien reiniciaria la escalada, asi que se sigue fallando.
+    const segundo = await agotarIntentos(usuario);
+
+    expect(segundo.status).toBe(423);
+    expect(segundo.body.error).toContain('5 minuto');
+  });
+
+  it('el tercero ya no caduca: solo lo levanta el administrador', async () => {
+    const admin = await obtenerToken();
+    const { usuario, id } = await cuentaNueva(admin);
+
+    await agotarIntentos(usuario);
+    await vencerElPlazo(id);
+    await agotarIntentos(usuario);
+    await vencerElPlazo(id);
+    const tercero = await agotarIntentos(usuario);
+
+    expect(tercero.status).toBe(423);
+    expect(tercero.body.error).toContain('administrador');
+
+    // Ni siquiera con el plazo cumplido: este bloqueo no caduca.
+    await vencerElPlazo(id);
+    const insiste = await request(app)
+      .post('/api/auth/login')
+      .send({ nombreUsuario: usuario, contrasena: 'Correcta123!' });
+    expect(insiste.status).toBe(423);
+
+    await request(app)
+      .post(`/api/usuarios/${id}/desbloquear`)
+      .set('Authorization', `Bearer ${admin}`)
+      .expect(200);
+
+    const reabierta = await request(app)
+      .post('/api/auth/login')
+      .send({ nombreUsuario: usuario, contrasena: 'Correcta123!' });
+    expect(reabierta.status).toBe(200);
+  });
+
+  /** Quien acierta demuestra ser el dueno: no arrastra sus despistes. */
+  it('entrar bien reinicia la escalada', async () => {
+    const admin = await obtenerToken();
+    const { usuario, id } = await cuentaNueva(admin);
+
+    await agotarIntentos(usuario);
+    await vencerElPlazo(id);
+    await request(app)
+      .post('/api/auth/login')
+      .send({ nombreUsuario: usuario, contrasena: 'Correcta123!' })
+      .expect(200);
+
+    // El siguiente bloqueo vuelve a ser el primero: un minuto, no cinco.
+    const otra = await agotarIntentos(usuario);
+    expect(otra.body.error).toContain('1 minuto');
+  });
+
+  /** El administrador responde por la cuenta: la escalada arranca de cero. */
+  it('el desbloqueo del administrador tambien la reinicia', async () => {
+    const admin = await obtenerToken();
+    const { usuario, id } = await cuentaNueva(admin);
+
+    await agotarIntentos(usuario);
+    await vencerElPlazo(id);
+    await agotarIntentos(usuario);
+
+    await request(app)
+      .post(`/api/usuarios/${id}/desbloquear`)
+      .set('Authorization', `Bearer ${admin}`)
+      .expect(200);
+
+    const otra = await agotarIntentos(usuario);
+    expect(otra.body.error).toContain('1 minuto');
   });
 });

@@ -98,8 +98,18 @@ export function esTransicionValida(origen: EstadoPedido, destino: EstadoPedido):
  * Es la base del reparto equitativo: la carga de cada repartidor es cuántos
  * pedidos tiene en estos estados. Un pedido entregado o cancelado ya no ocupa
  * a nadie, aunque siga asignado a su nombre en el historial.
+ *
+ * `Recibido` cuenta desde que la asignación es automática (RF-PED-07). Antes
+ * el repartidor se elegía a mano, siempre después de poner el pedido en
+ * preparación, así que un pedido recién recibido no tenía a quién ocupar. Hoy
+ * se asigna al entrar: sin contarlo, el sistema veía libre a quien acababa de
+ * recibir un pedido y le encajaba todos los siguientes al mismo.
  */
-export const ESTADOS_OCUPAN_REPARTIDOR: EstadoPedido[] = ['En preparacion', 'En camino'];
+export const ESTADOS_OCUPAN_REPARTIDOR: EstadoPedido[] = [
+  'Recibido',
+  'En preparacion',
+  'En camino',
+];
 
 export function esCancelable(estado: EstadoPedido): boolean {
   return ESTADOS_CANCELABLES.includes(estado);
