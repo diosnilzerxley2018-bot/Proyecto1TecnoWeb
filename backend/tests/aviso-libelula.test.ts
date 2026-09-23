@@ -93,3 +93,37 @@ describe('Aviso recibido por GET', () => {
     expect(r.status).not.toBe(500);
   });
 });
+
+/**
+ * El aviso identifica el cobro con **nuestra** referencia, no con la suya.
+ *
+ * Tomado literal de un aviso real en producción: en `transaction_id` viene
+ * `PEDIDO-16`, que es el `identificador_deuda` que le dimos al registrar la
+ * deuda, y no el UUID que Libélula devolvió al crearla. Buscar el cobro solo
+ * por ese UUID no encontraba nada y el aviso se descartaba como «de otro
+ * ambiente»: el cliente pagaba, el aviso llegaba, y el pedido seguía sin
+ * cobrarse. Es el último eslabón que faltaba.
+ */
+describe('El aviso trae la referencia del comercio', () => {
+  const real = {
+    ref: 'PEDIDO-16',
+    transaction_id: 'PEDIDO-16',
+    error: '0',
+    message: 'OK',
+    cancel_order: '0',
+    payment_method: 'ATC_QR',
+    payment_method_id: '30',
+    monto_total: '0.10',
+    numeroReferencia: '53078694',
+  };
+
+  it('se interpreta como cobrado, con su monto', () => {
+    const aviso = pasarela.interpretarAviso(real);
+
+    expect(aviso.estado).toBe('Pagado');
+    expect(aviso.idTransaccionExterna).toBe('PEDIDO-16');
+    // `monto_total`, que es como Libélula lo llama. Sin esto el cobro se
+    // rechazaba por pagar menos que el total de la venta.
+    expect(aviso.monto).toBe(0.1);
+  });
+});

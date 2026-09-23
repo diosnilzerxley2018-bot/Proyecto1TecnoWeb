@@ -531,6 +531,48 @@ function analizarCuerpo(cuerpoCrudo: string): Record<string, unknown> {
   }
 }
 
+/**
+ * Encuentra el cobro del que habla un aviso.
+ *
+ * Se busca primero por el identificador de la pasarela, que es lo esperable.
+ * Pero Libélula **no devuelve el suyo**: en `transaction_id` repite la
+ * referencia que le dimos al registrar la deuda —`PEDIDO-16`—, así que buscar
+ * solo por su UUID no encontraba nada y el aviso se descartaba como «de otro
+ * ambiente». El pago estaba hecho, el aviso llegaba, y el pedido seguía sin
+ * cobrarse.
+ *
+ * Usar la referencia es seguro: el testigo que autentica el aviso se deriva de
+ * ella, así que para cuando se llega aquí ya está comprobada.
+ */
+async function cobroDelAviso(
+  pasarela: string,
+  aviso: { idTransaccionExterna: string },
+  referencia: string | undefined,
+) {
+  const porTransaccion = await pagoModel.buscarPorTransaccionExterna(
+    pasarela,
+    aviso.idTransaccionExterna,
+  );
+  if (porTransaccion) return porTransaccion;
+
+  // La referencia puede venir en la dirección o, como hace Libélula, repetida
+  // dentro del propio aviso.
+  for (const candidata of [referencia, aviso.idTransaccionExterna]) {
+    const partes = /^(PEDIDO|VENTA)-(\d+)$/.exec(candidata ?? '');
+    if (!partes) continue;
+
+    const id = Number(partes[2]);
+    const encontrado =
+      partes[1] === 'PEDIDO'
+        ? await pagoModel.buscarDePedido(id)
+        : await pagoModel.buscarDeVenta(id);
+
+    if (encontrado) return encontrado;
+  }
+
+  return null;
+}
+
 export async function procesarAviso(
   cuerpoCrudo: string,
   cabeceras: Record<string, string | undefined>,
@@ -554,10 +596,7 @@ export async function procesarAviso(
   const cuerpo = { ...parametros, ...analizarCuerpo(cuerpoCrudo) };
 
   const aviso = pasarela.interpretarAviso(cuerpo);
-  const pago = await pagoModel.buscarPorTransaccionExterna(
-    pasarela.nombre,
-    aviso.idTransaccionExterna,
-  );
+  const pago = await cobroDelAviso(pasarela.nombre, aviso, cabeceras['x-referencia-pago']);
 
   // Un aviso sobre un cobro desconocido no es un error del emisor: puede ser
   // de otro ambiente. Se responde que se recibió y no se hace nada.

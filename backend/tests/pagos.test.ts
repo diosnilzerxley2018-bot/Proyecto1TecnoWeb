@@ -440,3 +440,45 @@ describe('Un cobro vencido que si se pago', () => {
     expect(r.body.estado).toBe('Pagado');
   });
 });
+
+/**
+ * El aviso de la pasarela cierra el cobro identificandolo por la referencia.
+ *
+ * Libelula no devuelve su propio identificador en el aviso: repite el
+ * `identificador_deuda` que le dimos, `PEDIDO-16`. Buscar el cobro solo por el
+ * identificador de la pasarela no encontraba nada y el aviso se descartaba en
+ * silencio, con el dinero ya cobrado.
+ */
+describe('Aviso que identifica el cobro por la referencia', () => {
+  it('confirma el pedido aunque no traiga el identificador de la pasarela', async () => {
+    const cliente = await registrarCliente();
+    const pedido = await pedidoConPago(cliente.token, 'QR');
+    const idPedido = pedido.body.id as number;
+
+    const aviso = await request(app).get('/api/pagos/notificacion').query({
+      testigo: 'en-modo-simulado-no-se-verifica',
+      ref: `PEDIDO-${idPedido}`,
+      estado: 'Pagado',
+      monto: String(pedido.body.total),
+    });
+
+    expect(aviso.status).toBe(200);
+    expect(aviso.body.procesado).toBe(true);
+
+    const detalle = await request(app)
+      .get(`/api/pedidos/${idPedido}`)
+      .set(cabecera(cliente.token));
+    expect(detalle.body.estadoPago).toBe('Pagado');
+    expect(detalle.body.estadoPedido).toBe('Recibido');
+  });
+
+  /** Un aviso sobre algo que no existe no se inventa un cobro. */
+  it('una referencia desconocida no confirma nada', async () => {
+    const r = await request(app)
+      .get('/api/pagos/notificacion')
+      .query({ testigo: 'x', ref: 'PEDIDO-999999', estado: 'Pagado' });
+
+    expect(r.status).toBe(200);
+    expect(r.body.procesado).toBe(false);
+  });
+});

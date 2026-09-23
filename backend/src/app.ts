@@ -10,6 +10,18 @@ import { ErrorApp } from './errors/error-app.js';
 export const app = express();
 
 /**
+ * Se confía en **un** proxy por delante.
+ *
+ * En Railway la aplicación no recibe la conexión del cliente sino la de su
+ * balanceador, que pone la dirección real en `X-Forwarded-For`. Sin esto,
+ * Express la ignora y el limitador de intentos ve a todo internet como una
+ * sola dirección: bastaría con que alguien gastara el cupo para dejar a los
+ * demás sin poder iniciar sesión. `1` y no `true` a propósito, porque confiar
+ * en toda la cadena permitiría falsificar la cabecera y esquivar el límite.
+ */
+app.set('trust proxy', 1);
+
+/**
  * Cabeceras de seguridad (RNF-SEG-03 y RNF-SEG-06).
  *
  * `contentSecurityPolicy` va apagada: esta aplicación solo sirve JSON, y la

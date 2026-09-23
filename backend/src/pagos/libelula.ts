@@ -304,10 +304,13 @@ export class PasarelaLibelula implements PasarelaPago {
       /** «1» cuando el cliente abandonó el pago. */
       cancel_order?: string | number;
       estado?: string;
+      /** Libélula lo llama `monto_total`; el resto se admite por compatibilidad. */
+      monto_total?: number | string;
       monto?: number | string;
     };
 
     const id = datos.transaction_id ?? datos.id_transaccion ?? '';
+    const monto = datos.monto_total ?? datos.monto;
     const estado = estadoDelAviso(datos);
 
     if (!estado) {
@@ -322,7 +325,7 @@ export class PasarelaLibelula implements PasarelaPago {
       idTransaccionExterna: id,
       estado,
       // Solo si lo informó. Ausente ≠ cobrado cero.
-      ...(datos.monto === undefined ? {} : { monto: Number(datos.monto) }),
+      ...(monto === undefined ? {} : { monto: Number(monto) }),
     };
   }
 
