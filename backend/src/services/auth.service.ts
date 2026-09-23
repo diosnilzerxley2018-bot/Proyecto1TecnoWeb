@@ -64,7 +64,7 @@ export async function iniciarSesion(nombreUsuario: string, contrasena: string): 
       throw new ErrorApp(
         423,
         minutos === null
-          ? 'Cuenta bloqueada tras varios bloqueos seguidos. Solo el administrador puede reabrirla.'
+          ? 'Su cuenta fue bloqueada indefinidamente. Contáctese con el administrador para reabrirla.'
           : `Cuenta bloqueada por superar los intentos permitidos. Vuelva a intentarlo en ${minutos} minuto(s).`,
       );
     }

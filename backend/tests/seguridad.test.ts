@@ -196,20 +196,27 @@ describe('Cabeceras de seguridad', () => {
 });
 
 describe('Límite de intentos por dirección IP', () => {
-  /*
-   * No se agota a propósito: la suite hace decenas de inicios de sesión
-   * fallidos y compartirían el cupo. Lo que sí se comprueba es que el límite
-   * **está montado**, por las cabeceras que publica, y cuántos intentos
-   * quedan. En `.env.test` el tope se sube para que no interfiera.
+  /**
+   * El **registro** lo conserva; el **inicio de sesión** ya no.
+   *
+   * En el login, el límite por IP contaba juntos los intentos de todas las
+   * cuentas: tres contraseñas mal en tres cuentas distintas dejaban fuera al
+   * navegador entero, y también al de al lado y al teléfono de la misma red,
+   * incluso para quien no se habia equivocado nunca. Encima tapaba el aviso de
+   * la cuenta bloqueada con uno sobre la conexión. Lo que se bloquea es la
+   * cuenta (CU-SEG-05), y de eso se encarga la escalada por cuenta.
+   *
+   * En el registro el razonamiento no aplica: ahí no hay ninguna cuenta a la
+   * que culpar, y sin tope cualquiera crea miles.
    */
-  it('el login publica el cupo restante en sus cabeceras', async () => {
+  it('el inicio de sesión ya no lleva límite por conexión', async () => {
     const r = await entrar('noexiste', 'LoQueSea1!');
 
-    expect(r.headers['ratelimit-limit']).toBeDefined();
-    expect(r.headers['ratelimit-remaining']).toBeDefined();
+    expect(r.headers['ratelimit-limit']).toBeUndefined();
+    expect(r.body.error).not.toContain('conexión');
   });
 
-  it('el registro también está protegido', async () => {
+  it('el registro sí sigue protegido', async () => {
     const nombreUsuario = `nuevo${sufijo()}`;
     const r = await request(app).post('/api/auth/registro').send({
       nombre: 'Cliente',
@@ -223,14 +230,13 @@ describe('Límite de intentos por dirección IP', () => {
     expect(r.headers['ratelimit-limit']).toBeDefined();
   });
 
-  /** Un acceso correcto no gasta cupo: el mostrador trabaja sin quedarse sin turnos. */
-  it('los inicios de sesión correctos no consumen el cupo', async () => {
+  /** Quien entra bien nunca se queda sin poder entrar por culpa de otro. */
+  it('equivocarse muchas veces no impide entrar a quien acierta', async () => {
     const empleado = await crearEmpleado('Vendedor');
 
-    const primera = await entrar(empleado.nombreUsuario, 'Empleado1234!');
-    const segunda = await entrar(empleado.nombreUsuario, 'Empleado1234!');
+    for (let i = 0; i < 12; i++) await entrar(`fantasma${sufijo()}`, 'LoQueSea1!');
 
-    expect(primera.status).toBe(200);
-    expect(segunda.headers['ratelimit-remaining']).toBe(primera.headers['ratelimit-remaining']);
+    const r = await entrar(empleado.nombreUsuario, 'Empleado1234!');
+    expect(r.status).toBe(200);
   });
 });

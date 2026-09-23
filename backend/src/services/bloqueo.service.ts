@@ -75,7 +75,7 @@ export function estadoDelBloqueo(cuenta: CuentaBloqueable): EstadoBloqueo {
 /** El aviso que se le da a quien encuentra su cuenta bloqueada. */
 export function mensajeDeBloqueo(estado: EstadoBloqueo): string {
   if (estado.definitivo) {
-    return 'La cuenta quedó bloqueada tras varios bloqueos seguidos. Solo el administrador puede reabrirla.';
+    return 'Su cuenta fue bloqueada indefinidamente. Contáctese con el administrador para reabrirla.';
   }
   return estado.minutosRestantes > 0
     ? `La cuenta está bloqueada. Vuelva a intentarlo en ${estado.minutosRestantes} minuto(s) o contacte al administrador.`

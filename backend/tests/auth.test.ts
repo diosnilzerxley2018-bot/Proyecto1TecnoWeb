@@ -389,3 +389,81 @@ describe('CU-SEG-05 · La escalada del bloqueo', () => {
     expect(otra.body.error).toContain('1 minuto');
   });
 });
+
+/**
+ * CU-SEG-05 — lo que se bloquea es **la cuenta**, no la conexion.
+ *
+ * El inicio de sesion tenia delante un limite por direccion IP que contaba los
+ * intentos de todas las cuentas juntas. Probar tres contrasenas en tres cuentas
+ * distintas dejaba fuera al navegador entero --y al de al lado, y al telefono
+ * en la misma red--, incluso a quien sabia su contrasena y no se habia
+ * equivocado nunca. Ademas tapaba el aviso de la cuenta bloqueada con uno sobre
+ * la conexion, que no explica nada a quien necesita entender por que no entra.
+ */
+describe('CU-SEG-05 · Se bloquea la cuenta, no la conexion', () => {
+  async function cuentaNueva(tokenAdmin: string) {
+    const usuario = `aisla${sufijo()}`;
+    await request(app)
+      .post('/api/usuarios')
+      .set('Authorization', `Bearer ${tokenAdmin}`)
+      .send({
+        nombre: 'Prueba', apellido: 'Aislada',
+        email: `${usuario}@correo.bo`,
+        nombreUsuario: usuario, contrasena: 'Correcta123!',
+        idRol: 2, idCargo: 2,
+      })
+      .expect(201);
+    return usuario;
+  }
+
+  const fallar = (usuario: string) =>
+    request(app).post('/api/auth/login').send({ nombreUsuario: usuario, contrasena: 'incorrecta' });
+
+  it('bloquear varias cuentas desde la misma conexion no afecta a una tercera', async () => {
+    const admin = await obtenerToken();
+    const [una, otra, tercera] = await Promise.all([
+      cuentaNueva(admin),
+      cuentaNueva(admin),
+      cuentaNueva(admin),
+    ]);
+
+    // Se agotan los intentos de dos cuentas: seis fallos desde esta conexion.
+    for (const cuenta of [una, otra]) {
+      for (let i = 0; i < 3; i++) await fallar(cuenta);
+      const bloqueada = await fallar(cuenta);
+      expect(bloqueada.status).toBe(423);
+    }
+
+    // La tercera sigue con sus tres intentos intactos: su contador es suyo.
+    const r = await fallar(tercera);
+    expect(r.status).toBe(401);
+    expect(r.body.error).toContain('2 intento');
+
+    // Y quien sabe su contrasena entra sin problema desde la misma conexion.
+    const entra = await request(app)
+      .post('/api/auth/login')
+      .send({ nombreUsuario: 'admin', contrasena: 'Admin1234!' });
+    expect(entra.status).toBe(200);
+  });
+
+  /** Ningun mensaje debe hablar de la conexion: no es lo que se bloquea. */
+  it('el aviso habla de la cuenta, no del dispositivo', async () => {
+    const admin = await obtenerToken();
+    const usuario = await cuentaNueva(admin);
+
+    // El tercero bloquea; el cuarto ya encuentra la cuenta bloqueada. Los dos
+    // mensajes tienen que hablar de la cuenta y decir cuanto falta.
+    await fallar(usuario);
+    await fallar(usuario);
+    const bloquea = await fallar(usuario);
+    const insiste = await fallar(usuario);
+
+    for (const r of [bloquea, insiste]) {
+      expect(r.status).toBe(423);
+      expect(r.body.error.toLowerCase()).toContain('cuenta');
+      expect(r.body.error).toContain('1 minuto');
+      expect(r.body.error).not.toContain('conexión');
+      expect(r.body.error).not.toContain('dispositivo');
+    }
+  });
+});
