@@ -5,7 +5,12 @@ import { hashearContrasena } from '../utils/hash.js';
 import { ROL_CLIENTE } from '../config/dominio.js';
 import { verificarContrasena } from '../utils/hash.js';
 import { firmarToken } from '../utils/jwt.js';
-import { duracionDelBloqueo, estadoDelBloqueo, mensajeDeBloqueo } from './bloqueo.service.js';
+import {
+  estadoDelBloqueo,
+  mensajeDeBloqueo,
+  plazoDelBloqueo,
+  puedeReabrirCuentas,
+} from './bloqueo.service.js';
 import { ErrorApp } from '../errors/error-app.js';
 import { env } from '../config/env.js';
 import type { SesionDTO } from '../dtos/auth.dto.js';
@@ -34,7 +39,8 @@ export async function iniciarSesion(nombreUsuario: string, contrasena: string): 
      * insiste lo deja fuera. Sin escalada había que elegir entre un plazo
      * corto, que no frena a nadie, y uno largo, que castiga al dueño.
      */
-    const bloqueo = estadoDelBloqueo(usuario);
+    const exento = await puedeReabrirCuentas(usuario.id_usuario);
+    const bloqueo = estadoDelBloqueo(usuario, { nuncaDefinitivo: exento });
     if (bloqueo.vigente) throw new ErrorApp(423, mensajeDeBloqueo(bloqueo));
 
     // Cumplido el plazo, la cuenta vuelve a estar disponible por sí sola.
@@ -60,7 +66,8 @@ export async function iniciarSesion(nombreUsuario: string, contrasena: string): 
        * mismo: escala con la insistencia. Un «cuenta bloqueada» a secas deja
        * al dueño sin saber si esperar un minuto o llamar al administrador.
        */
-      const minutos = duracionDelBloqueo(usuario.veces_bloqueado + 1);
+      const exento = await puedeReabrirCuentas(usuario.id_usuario);
+      const minutos = plazoDelBloqueo(usuario.veces_bloqueado + 1, { nuncaDefinitivo: exento });
       throw new ErrorApp(
         423,
         minutos === null

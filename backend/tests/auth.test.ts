@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import request from 'supertest';
 import { app } from '../src/app.js';
 import { prisma } from '../src/config/prisma.js';
@@ -465,5 +465,89 @@ describe('CU-SEG-05 · Se bloquea la cuenta, no la conexion', () => {
       expect(r.body.error).not.toContain('conexión');
       expect(r.body.error).not.toContain('dispositivo');
     }
+  });
+});
+
+/**
+ * CU-SEG-05 — quien puede reabrir cuentas no puede quedar fuera para siempre.
+ *
+ * Si la unica cuenta capaz de desbloquear queda cerrada de forma definitiva, no
+ * queda nadie que pueda reabrirla: bastaban nueve intentos fallidos contra el
+ * administrador para dejar el sistema sin salida. Su bloqueo deja de escalar en
+ * el ultimo plazo que caduca --cinco minutos--, que sigue frenando a quien
+ * insiste pero nunca se vuelve irreversible.
+ *
+ * Se mira el permiso y no el nombre del rol: lo que crea el punto muerto es
+ * *poder desbloquear*, no llamarse «Administrador».
+ */
+describe('CU-SEG-05 · El administrador nunca queda bloqueado para siempre', () => {
+  const fallar = (usuario: string) =>
+    request(app).post('/api/auth/login').send({ nombreUsuario: usuario, contrasena: 'incorrecta' });
+
+  const vencerElPlazo = (nombreUsuario: string) =>
+    prisma.usuario.update({
+      where: { nombre_usuario: nombreUsuario },
+      data: { fecha_bloqueo: new Date(Date.now() - 60 * 60_000) },
+    });
+
+  /**
+   * Dos bloqueos cumplidos y un tercero en pie: a un empleado eso lo deja
+   * fuera de forma definitiva. Devuelve la respuesta del que bloquea.
+   */
+  async function agotarLaEscalada(usuario: string) {
+    for (let tanda = 0; tanda < 2; tanda++) {
+      for (let i = 0; i < 3; i++) await fallar(usuario);
+      await vencerElPlazo(usuario);
+    }
+    let ultima;
+    for (let i = 0; i < 3; i++) ultima = await fallar(usuario);
+    return ultima!;
+  }
+
+  /**
+   * `admin` es la cuenta con la que se autentican casi todas las pruebas, asi
+   * que se la devuelve a su estado normal aunque esta falle a mitad de camino.
+   */
+  afterEach(() =>
+    prisma.usuario.updateMany({
+      where: { nombre_usuario: 'admin' },
+      data: { bloqueado: false, fecha_bloqueo: null, intentos_fallidos: 0, veces_bloqueado: 0 },
+    }),
+  );
+
+  it('al agotar la escalada se queda en cinco minutos, no en definitivo', async () => {
+    const r = await agotarLaEscalada('admin');
+
+    expect(r.status).toBe(423);
+    expect(r.body.error).toContain('5 minuto');
+    expect(r.body.error).not.toContain('indefinidamente');
+
+    // Y cumplido ese plazo vuelve a entrar sin que nadie lo reabra.
+    await vencerElPlazo('admin');
+    const entra = await request(app)
+      .post('/api/auth/login')
+      .send({ nombreUsuario: 'admin', contrasena: 'Admin1234!' });
+    expect(entra.status).toBe(200);
+  });
+
+  /** La excepcion es solo para quien puede reabrir: al resto si lo alcanza. */
+  it('a un empleado sin ese permiso si lo deja fuera', async () => {
+    const admin = await obtenerToken();
+    const usuario = `sinpermiso${sufijo()}`;
+    await request(app)
+      .post('/api/usuarios')
+      .set('Authorization', `Bearer ${admin}`)
+      .send({
+        nombre: 'Prueba', apellido: 'SinPermiso',
+        email: `${usuario}@correo.bo`,
+        nombreUsuario: usuario, contrasena: 'Correcta123!',
+        idRol: 2, idCargo: 2,
+      })
+      .expect(201);
+
+    const r = await agotarLaEscalada(usuario);
+
+    expect(r.status).toBe(423);
+    expect(r.body.error).toContain('indefinidamente');
   });
 });

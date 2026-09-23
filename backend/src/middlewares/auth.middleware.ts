@@ -2,7 +2,11 @@ import type { Request, Response, NextFunction } from 'express';
 import { verificarToken, type PayloadToken } from '../utils/jwt.js';
 import { permisosDeUsuario } from '../models/permiso.model.js';
 import * as usuarioModel from '../models/usuario.model.js';
-import { estadoDelBloqueo, mensajeDeBloqueo } from '../services/bloqueo.service.js';
+import {
+  estadoDelBloqueo,
+  mensajeDeBloqueo,
+  puedeReabrirCuentas,
+} from '../services/bloqueo.service.js';
 import { ErrorApp } from '../errors/error-app.js';
 
 declare global {
@@ -56,7 +60,8 @@ export async function requiereAutenticacion(req: Request, _res: Response, next: 
      * que alguien intentara iniciar sesión. El bloqueo protegía la cuenta y a
      * la vez servía para echar a su dueño.
      */
-    const bloqueo = estadoDelBloqueo(cuenta);
+    const exento = await puedeReabrirCuentas(sesion.idUsuario);
+    const bloqueo = estadoDelBloqueo(cuenta, { nuncaDefinitivo: exento });
     if (bloqueo.vigente) {
       throw new ErrorApp(401, `La cuenta fue bloqueada. ${mensajeDeBloqueo(bloqueo)}`);
     }

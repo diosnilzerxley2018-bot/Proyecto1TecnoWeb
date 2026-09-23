@@ -1,3 +1,4 @@
+import * as permisoModel from '../models/permiso.model.js';
 
 /**
  * La regla del bloqueo por intentos fallidos (CU-SEG-05, hallazgo H8).
@@ -51,10 +52,59 @@ export function duracionDelBloqueo(veces: number): number | null {
   return MINUTOS_POR_BLOQUEO[veces - 1] ?? null;
 }
 
-export function estadoDelBloqueo(cuenta: CuentaBloqueable): EstadoBloqueo {
+/** El escalón más alto que sí caduca. Es el techo de quien no puede quedar fuera. */
+const ULTIMO_PLAZO = MINUTOS_POR_BLOQUEO[MINUTOS_POR_BLOQUEO.length - 1];
+
+/**
+ * Cuánto dura el bloqueo número `veces`, o `null` si ya no caduca.
+ *
+ * Es el único lugar donde se decide eso, y por eso lo usan tanto el estado de
+ * un bloqueo en curso como el aviso del que se acaba de aplicar: si la regla
+ * viviera en los dos, con el tiempo dirían cosas distintas.
+ */
+export function plazoDelBloqueo(
+  veces: number,
+  opciones: { nuncaDefinitivo?: boolean } = {},
+): number | null {
+  const minutos = duracionDelBloqueo(veces);
+  if (minutos !== null) return minutos;
+  return opciones.nuncaDefinitivo ? ULTIMO_PLAZO : null;
+}
+
+/**
+ * Permiso que hace falta para reabrir una cuenta ajena.
+ *
+ * Quien lo tiene **no puede quedar bloqueado para siempre**: si la única
+ * cuenta capaz de desbloquear queda cerrada de forma definitiva, no queda
+ * nadie que pueda reabrirla, y bastaban nueve intentos fallidos contra el
+ * administrador para dejar el sistema sin salida. Su bloqueo deja de escalar
+ * en el último plazo que caduca: sigue frenando a quien insiste —tres
+ * intentos cada cinco minutos— pero nunca se vuelve irreversible.
+ *
+ * Se mira el permiso y no el nombre del rol: lo que crea el punto muerto es
+ * *poder desbloquear*, no llamarse «Administrador». Así la regla sigue siendo
+ * cierta el día que ese permiso se le dé a otro rol.
+ */
+export const PERMISO_REABRIR_CUENTAS = 'USUARIO_EDITAR';
+
+/**
+ * Si esta cuenta es de las que no pueden quedar fuera para siempre.
+ *
+ * Cuesta una consulta, y por eso solo se pregunta cuando la cuenta ya está
+ * bloqueada, que es cuando la respuesta cambia algo.
+ */
+export async function puedeReabrirCuentas(idUsuario: number): Promise<boolean> {
+  const permisos = await permisoModel.permisosDeUsuario(idUsuario);
+  return permisos.includes(PERMISO_REABRIR_CUENTAS);
+}
+
+export function estadoDelBloqueo(
+  cuenta: CuentaBloqueable,
+  opciones: { nuncaDefinitivo?: boolean } = {},
+): EstadoBloqueo {
   if (!cuenta.bloqueado) return { vigente: false, minutosRestantes: 0, definitivo: false };
 
-  const minutos = duracionDelBloqueo(cuenta.veces_bloqueado);
+  const minutos = plazoDelBloqueo(cuenta.veces_bloqueado, opciones);
 
   // Agotada la escalada, el bloqueo no caduca: solo lo levanta el
   // administrador desde la gestión de usuarios (CU-SEG-05).
