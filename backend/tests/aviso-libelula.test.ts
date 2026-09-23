@@ -1,7 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
 import { app } from '../src/app.js';
 import { PasarelaLibelula } from '../src/pagos/libelula.js';
+import { env } from '../src/config/env.js';
 
 /**
  * RF-PED-04 — el aviso de pago de Libélula, tal como lo manda de verdad.
@@ -125,5 +126,77 @@ describe('El aviso trae la referencia del comercio', () => {
     // `monto_total`, que es como Libélula lo llama. Sin esto el cobro se
     // rechazaba por pagar menos que el total de la venta.
     expect(aviso.monto).toBe(0.1);
+  });
+});
+
+/**
+ * Qué se le muestra al cliente según cómo eligió pagar.
+ *
+ * Libélula no registra «un pago con QR» o «uno con tarjeta»: registra una
+ * deuda y devuelve las dos formas de saldarla. Preferir el QR sin mirar el
+ * método le daba un código para escanear a quien eligió Tarjeta, que es
+ * exactamente lo que esa persona no puede usar.
+ */
+describe('Cobro creado según el método elegido', () => {
+  const respuesta = {
+    id_transaccion: '0201cb5d-555c-4456-bb50-4fb3c14e1e34',
+    url_pasarela_pagos: 'https://api.libelula.bo/pagar/0201cb5d',
+    qr_simple_base64: 'iVBORw0KGgoAAAANSUhEUg==',
+  };
+
+  /**
+   * Credenciales mínimas para que `crearCobro` llegue a pedir: sin ellas falla
+   * antes, con el aviso de configuración que corresponde.
+   */
+  const guardado = {
+    apiKey: env.pago.libelula.apiKey,
+    urlPublica: env.pago.urlPublica,
+    correo: env.pago.libelula.emailComercio,
+  };
+
+  beforeEach(() => {
+    env.pago.libelula.apiKey = 'appkey-de-prueba';
+    env.pago.urlPublica = 'https://ejemplo.test';
+    env.pago.libelula.emailComercio = 'comercio@tecnologia.web';
+  });
+
+  /** Sustituye la llamada a la pasarela por su respuesta real. */
+  function conRespuestaDeLibelula() {
+    return vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => respuesta,
+    } as Response);
+  }
+
+  const solicitud = {
+    monto: 0.1,
+    moneda: 'BOB',
+    descripcion: 'Pedido de prueba',
+    referenciaInterna: 'PEDIDO-18',
+    cliente: { nombre: 'Cliente Prueba', email: 'cliente@tecnologia.web' },
+  };
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    env.pago.libelula.apiKey = guardado.apiKey;
+    env.pago.urlPublica = guardado.urlPublica;
+    env.pago.libelula.emailComercio = guardado.correo;
+  });
+
+  it('con QR entrega el código para escanear', async () => {
+    conRespuestaDeLibelula();
+    const cobro = await pasarela.crearCobro({ ...solicitud, metodo: 'QR' });
+
+    expect(cobro.tipoDatos).toBe('qr');
+    expect(cobro.datosCobro).toContain('data:image/png;base64,');
+  });
+
+  it('con tarjeta entrega la página de pago, no un código', async () => {
+    conRespuestaDeLibelula();
+    const cobro = await pasarela.crearCobro({ ...solicitud, metodo: 'Tarjeta' });
+
+    expect(cobro.tipoDatos).toBe('url');
+    expect(cobro.datosCobro).toBe(respuesta.url_pasarela_pagos);
   });
 });

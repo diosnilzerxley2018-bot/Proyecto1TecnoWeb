@@ -51,11 +51,21 @@ import type {
 
 const TIEMPO_LIMITE_MS = 15_000;
 
-/** Extremos publicados en la guía de integración. */
-const EXTREMOS = {
-  produccion: 'https://api.todotix.com',
-  pruebas: 'http://www.todotix.com:10888',
-} as const;
+/**
+ * Dirección de la API.
+ *
+ * `https://api.libelula.bo` confirmada por el soporte de Libélula por WhatsApp
+ * el 23-sep-2026, preguntando expresamente cuál estaba vigente: la guía del
+ * plugin indica esa y varias integraciones usan `api.todotix.com`, que también
+ * responde. Se pregunta porque las dos funcionan y eso no aclara cuál seguirá
+ * haciéndolo.
+ *
+ * No hay ambiente de pruebas: el mismo soporte respondió que **no cuentan con
+ * uno para proyectos académicos**. El antiguo `todotix.com:10888` ya no
+ * responde, y apuntar ahí por omisión solo hacía que todo fallara sin decir
+ * por qué.
+ */
+const URL_BASE_OFICIAL = 'https://api.libelula.bo';
 
 /** Traduce el vocabulario de la pasarela al del sistema. CONFIRMAR con la guía. */
 /**
@@ -123,9 +133,7 @@ export class PasarelaLibelula implements PasarelaPago {
           'Configure LIBELULA_API_KEY, o vuelva al modo simulado.',
       );
     }
-    // Sin URL explícita se asume el ambiente de pruebas: equivocarse hacia el
-    // lado que no mueve dinero es la falla segura.
-    return { urlBase: urlBase || EXTREMOS.pruebas, appkey: apiKey };
+    return { urlBase: urlBase || URL_BASE_OFICIAL, appkey: apiKey };
   }
 
   private async pedir(ruta: string, cuerpo: Record<string, unknown>): Promise<unknown> {
@@ -242,17 +250,23 @@ export class PasarelaLibelula implements PasarelaPago {
     }
 
     /*
-     * Libélula devuelve el QR ya dibujado, así que se prefiere sobre la
-     * dirección: el cliente escanea desde la app de su banco sin salir del
-     * sistema. La dirección queda como respaldo para quien pague con tarjeta,
-     * que es lo que esa pantalla ofrece.
+     * Lo que se le muestra al cliente depende de **cómo eligió pagar**.
+     *
+     * Libélula no registra «un pago con QR» o «un pago con tarjeta»: registra
+     * una deuda, y devuelve siempre las dos formas de saldarla —el QR ya
+     * dibujado y la dirección de su página, donde están todos los canales—.
+     *
+     * Preferir el QR sin mirar el método le daba un código para escanear a
+     * quien había elegido Tarjeta, que es justo lo que esa persona no puede
+     * usar. La tarjeta se cobra en la página de Libélula, que es la única que
+     * puede pedir el número sin que pase por nosotros.
      */
+    const codigoQR = solicitud.metodo === 'QR' ? datos.qr_simple_base64 : undefined;
+
     return {
       idTransaccionExterna: idTransaccion,
-      datosCobro: datos.qr_simple_base64
-        ? `data:image/png;base64,${datos.qr_simple_base64}`
-        : urlPago,
-      tipoDatos: datos.qr_simple_base64 ? 'qr' : 'url',
+      datosCobro: codigoQR ? `data:image/png;base64,${codigoQR}` : urlPago,
+      tipoDatos: codigoQR ? 'qr' : 'url',
       expiraEn: new Date(Date.now() + env.pago.minutosExpiracion * 60_000),
     };
   }
