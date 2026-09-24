@@ -12,6 +12,14 @@ export interface ProductoDTO {
   stockDisponible: number;
   disponible: boolean;
   valorNutricional: ValorNutricionalDTO | null;
+  /**
+   * Cuándo se guardó la foto vigente, o `null` sin foto.
+   *
+   * No es la imagen: es la marca de tiempo con la que el frontend arma
+   * `/catalogo/:id/imagen?v=<esto>`, para poder cachear la foto de forma
+   * agresiva y aun así refrescarla en cuanto alguien la reemplaza.
+   */
+  imagenActualizadaEn: string | null;
 }
 
 export interface CategoriaDTO {

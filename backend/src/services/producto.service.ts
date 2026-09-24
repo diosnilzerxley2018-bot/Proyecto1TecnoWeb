@@ -10,6 +10,7 @@ import type {
 import type { ValorNutricionalDTO } from '../dtos/comun.dto.js';
 import { ErrorApp } from '../errors/error-app.js';
 import type { TipoConservacion } from '../config/dominio.js';
+import { tipoRealDeImagen } from '../utils/imagen.js';
 
 /**
  * CU-PRO-01 — Gestionar Producto y Receta (parte de producto), y
@@ -51,6 +52,7 @@ function aDTO(producto: ProductoGestion): ProductoGestionDTO {
     // que solo se mira en la ficha. `conCosto` los completa allí.
     costoPromedio: null,
     vendeBajoCosto: false,
+    imagenActualizadaEn: producto.imagen_actualizada_en?.toISOString() ?? null,
   };
 }
 
@@ -169,4 +171,33 @@ export async function guardarValorNutricional(
     fibra: datos.fibra ?? null,
   });
   return aDTO(await exigirProducto(idProducto));
+}
+
+/**
+ * Guarda la foto de un producto (RF-PRO extensión opcional, como el valor
+ * nutricional: el producto existe con o sin ella).
+ *
+ * El tipo que se guarda es el que devuelve `tipoRealDeImagen`, mirando los
+ * primeros bytes del archivo — nunca el `mimetype` que declaró quien lo
+ * subió, que es un dato del cliente y no una verdad del servidor.
+ */
+export async function guardarImagen(id: number, datos: Buffer): Promise<ProductoGestionDTO> {
+  await exigirProducto(id);
+
+  const tipo = tipoRealDeImagen(datos);
+  if (!tipo) {
+    throw new ErrorApp(
+      415,
+      'El archivo no es una imagen JPEG, PNG o WEBP válida.',
+    );
+  }
+
+  await productoModel.guardarImagen(id, datos, tipo);
+  return aDTO(await exigirProducto(id));
+}
+
+export async function eliminarImagen(id: number): Promise<ProductoGestionDTO> {
+  await exigirProducto(id);
+  await productoModel.eliminarImagen(id);
+  return aDTO(await exigirProducto(id));
 }

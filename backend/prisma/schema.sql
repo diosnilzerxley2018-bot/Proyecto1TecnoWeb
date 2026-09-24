@@ -142,9 +142,20 @@ CREATE TABLE producto (
     activo              BOOLEAN NOT NULL DEFAULT TRUE,
     tipo_conservacion   VARCHAR(20) NOT NULL DEFAULT 'Seco',
     id_categoria        INT NOT NULL,
+    -- La foto del producto vive en la misma fila, no en el disco del
+    -- servidor: Railway lo reinicia en cada despliegue y una imagen guardada
+    -- ahí desaparecería con el siguiente `git push`. Así viaja con el resto
+    -- del producto y con las mismas copias de seguridad de la base.
+    imagen               BYTEA,
+    imagen_tipo          VARCHAR(20),
+    imagen_actualizada_en TIMESTAMPTZ,
     CONSTRAINT fk_producto_categoria FOREIGN KEY (id_categoria) REFERENCES categoria(id_categoria),
     CONSTRAINT ck_producto_precio CHECK (precio_venta >= 0),
-    CONSTRAINT ck_producto_conservacion CHECK (tipo_conservacion IN ('Seco','Refrigerado'))
+    CONSTRAINT ck_producto_conservacion CHECK (tipo_conservacion IN ('Seco','Refrigerado')),
+    -- El tipo declarado lo decide el servidor tras mirar los primeros bytes
+    -- del archivo, nunca lo que dice el cliente (RNF-SEG-04).
+    CONSTRAINT ck_producto_imagen_tipo CHECK (imagen_tipo IS NULL OR imagen_tipo IN ('image/jpeg','image/png','image/webp')),
+    CONSTRAINT ck_producto_imagen_completa CHECK ((imagen IS NULL) = (imagen_tipo IS NULL))
 );
 
 CREATE TABLE valor_nutricional (

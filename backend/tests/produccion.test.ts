@@ -3,6 +3,14 @@ import request from 'supertest';
 import { app } from '../src/app.js';
 import { obtenerToken, registrarCliente, crearPedido, sufijo } from './ayudantes.js';
 
+/** Firma real de un PNG, seguida de relleno para simular un archivo de cierto tamaño. */
+function bufferPNG(relleno = 200): Buffer {
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    Buffer.alloc(relleno, 1),
+  ]);
+}
+
 /**
  * Etapa 3: CU-PRO-01 Gestionar Producto y Receta, con CU-PRO-03 Registrar
  * Valor Nutricional como extensión opcional.
@@ -218,6 +226,89 @@ describe('CU-PRO-03 Registrar valor nutricional', () => {
 
     const r = await request(app).get(`/api/catalogo/${producto.id}`);
     expect(r.body.valorNutricional.calorias).toBe(180);
+  });
+});
+
+describe('RF-PRO Foto del producto', () => {
+  it('sube una imagen y queda disponible en el catálogo público', async () => {
+    const staff = await obtenerToken();
+    const producto = await crearProducto(staff);
+    const png = bufferPNG();
+
+    const subida = await request(app)
+      .post(`/api/productos/${producto.id}/imagen`)
+      .set(cabecera(staff))
+      .attach('imagen', png, 'foto.png');
+    expect(subida.status).toBe(200);
+    expect(subida.body.imagenActualizadaEn).not.toBeNull();
+
+    const detalle = await request(app).get(`/api/catalogo/${producto.id}`);
+    expect(detalle.body.imagenActualizadaEn).not.toBeNull();
+
+    const imagen = await request(app).get(`/api/catalogo/${producto.id}/imagen`);
+    expect(imagen.status).toBe(200);
+    expect(imagen.headers['content-type']).toBe('image/png');
+    expect(Buffer.compare(imagen.body as Buffer, png)).toBe(0);
+  });
+
+  it('decide el tipo por los bytes reales, no por lo que declara el cliente', async () => {
+    const staff = await obtenerToken();
+    const producto = await crearProducto(staff);
+    // Texto plano disfrazado de imagen: el nombre y el Content-Type mienten,
+    // la firma de los primeros bytes no.
+    const noEsImagen = Buffer.from('esto no es una imagen'.repeat(10));
+
+    const r = await request(app)
+      .post(`/api/productos/${producto.id}/imagen`)
+      .set(cabecera(staff))
+      .attach('imagen', noEsImagen, { filename: 'foto.png', contentType: 'image/png' });
+
+    expect(r.status).toBe(415);
+  });
+
+  it('rechaza un archivo que excede el tamaño máximo', async () => {
+    const staff = await obtenerToken();
+    const producto = await crearProducto(staff);
+    const demasiadoGrande = bufferPNG(3 * 1024 * 1024 + 1);
+
+    const r = await request(app)
+      .post(`/api/productos/${producto.id}/imagen`)
+      .set(cabecera(staff))
+      .attach('imagen', demasiadoGrande, 'foto.png');
+
+    expect(r.status).toBe(413);
+  });
+
+  it('exige el permiso de gestión, no solo una sesión iniciada', async () => {
+    const staff = await obtenerToken();
+    const producto = await crearProducto(staff);
+    const cliente = await registrarCliente();
+
+    const r = await request(app)
+      .post(`/api/productos/${producto.id}/imagen`)
+      .set(cabecera(cliente.token))
+      .attach('imagen', bufferPNG(), 'foto.png');
+
+    expect(r.status).toBe(403);
+  });
+
+  it('se puede quitar, y el catálogo vuelve a no tener foto', async () => {
+    const staff = await obtenerToken();
+    const producto = await crearProducto(staff);
+    await request(app)
+      .post(`/api/productos/${producto.id}/imagen`)
+      .set(cabecera(staff))
+      .attach('imagen', bufferPNG(), 'foto.png')
+      .expect(200);
+
+    const eliminacion = await request(app)
+      .delete(`/api/productos/${producto.id}/imagen`)
+      .set(cabecera(staff));
+    expect(eliminacion.status).toBe(200);
+    expect(eliminacion.body.imagenActualizadaEn).toBeNull();
+
+    const imagen = await request(app).get(`/api/catalogo/${producto.id}/imagen`);
+    expect(imagen.status).toBe(404);
   });
 });
 

@@ -11,10 +11,12 @@ import { FormularioProducto } from './FormularioProducto';
 import { cn } from '@/lib/cn';
 import { PanelNutricion } from './PanelNutricion';
 import { PanelRecetas } from './PanelRecetas';
+import { PanelFoto } from './PanelFoto';
 import type { Producto } from '@/types';
 import { formatearBs, formatearCantidad } from '@/lib/formato';
+import { urlImagenProducto } from '@/lib/imagenes';
 
-type Seccion = 'ficha' | 'nutricion' | 'recetas';
+type Seccion = 'ficha' | 'foto' | 'nutricion' | 'recetas';
 
 /** Detalle de un producto: su ficha, su información nutricional y sus recetas. */
 export function PanelProducto({
@@ -50,6 +52,7 @@ export function PanelProducto({
           }}
           opciones={[
             { valor: 'ficha', etiqueta: 'Ficha' },
+            { valor: 'foto', etiqueta: 'Foto' },
             { valor: 'nutricion', etiqueta: 'Nutrición' },
             { valor: 'recetas', etiqueta: 'Recetas' },
           ]}
@@ -81,6 +84,10 @@ export function PanelProducto({
                 />
               ))}
 
+            {seccion === 'foto' && (
+              <PanelFoto producto={producto} puedeGestionar={puedeGestionar} onGuardado={onCambio} />
+            )}
+
             {seccion === 'nutricion' && (
               <PanelNutricion
                 producto={producto}
@@ -109,9 +116,17 @@ function Ficha({
   onEditar: () => void;
 }) {
   const frio = producto.tipoConservacion === 'Refrigerado';
+  const urlFoto = urlImagenProducto(producto.id, producto.imagenActualizadaEn);
 
   return (
     <div className="space-y-6">
+      {urlFoto && (
+        <div className="overflow-hidden rounded-2xl border border-borde">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={urlFoto} alt={producto.nombre} className="aspect-video w-full object-cover" />
+        </div>
+      )}
+
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-2xl font-semibold tabular-nums leading-none text-marca-300">

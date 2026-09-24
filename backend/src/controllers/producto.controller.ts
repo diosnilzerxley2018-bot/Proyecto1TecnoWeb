@@ -33,6 +33,15 @@ export async function guardarValorNutricional(req: Request, res: Response) {
   res.json(await productoService.guardarValorNutricional(Number(req.params.id), req.body));
 }
 
+export async function subirImagen(req: Request, res: Response) {
+  if (!req.file) throw new ErrorApp(400, 'Falta el archivo de la imagen');
+  res.json(await productoService.guardarImagen(Number(req.params.id), req.file.buffer));
+}
+
+export async function eliminarImagen(req: Request, res: Response) {
+  res.json(await productoService.eliminarImagen(Number(req.params.id)));
+}
+
 export async function listarRecetas(req: Request, res: Response) {
   res.json(await recetaService.listarDeProducto(Number(req.params.id)));
 }

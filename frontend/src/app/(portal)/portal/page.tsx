@@ -15,6 +15,7 @@ import { TarjetaCatalogo } from '@/components/portal/TarjetaCatalogo';
 import type { Categoria, ProductoCatalogo } from '@/types';
 import { formatearBs, formatearCantidad } from '@/lib/formato';
 import { cn } from '@/lib/cn';
+import { urlImagenProducto } from '@/lib/imagenes';
 
 /** CU-PED-01 — Buscar Productos. Catálogo del portal de pedidos. */
 export default function PaginaCatalogo() {
@@ -76,9 +77,10 @@ export default function PaginaCatalogo() {
   }, [productos, idCategoria, busqueda]);
 
   const cantidadDe = (id: number) => lineas.find((l) => l.idProducto === id)?.cantidad ?? 0;
+  const urlFotoDetalle = detalle && urlImagenProducto(detalle.id, detalle.imagenActualizadaEn);
 
   return (
-    <>
+    <>     
       <motion.section
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -186,6 +188,17 @@ export default function PaginaCatalogo() {
       >
         {detalle && (
           <div className="space-y-5">
+            {urlFotoDetalle && (
+              <div className="-mt-1 overflow-hidden rounded-2xl">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={urlFotoDetalle}
+                  alt={detalle.nombre}
+                  className="aspect-video w-full object-cover"
+                />
+              </div>
+            )}
+
             <p className="text-sm leading-relaxed text-tinta-suave">
               {detalle.descripcion ?? 'Sin descripción disponible.'}
             </p>

@@ -131,6 +131,20 @@ export const TIPOS_CONSERVACION = ['Seco', 'Refrigerado'] as const;
 export type TipoConservacion = (typeof TIPOS_CONSERVACION)[number];
 
 /**
+ * Formatos admitidos para la foto de un producto (`ck_producto_imagen_tipo`).
+ *
+ * Es la lista contra la que se compara el tipo **real** del archivo —los
+ * primeros bytes, no la cabecera `Content-Type` que manda el navegador y que
+ * cualquiera puede falsificar (`utils/imagen.ts`).
+ */
+export const TIPOS_IMAGEN_PRODUCTO = ['image/jpeg', 'image/png', 'image/webp'] as const;
+
+export type TipoImagenProducto = (typeof TIPOS_IMAGEN_PRODUCTO)[number];
+
+/** Tamaño máximo admitido para la foto de un producto. */
+export const TAMANO_MAXIMO_IMAGEN_PRODUCTO = 3 * 1024 * 1024;
+
+/**
  * Motivos admitidos por `ck_notaing_motivo` y `ck_notaegr_motivo`.
  *
  * Las listas no coinciden, y la diferencia es deliberada: no existe el motivo

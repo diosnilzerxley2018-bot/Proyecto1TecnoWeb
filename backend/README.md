@@ -43,6 +43,7 @@ Todas verificadas contra el registro de npm el **30/08/2026**. Están **fijadas 
 | `dotenv` | **17.4.2** | Variables de entorno |
 | `cors` | **2.8.6** | Permite el origen del frontend |
 | `tsx` | **4.23.13** | Ejecuta TypeScript en desarrollo sin compilar |
+| `multer` | **^2.4.0** | Recibe la foto de un producto como `multipart/form-data`, en memoria (nada a disco: en Railway se perdería en el siguiente despliegue) |
 
 ### ⚠️ Advertencia sobre Prisma
 

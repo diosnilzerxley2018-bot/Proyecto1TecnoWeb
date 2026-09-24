@@ -42,6 +42,7 @@ function aDTO(producto: ProductoPublico): ProductoDTO {
     stockDisponible: stock,
     disponible: stock > 0,
     valorNutricional: aValorNutricional(producto.valor_nutricional),
+    imagenActualizadaEn: producto.imagen_actualizada_en?.toISOString() ?? null,
   };
 }
 
@@ -62,4 +63,24 @@ export async function detalle(id: number): Promise<ProductoDTO> {
 export async function listarCategorias(): Promise<CategoriaDTO[]> {
   const categorias = await productoModel.listarCategorias();
   return categorias.map((c) => ({ id: c.id_categoria, nombre: c.nombre }));
+}
+
+export interface ImagenProducto {
+  datos: Buffer;
+  tipo: string;
+}
+
+/**
+ * La foto de un producto, para el único extremo que la sirve en bytes
+ * (`GET /catalogo/:id/imagen`).
+ *
+ * A propósito no filtra por `activo`: una fotografía no es información de
+ * negocio como la receta o el costo, y el mismo extremo lo usa también el
+ * panel de gestión para mostrar la ficha de un producto dado de baja, sin
+ * necesitar una segunda ruta protegida que sirva lo mismo.
+ */
+export async function obtenerImagen(id: number): Promise<ImagenProducto | null> {
+  const producto = await productoModel.buscarImagen(id);
+  if (!producto?.imagen || !producto.imagen_tipo) return null;
+  return { datos: Buffer.from(producto.imagen), tipo: producto.imagen_tipo };
 }

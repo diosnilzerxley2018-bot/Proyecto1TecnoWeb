@@ -76,6 +76,20 @@ const AJUSTES: Ajuste[] = [
       `ALTER TABLE usuario ADD COLUMN IF NOT EXISTS veces_bloqueado INT NOT NULL DEFAULT 0`,
     ],
   },
+  {
+    nombre: 'producto.imagen — la foto se guarda junto al producto, no en disco',
+    sentencias: [
+      `ALTER TABLE producto ADD COLUMN IF NOT EXISTS imagen BYTEA`,
+      `ALTER TABLE producto ADD COLUMN IF NOT EXISTS imagen_tipo VARCHAR(20)`,
+      `ALTER TABLE producto ADD COLUMN IF NOT EXISTS imagen_actualizada_en TIMESTAMPTZ`,
+      `ALTER TABLE producto DROP CONSTRAINT IF EXISTS ck_producto_imagen_tipo`,
+      `ALTER TABLE producto ADD CONSTRAINT ck_producto_imagen_tipo
+         CHECK (imagen_tipo IS NULL OR imagen_tipo IN ('image/jpeg','image/png','image/webp'))`,
+      `ALTER TABLE producto DROP CONSTRAINT IF EXISTS ck_producto_imagen_completa`,
+      `ALTER TABLE producto ADD CONSTRAINT ck_producto_imagen_completa
+         CHECK ((imagen IS NULL) = (imagen_tipo IS NULL))`,
+    ],
+  },
 ];
 
 const url = process.env.DATABASE_URL;

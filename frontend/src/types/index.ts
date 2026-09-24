@@ -252,6 +252,8 @@ export interface Producto {
   costoPromedio: number | null;
   /** Verdadero cuando el precio de venta no cubre ese costo. */
   vendeBajoCosto: boolean;
+  /** `null` sin foto; si no, la fecha con la que se arma la URL de la imagen. */
+  imagenActualizadaEn: string | null;
 }
 
 export interface LineaReceta {
@@ -772,6 +774,8 @@ export interface ProductoCatalogo {
   stockDisponible: number;
   disponible: boolean;
   valorNutricional: ValorNutricional | null;
+  /** `null` sin foto; si no, la fecha con la que se arma la URL de la imagen. */
+  imagenActualizadaEn: string | null;
 }
 
 export interface PedidoCliente {

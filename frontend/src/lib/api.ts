@@ -69,9 +69,41 @@ async function descargar(ruta: string): Promise<Blob> {
   return respuesta.blob();
 }
 
+/**
+ * Sube un archivo como `multipart/form-data`, con la sesión adjunta.
+ *
+ * `peticion` no sirve para esto: siempre fija `Content-Type: application/json`
+ * y serializa el cuerpo con `JSON.stringify`. Un `FormData` necesita su propio
+ * `Content-Type`, con el `boundary` que el navegador calcula solo — por eso
+ * aquí no se fija ninguno a mano, a diferencia de `peticion`.
+ */
+async function subir<T>(ruta: string, datos: FormData): Promise<T> {
+  const sesion = leerSesion();
+  const cabeceras: Record<string, string> = {};
+  if (sesion?.token) cabeceras.Authorization = `Bearer ${sesion.token}`;
+
+  let respuesta: Response;
+  try {
+    respuesta = await fetch(`${BASE}${ruta}`, { method: 'POST', headers: cabeceras, body: datos });
+  } catch {
+    throw new ErrorApi(0, 'No se pudo conectar con el servidor. ¿Está encendida la API?');
+  }
+
+  const cuerpo = await respuesta.json().catch(() => ({}));
+  if (!respuesta.ok) {
+    if (respuesta.status === 401 && sesion) {
+      borrarSesion();
+      if (typeof window !== 'undefined') window.location.href = '/login';
+    }
+    throw new ErrorApi(respuesta.status, (cuerpo as { error?: string }).error ?? 'Error inesperado');
+  }
+  return cuerpo as T;
+}
+
 export const api = {
   get:  <T>(ruta: string) => peticion<T>(ruta),
   descargar,
+  subir,
   post: <T>(ruta: string, datos?: unknown) =>
     peticion<T>(ruta, { method: 'POST', body: datos ? JSON.stringify(datos) : undefined }),
   put:  <T>(ruta: string, datos: unknown) =>

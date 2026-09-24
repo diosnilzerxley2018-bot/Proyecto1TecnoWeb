@@ -69,3 +69,16 @@ export function redondearCoordenadas({ lat, lon }: Coordenadas): Coordenadas {
  * El negocio opera en Santa Cruz de la Sierra.
  */
 export const CENTRO_REPARTO: Coordenadas = { lat: -17.783327, lon: -63.18214 };
+
+/* --- Foto del producto --- */
+
+/**
+ * Espejo de `backend/src/config/dominio.ts`.
+ *
+ * Se usa para rechazar un archivo inválido antes de subirlo, no en lugar de
+ * la comprobación del servidor: ese vuelve a mirar los bytes reales del
+ * archivo, porque el tipo que declara el navegador no es de fiar.
+ */
+export const TIPOS_IMAGEN_PRODUCTO = ['image/jpeg', 'image/png', 'image/webp'];
+
+export const TAMANO_MAXIMO_IMAGEN_PRODUCTO = 3 * 1024 * 1024;

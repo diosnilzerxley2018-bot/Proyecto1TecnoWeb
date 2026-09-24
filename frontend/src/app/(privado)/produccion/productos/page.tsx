@@ -30,6 +30,7 @@ import { PanelProducto } from '@/components/produccion/PanelProducto';
 import type { Categoria, Producto } from '@/types';
 import { formatearBs, formatearCantidad } from '@/lib/formato';
 import { cn } from '@/lib/cn';
+import { urlImagenProducto } from '@/lib/imagenes';
 
 /** CU-PRO-01 Gestionar Producto y Receta, con CU-PRO-03 como extensión. */
 export default function PaginaProduccion() {
@@ -237,7 +238,7 @@ function CatalogoProductos() {
         abierto={creando}
         onCerrar={() => setCreando(false)}
         titulo="Nuevo producto"
-        descripcion="La información nutricional y la receta se agregan después, desde su ficha"
+        descripcion="La foto, la información nutricional y la receta se agregan después, desde su ficha"
       >
         <FormularioProducto
           onCancelar={() => setCreando(false)}
@@ -292,6 +293,7 @@ function TarjetaProducto({
   onAbrir: () => void;
 }) {
   const frio = producto.tipoConservacion === 'Refrigerado';
+  const urlFoto = urlImagenProducto(producto.id, producto.imagenActualizadaEn);
 
   return (
     <Tarjeta
@@ -313,9 +315,17 @@ function TarjetaProducto({
       className={cn('group flex flex-col p-4', !producto.activo && 'opacity-60')}
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-tinta">{producto.nombre}</p>
-          <p className="mt-0.5 text-[11px] text-tinta-tenue">{producto.categoria.nombre}</p>
+        <div className="flex min-w-0 items-center gap-2.5">
+          {urlFoto && (
+            <span className="size-10 shrink-0 overflow-hidden rounded-lg border border-borde bg-white/[0.02]">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={urlFoto} alt="" className="size-full object-cover" />
+            </span>
+          )}
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium text-tinta">{producto.nombre}</p>
+            <p className="mt-0.5 text-[11px] text-tinta-tenue">{producto.categoria.nombre}</p>
+          </div>
         </div>
         <span
           className={cn(

@@ -12,5 +12,8 @@ const router = Router();
 router.get('/categorias', ctrl.listarCategorias);
 router.get('/', ctrl.buscar);
 router.get('/:id', validarIdParam, ctrl.detalle);
+// La foto del producto, en bytes. Pública por la misma razón que las teselas
+// del mapa: una etiqueta <img> no manda la cabecera Authorization.
+router.get('/:id/imagen', validarIdParam, ctrl.imagen);
 
 export default router;

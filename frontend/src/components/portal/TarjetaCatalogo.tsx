@@ -9,6 +9,7 @@ import { Boton } from '@/components/ui/Boton';
 import type { ProductoCatalogo } from '@/types';
 import { formatearBs } from '@/lib/formato';
 import { cn } from '@/lib/cn';
+import { urlImagenProducto } from '@/lib/imagenes';
 
 /**
  * Producto del catálogo público.
@@ -36,6 +37,7 @@ export function TarjetaCatalogo({
   const agotado = !producto.disponible;
   const enCarrito = cantidadEnCarrito > 0;
   const topeAlcanzado = cantidadEnCarrito >= producto.stockDisponible;
+  const urlFoto = urlImagenProducto(producto.id, producto.imagenActualizadaEn);
 
   function agregar() {
     onAgregar();
@@ -52,23 +54,36 @@ export function TarjetaCatalogo({
       transition={{ duration: 0.32, delay: Math.min(indice * 0.04, 0.3), ease: 'easeOut' }}
       className={cn('group flex flex-col overflow-hidden', agotado && 'opacity-60')}
     >
-      {/* Cabecera cromática: sin fotografías en el modelo de datos, el color de
-          la categoría es lo que da identidad visual a cada tarjeta. */}
       <button
         onClick={onVerDetalle}
         className="relative h-28 w-full shrink-0 overflow-hidden text-left"
         aria-label={`Ver detalle de ${producto.nombre}`}
       >
-        <div className="absolute inset-0 bg-gradient-to-br from-marca-500/25 via-info/10 to-transparent transition-transform duration-500 group-hover:scale-105" />
-        <div
-          className="absolute inset-0 opacity-30"
-          aria-hidden
-          style={{
-            backgroundImage:
-              'radial-gradient(circle at 20% 30%, rgba(255,255,255,0.12) 1px, transparent 1px)',
-            backgroundSize: '20px 20px',
-          }}
-        />
+        {urlFoto ? (
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={urlFoto}
+              alt=""
+              className="absolute inset-0 size-full object-cover transition-transform duration-500 group-hover:scale-105"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/5 to-transparent" />
+          </>
+        ) : (
+          <>
+            {/* Sin foto: el color de la categoría da identidad visual a la tarjeta. */}
+            <div className="absolute inset-0 bg-gradient-to-br from-marca-500/25 via-info/10 to-transparent transition-transform duration-500 group-hover:scale-105" />
+            <div
+              className="absolute inset-0 opacity-30"
+              aria-hidden
+              style={{
+                backgroundImage:
+                  'radial-gradient(circle at 20% 30%, rgba(255,255,255,0.12) 1px, transparent 1px)',
+                backgroundSize: '20px 20px',
+              }}
+            />
+          </>
+        )}
         <div className="absolute bottom-3 left-4 right-4 flex items-end justify-between gap-2">
           <span className="rounded-lg vidrio px-2 py-1 text-[10px] uppercase tracking-wider text-tinta-suave">
             {producto.categoria.nombre}

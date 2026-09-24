@@ -63,6 +63,8 @@ export interface ProductoGestionDTO {
   valorNutricional: ValorNutricionalDTO | null;
   stockTotal: number;
   existencias: ExistenciaDTO[];
+  /** Igual que en el catálogo público: `null` sin foto, o la fecha para armar la URL. */
+  imagenActualizadaEn: string | null;
   /**
    * Costo unitario promedio, deducido de las notas de ingreso.
    * Nulo cuando el producto todavía no tuvo ningún ingreso registrado.

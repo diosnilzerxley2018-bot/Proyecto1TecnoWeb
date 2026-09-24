@@ -254,17 +254,20 @@ model permiso {
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model producto {
-  id_producto       Int                @id @default(autoincrement())
-  nombre            String             @db.VarChar(100)
-  descripcion       String?            @db.VarChar(250)
-  precio_venta      Decimal            @db.Decimal(10, 2)
-  activo            Boolean            @default(true)
-  id_categoria      Int
-  tipo_conservacion String             @default("Seco") @db.VarChar(20)
-  categoria         categoria          @relation(fields: [id_categoria], references: [id_categoria], onDelete: NoAction, onUpdate: NoAction, map: "fk_producto_categoria")
-  producto_almacen  producto_almacen[]
-  receta            receta?
-  valor_nutricional valor_nutricional?
+  id_producto           Int                @id @default(autoincrement())
+  nombre                String             @db.VarChar(100)
+  descripcion           String?            @db.VarChar(250)
+  precio_venta          Decimal            @db.Decimal(10, 2)
+  activo                Boolean            @default(true)
+  id_categoria          Int
+  tipo_conservacion     String             @default("Seco") @db.VarChar(20)
+  imagen                Bytes?
+  imagen_tipo           String?            @db.VarChar(20)
+  imagen_actualizada_en DateTime?          @db.Timestamptz(6)
+  categoria             categoria          @relation(fields: [id_categoria], references: [id_categoria], onDelete: NoAction, onUpdate: NoAction, map: "fk_producto_categoria")
+  producto_almacen      producto_almacen[]
+  receta                receta?
+  valor_nutricional     valor_nutricional?
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.

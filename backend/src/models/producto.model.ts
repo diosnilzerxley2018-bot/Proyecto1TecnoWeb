@@ -26,6 +26,11 @@ const CAMPOS_PUBLICOS = {
     },
   },
   producto_almacen: { select: { stock_actual: true } },
+  // Solo la fecha, no la imagen: un listado con muchos productos no tiene por
+  // qué traer los bytes de cada foto para saber si existe. La fecha alcanza
+  // para decidirlo y además sirve para invalidar la caché del navegador
+  // cuando la foto cambia (`GET /catalogo/:id/imagen`).
+  imagen_actualizada_en: true,
 } as const;
 
 export interface FiltroCatalogo {
@@ -107,6 +112,7 @@ const CAMPOS_GESTION = {
   producto_almacen: {
     select: { stock_actual: true, almacen: { select: { id_almacen: true, nombre: true } } },
   },
+  imagen_actualizada_en: true,
 } as const;
 
 export interface FiltroGestion {
@@ -219,6 +225,37 @@ export const guardarValorNutricional = (
 };
 
 export type ProductoGestion = NonNullable<Awaited<ReturnType<typeof buscarParaGestion>>>;
+
+/**
+ * La foto de un producto, en una consulta aparte de `CAMPOS_PUBLICOS` y
+ * `CAMPOS_GESTION`: son los únicos dos lugares donde hace falta traer los
+ * bytes completos, y solo cuando se va a servir la imagen misma.
+ */
+export const buscarImagen = (id: number) =>
+  prisma.producto.findUnique({
+    where: { id_producto: id },
+    select: { imagen: true, imagen_tipo: true },
+  });
+
+export const guardarImagen = (id: number, datos: Buffer, tipo: string) =>
+  prisma.producto.update({
+    where: { id_producto: id },
+    // `Buffer` es un `Uint8Array<ArrayBufferLike>`; el campo `Bytes` de Prisma
+    // exige el `ArrayBuffer` concreto. `Uint8Array.from` copia los bytes a uno.
+    data: {
+      imagen: Uint8Array.from(datos),
+      imagen_tipo: tipo,
+      imagen_actualizada_en: new Date(),
+    },
+    select: { id_producto: true },
+  });
+
+export const eliminarImagen = (id: number) =>
+  prisma.producto.update({
+    where: { id_producto: id },
+    data: { imagen: null, imagen_tipo: null, imagen_actualizada_en: null },
+    select: { id_producto: true },
+  });
 
 /** Productos existentes entre los indicados; `soloActivos` filtra las bajas lógicas. */
 export const existentes = (ids: number[], tx: ClientePrisma, soloActivos: boolean) =>
