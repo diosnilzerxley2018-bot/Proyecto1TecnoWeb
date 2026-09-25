@@ -45,8 +45,6 @@ export default function PaginaCarrito() {
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const pagoEnLinea = metodoPago !== 'Efectivo';
-
   async function confirmar(evento: React.FormEvent) {
     evento.preventDefault();
     setError(null);
@@ -60,27 +58,36 @@ export default function PaginaCarrito() {
       });
 
       vaciar();
+      const numero = `#${String(pedido.id).padStart(5, '0')}`;
 
-      if (pedido.cobro && pedido.cobro.estado === 'Pendiente') {
-        // El pedido existe y reservó su stock, pero todavía no está pagado:
-        // se le muestra el código en lugar de mandarlo al listado a esperar.
+      /*
+       * Solo un pedido que **espera un pago en línea** muestra el cobro.
+       *
+       * Antes bastaba con que el cobro estuviera pendiente, y el de un pedido
+       * en efectivo también lo está: se cobra recién en la puerta. Al cliente
+       * que pagaba en efectivo se le abría "Cobrar · Esperando la confirmación
+       * del pago", que no terminaba nunca, y no llegaba a ver su pedido.
+       */
+      if (pedido.estadoPedido === 'Pendiente de pago' && pedido.cobro) {
         setCobro(pedido.cobro);
         return;
       }
 
-      /*
-       * Sin cobro pendiente el pedido ya está en firme: o se paga en efectivo
-       * al recibirlo, o la pasarela no pudo abrirlo. Lo segundo se avisa, en
-       * vez de dar por bueno un pago que no ocurrió.
-       */
-      if (pedido.cobro?.estado === 'Fallido') {
+      if (pedido.metodoPago === 'Efectivo') {
+        notificar(
+          'exito',
+          `Pedido ${numero} confirmado. Tenga listos ${formatearBs(pedido.total)} para pagarle al repartidor`,
+        );
+      } else if (pedido.cobro?.estado === 'Fallido') {
+        // La pasarela no pudo abrir el cobro: se avisa en vez de dar por
+        // bueno un pago que no ocurrió.
         notificar(
           'info',
-          `Pedido #${String(pedido.id).padStart(5, '0')} confirmado, pero no se pudo ` +
-            'generar el cobro en línea. Puede pagarlo al recibirlo.',
+          `Pedido ${numero} confirmado, pero no se pudo generar el cobro en línea. ` +
+            'Puede pagarlo al recibirlo.',
         );
       } else {
-        notificar('exito', `Pedido #${String(pedido.id).padStart(5, '0')} confirmado`);
+        notificar('exito', `Pedido ${numero} confirmado`);
       }
       router.push('/portal/pedidos');
     } catch (e) {
@@ -128,7 +135,10 @@ export default function PaginaCarrito() {
         </div>
       </header>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
+      {/* `minmax(0,1fr)` también en el celular: con la columna automática la
+          grilla tomaba el ancho del nombre más largo sin partirlo, y la página
+          se desbordaba a los costados. */}
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start">
         <AnimatePresence mode="wait">
           {paso === 'carrito' ? (
             <motion.ul
@@ -257,20 +267,22 @@ export default function PaginaCarrito() {
                   })}
                 </div>
 
-                <AnimatePresence>
-                  {pagoEnLinea && (
-                    <motion.p
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="overflow-hidden text-xs leading-relaxed text-tinta-tenue"
-                    >
-                      <span className="block pt-4">
-                        Al confirmar se mostrará el código de pago con el monto ya cargado. El
-                        pedido entra a la cocina cuando el pago se acredita.
-                      </span>
-                    </motion.p>
-                  )}
+                {/* Qué va a pasar después de confirmar, dicho para el método
+                    elegido: con tarjeta no hay "código", hay una página de pago. */}
+                <AnimatePresence mode="wait">
+                  <motion.p
+                    key={metodoPago}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="pt-4 text-xs leading-relaxed text-tinta-tenue"
+                  >
+                    {metodoPago === 'Efectivo'
+                      ? `Le paga ${formatearBs(importeTotal)} al repartidor cuando recibe su pedido. Si puede, tenga el monto justo.`
+                      : metodoPago === 'QR'
+                        ? 'Al confirmar verá el código QR con el monto ya cargado. Su pedido entra a la cocina en cuanto se acredita el pago.'
+                        : 'Al confirmar se abrirá la página de pago segura. Su pedido entra a la cocina en cuanto se acredita el pago.'}
+                  </motion.p>
                 </AnimatePresence>
               </section>
 
@@ -309,7 +321,7 @@ export default function PaginaCarrito() {
             </span>
           </div>
           <p className="mt-1.5 text-[11px] leading-snug text-tinta-tenue">
-            El importe definitivo lo calcula el sistema con el precio vigente al confirmar.
+            Se cobra el precio vigente al confirmar el pedido.
           </p>
 
           <div className="mt-5 space-y-2">

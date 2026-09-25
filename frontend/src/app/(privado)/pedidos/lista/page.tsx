@@ -30,7 +30,8 @@ import type {
   PedidoGestion,
   Repartidor,
 } from '@/types';
-import { ETIQUETA_ESTADO, ORDEN_FLUJO } from '@/lib/pedidos';
+import { ETIQUETA_ESTADO, ORDEN_FLUJO, avisoTrasAccion } from '@/lib/pedidos';
+import { usarRefrescoPeriodico } from '@/components/ui/usarRefrescoPeriodico';
 
 /** CU-PED-02 — Gestionar Pedido, lado del empleado (Etapa 1). */
 export default function PaginaPedidos() {
@@ -99,6 +100,10 @@ function TableroPedidos() {
   useEffect(() => {
     void cargar();
   }, [cargar]);
+
+  // Un pedido nuevo aparece solo: antes esperaba en el servidor hasta que
+  // alguien pulsara "Actualizar", y la cocina no se enteraba de que había llegado.
+  usarRefrescoPeriodico(() => cargar(true), 30_000);
 
   /** Todos los pedidos del sistema, para el chip «Todos». */
   const totalDeTodos = useMemo(
@@ -275,7 +280,7 @@ function TableroPedidos() {
           operar(
             () =>
               api.patch<PedidoGestion>(`/gestion/pedidos/${abierto!.id}/estado`, { estado }),
-            `Pedido actualizado a ${ETIQUETA_ESTADO[estado].toLowerCase()}`,
+            avisoTrasAccion(abierto!.id, estado, abierto!),
           )
         }
         onAsignar={(idRepartidor) =>

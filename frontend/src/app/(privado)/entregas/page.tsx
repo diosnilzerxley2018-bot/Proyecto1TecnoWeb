@@ -1,9 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Bike, MapPin, Phone, PowerOff, Zap } from 'lucide-react';
+import { Banknote, Bike, ChefHat, CircleCheck, MapPin, Phone, PowerOff, Zap } from 'lucide-react';
 import { api, ErrorApi } from '@/lib/api';
+import { useAuth } from '@/context/AuthContext';
 import { useNotificaciones } from '@/components/ui/Notificaciones';
 import { RequierePermiso } from '@/components/RequierePermiso';
 import { EncabezadoPagina } from '@/components/ui/EncabezadoPagina';
@@ -11,9 +12,12 @@ import { EstadoVacio } from '@/components/ui/EstadoVacio';
 import { EsqueletoFilas } from '@/components/ui/Esqueleto';
 import { Insignia } from '@/components/ui/Insignia';
 import { Boton } from '@/components/ui/Boton';
+import { Dialogo } from '@/components/ui/Dialogo';
 import { MapaUbicacion } from '@/components/pedidos/MapaUbicacion';
+import { usarRefrescoPeriodico } from '@/components/ui/usarRefrescoPeriodico';
 import type { Disponibilidad, EstadoPedido, PedidoGestion } from '@/types';
-import { ACCION_HACIA, ETIQUETA_ESTADO, TONO_ESTADO, separarTransiciones } from '@/lib/pedidos';
+import { CARGO_REPARTIDOR } from '@/lib/dominio';
+import { ETIQUETA_ESTADO, TONO_ESTADO, avisoTrasAccion, textoDePago } from '@/lib/pedidos';
 import { formatearBs, tiempoTranscurrido } from '@/lib/formato';
 import { cn } from '@/lib/cn';
 
@@ -22,12 +26,13 @@ import { cn } from '@/lib/cn';
  *
  * Existe aparte del tablero general porque el repartidor no necesita ver todos
  * los pedidos del negocio: necesita **los suyos**, con la dirección, el punto
- * en el mapa y el teléfono de quien recibe. Antes tenía que buscarlos entre
- * los de todos.
+ * en el mapa, el teléfono de quien recibe y cuánto tiene que cobrar.
  *
- * El interruptor de turno está arriba y no escondido en un menú: es lo primero
- * que hace al empezar la jornada, y lo que determina si el sistema lo va a
- * proponer para nuevas entregas.
+ * Se ordena por su tarea, no por fecha. Primero lo que ya está en la calle,
+ * después lo que está por salir y al final, compacto y sin botones, lo que
+ * sigue en la cocina. Antes las tres cosas se veían iguales, con el mismo
+ * botón verde grande, y a un pedido todavía en cocina se le ofrecía "Poner en
+ * preparación", que no es trabajo del repartidor.
  */
 export default function PaginaEntregas() {
   return (
@@ -37,7 +42,10 @@ export default function PaginaEntregas() {
   );
 }
 
+type Cierre = { pedido: PedidoGestion; destino: 'Entregado' | 'Cancelado' };
+
 function MisEntregas() {
+  const { sesion } = useAuth();
   const { notificar } = useNotificaciones();
 
   const [entregas, setEntregas] = useState<PedidoGestion[]>([]);
@@ -48,8 +56,13 @@ function MisEntregas() {
    * entraba aunque el turno siguiera abierto en la base.
    */
   const [deTurno, setDeTurno] = useState<boolean | null>(null);
-  const [cambiando, setCambiando] = useState(false);
-  const [cerrando, setCerrando] = useState<{ idPedido: number; estado: EstadoPedido } | null>(null);
+  const [cambiandoTurno, setCambiandoTurno] = useState(false);
+  const [enCurso, setEnCurso] = useState<number | null>(null);
+  const [porCerrar, setPorCerrar] = useState<Cierre | null>(null);
+
+  /** Un cargo conocido que no es de reparto: esta no es su pantalla. */
+  const cargo = sesion?.usuario.cargo;
+  const noReparte = cargo !== undefined && cargo !== CARGO_REPARTIDOR;
 
   const cargarEntregas = useCallback(async () => {
     try {
@@ -63,8 +76,7 @@ function MisEntregas() {
 
   /**
    * Va aparte de las entregas: si una de las dos consultas falla, la otra
-   * igual tiene que verse. Perder la lista por no saber el turno —o al revés—
-   * dejaría al repartidor sin lo que sí se pudo cargar.
+   * igual tiene que verse.
    */
   const cargarTurno = useCallback(async () => {
     try {
@@ -76,44 +88,48 @@ function MisEntregas() {
   }, [notificar]);
 
   useEffect(() => {
+    if (noReparte) return;
     void cargarEntregas();
     void cargarTurno();
-  }, [cargarEntregas, cargarTurno]);
+  }, [cargarEntregas, cargarTurno, noReparte]);
+
+  // Una entrega nueva aparece sola: el repartidor no tiene por qué recargar.
+  usarRefrescoPeriodico(cargarEntregas, 20_000, !noReparte);
+
+  const grupos = useMemo(
+    () => ({
+      enCamino: entregas.filter((p) => p.estadoPedido === 'En camino'),
+      porSalir: entregas.filter((p) => p.estadoPedido === 'En preparacion'),
+      enCocina: entregas.filter((p) => p.estadoPedido === 'Recibido'),
+    }),
+    [entregas],
+  );
 
   /**
-   * Cierra una entrega: la registra como hecha, o como no realizada.
-   *
-   * Tras el cambio se recarga la lista en vez de retocarla en memoria: el
-   * pedido cerrado sale de «mis entregas» —ya no ocupa al repartidor— y
-   * reconstruirlo a mano correría el riesgo de mostrar algo distinto de lo que
-   * quedó guardado.
+   * Mueve el pedido y vuelve a leer la lista. Se recarga en vez de retocarla
+   * en memoria: un pedido cerrado sale de «mis entregas», y reconstruirlo a
+   * mano correría el riesgo de mostrar algo distinto de lo que quedó guardado.
    */
-  async function cerrarEntrega(idPedido: number, estado: EstadoPedido) {
-    setCerrando({ idPedido, estado });
+  async function mover(pedido: PedidoGestion, destino: EstadoPedido) {
+    setEnCurso(pedido.id);
     try {
-      await api.patch<PedidoGestion>(`/gestion/pedidos/${idPedido}/estado`, { estado });
-      notificar(
-        'exito',
-        estado === 'Entregado'
-          ? 'Entrega registrada'
-          : 'Registrado como no entregado. La comida vuelve al inventario',
-      );
+      await api.patch<PedidoGestion>(`/gestion/pedidos/${pedido.id}/estado`, { estado: destino });
+      notificar('exito', avisoTrasAccion(pedido.id, destino, pedido));
+      setPorCerrar(null);
       await cargarEntregas();
     } catch (e) {
-      notificar('error', e instanceof ErrorApi ? e.message : 'No se pudo cerrar la entrega');
+      notificar('error', e instanceof ErrorApi ? e.message : 'No se pudo actualizar la entrega');
     } finally {
-      setCerrando(null);
+      setEnCurso(null);
     }
   }
 
   async function cambiarTurno() {
     // Sin saber el estado actual no hay a qué invertirlo.
     if (deTurno === null) return;
-    setCambiando(true);
+    setCambiandoTurno(true);
     try {
-      const r = await api.put<Disponibilidad>('/gestion/disponibilidad', {
-        disponible: !deTurno,
-      });
+      const r = await api.put<Disponibilidad>('/gestion/disponibilidad', { disponible: !deTurno });
       setDeTurno(r.disponible);
       notificar(
         'exito',
@@ -124,20 +140,33 @@ function MisEntregas() {
     } catch (e) {
       notificar('error', e instanceof ErrorApi ? e.message : 'No se pudo cambiar su turno');
     } finally {
-      setCambiando(false);
+      setCambiandoTurno(false);
     }
+  }
+
+  if (noReparte) {
+    return (
+      <>
+        <EncabezadoPagina titulo="Mis entregas" descripcion="Pedidos asignados a un repartidor" />
+        <EstadoVacio
+          icono={<Bike className="size-6" aria-hidden />}
+          titulo="Esta pantalla es para repartidores"
+          descripcion="Los pedidos del local se atienden desde el módulo Pedidos."
+        />
+      </>
+    );
   }
 
   return (
     <>
       <EncabezadoPagina
         titulo="Mis entregas"
-        descripcion="Los pedidos que tiene asignados, con su dirección y referencia"
+        descripcion="Lo que tiene que llevar, a dónde y cuánto cobrar"
       />
 
       <section
         className={cn(
-          'superficie-tarjeta mb-5 flex flex-wrap items-center gap-3 rounded-2xl p-4 transition-colors',
+          'superficie-tarjeta mb-6 flex flex-wrap items-center gap-3 rounded-2xl p-4 transition-colors',
           deTurno && 'border-marca-500/40 bg-marca-500/[0.06]',
         )}
       >
@@ -156,9 +185,9 @@ function MisEntregas() {
           </p>
           <p className="mt-0.5 text-[11px] text-tinta-tenue">
             {deTurno === null
-              ? 'Un momento, se está leyendo lo que tiene declarado'
+              ? 'Un momento'
               : deTurno
-                ? 'El sistema puede proponerlo para las entregas nuevas'
+                ? 'Le llegan las entregas nuevas'
                 : 'No se le asignarán entregas hasta que active su turno'}
           </p>
         </div>
@@ -166,8 +195,8 @@ function MisEntregas() {
         {/* Deshabilitado mientras no se sabe el turno: el botón invierte el
             estado actual, y sin conocerlo ofrecería la acción equivocada. */}
         <Boton
-          variante={deTurno ? 'contorno' : 'primario'}
-          cargando={cambiando}
+          variante={deTurno ? 'secundario' : 'primario'}
+          cargando={cambiandoTurno}
           disabled={deTurno === null}
           onClick={cambiarTurno}
           className="shrink-0"
@@ -185,131 +214,289 @@ function MisEntregas() {
           descripcion={
             deTurno === false
               ? 'Inicie su turno para que el sistema pueda asignarle entregas.'
-              : 'Cuando le asignen un pedido va a aparecer acá.'
+              : 'Cuando le asignen un pedido va a aparecer acá, sin recargar la página.'
           }
         />
       ) : (
-        <ul className="grid gap-4 lg:grid-cols-2">
-          <AnimatePresence initial={false}>
-            {entregas.map((pedido, indice) => (
-              <motion.li
-                key={pedido.id}
-                layout
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.98 }}
-                transition={{ duration: 0.25, delay: Math.min(indice * 0.04, 0.25) }}
-                className="superficie-tarjeta overflow-hidden rounded-2xl"
-              >
-                <TarjetaEntrega
-                  pedido={pedido}
-                  enCurso={cerrando?.idPedido === pedido.id ? cerrando.estado : null}
-                  onCerrar={(estado) => void cerrarEntrega(pedido.id, estado)}
-                />
-              </motion.li>
+        <div className="space-y-8">
+          <Grupo titulo="En camino" cantidad={grupos.enCamino.length}>
+            {grupos.enCamino.map((pedido) => (
+              <TarjetaEntrega key={pedido.id} pedido={pedido}>
+                <Boton
+                  variante="primario"
+                  tamano="lg"
+                  className="w-full justify-center"
+                  icono={<CircleCheck className="size-4" aria-hidden />}
+                  onClick={() => setPorCerrar({ pedido, destino: 'Entregado' })}
+                >
+                  Registrar entrega
+                </Boton>
+                {/* La salida del flujo va discreta: es lo que se registra
+                    cuando algo salió mal, no la acción esperada. */}
+                <button
+                  type="button"
+                  onClick={() => setPorCerrar({ pedido, destino: 'Cancelado' })}
+                  className="w-full rounded-xl py-2 text-xs text-tinta-tenue underline-offset-2 transition-colors hover:text-peligro hover:underline"
+                >
+                  No pude entregarlo
+                </button>
+              </TarjetaEntrega>
             ))}
-          </AnimatePresence>
-        </ul>
+          </Grupo>
+
+          <Grupo
+            titulo="Por salir"
+            cantidad={grupos.porSalir.length}
+            ayuda="La cocina lo está preparando. Márquelo al salir con él."
+          >
+            {grupos.porSalir.map((pedido) => (
+              <TarjetaEntrega key={pedido.id} pedido={pedido}>
+                <Boton
+                  variante="primario"
+                  tamano="lg"
+                  className="w-full justify-center"
+                  icono={<Bike className="size-4" aria-hidden />}
+                  cargando={enCurso === pedido.id}
+                  onClick={() => void mover(pedido, 'En camino')}
+                >
+                  Salgo con el pedido
+                </Boton>
+              </TarjetaEntrega>
+            ))}
+          </Grupo>
+
+          <Grupo
+            titulo="En cocina"
+            cantidad={grupos.enCocina.length}
+            ayuda="Asignados a usted, pero la cocina todavía no los empezó."
+          >
+            {grupos.enCocina.map((pedido) => (
+              <FilaEnCocina key={pedido.id} pedido={pedido} />
+            ))}
+          </Grupo>
+        </div>
       )}
+
+      <DialogoCierre
+        cierre={porCerrar}
+        enviando={porCerrar !== null && enCurso === porCerrar.pedido.id}
+        onConfirmar={() => porCerrar && void mover(porCerrar.pedido, porCerrar.destino)}
+        onCerrar={() => setPorCerrar(null)}
+      />
     </>
   );
 }
 
-function TarjetaEntrega({
-  pedido,
-  enCurso,
-  onCerrar,
+function Grupo({
+  titulo,
+  cantidad,
+  ayuda,
+  children,
 }: {
-  pedido: PedidoGestion;
-  /** Estado cuyo cambio se está enviando, para señalar cuál botón espera. */
-  enCurso: EstadoPedido | null;
-  onCerrar: (estado: EstadoPedido) => void;
+  titulo: string;
+  cantidad: number;
+  ayuda?: string;
+  children: React.ReactNode;
 }) {
+  if (cantidad === 0) return null;
+  return (
+    <section>
+      <header className="mb-3">
+        <h2 className="flex items-center gap-2 text-sm font-medium text-tinta">
+          {titulo}
+          <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[11px] tabular-nums text-tinta-suave">
+            {cantidad}
+          </span>
+        </h2>
+        {ayuda && <p className="mt-0.5 text-[11px] text-tinta-tenue">{ayuda}</p>}
+      </header>
+      <ul className="grid gap-4 lg:grid-cols-2">
+        <AnimatePresence initial={false}>{children}</AnimatePresence>
+      </ul>
+    </section>
+  );
+}
+
+/** Una entrega que está por salir o en la calle: todo lo que hace falta para llevarla. */
+function TarjetaEntrega({ pedido, children }: { pedido: PedidoGestion; children: React.ReactNode }) {
   const { ubicacion, cliente } = pedido;
-  const { avance, salidas } = separarTransiciones(pedido.transicionesPosibles);
+  const pago = textoDePago(pedido, 'personal');
+  const cobra = pedido.metodoPago === 'Efectivo' && pedido.estadoPago !== 'Pagado';
   const punto =
     ubicacion.latitud !== null && ubicacion.longitud !== null
       ? { lat: ubicacion.latitud, lon: ubicacion.longitud }
       : null;
 
   return (
-    <>
+    <motion.li
+      layout
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.98 }}
+      className="superficie-tarjeta overflow-hidden rounded-2xl"
+    >
       <header className="flex flex-wrap items-center gap-2 border-b border-borde px-4 py-3">
         <span className="font-mono text-[11px] text-tinta-tenue">
           #{String(pedido.id).padStart(5, '0')}
         </span>
-        <Insignia tono={TONO_ESTADO[pedido.estadoPedido]}>
+        <Insignia tono={TONO_ESTADO[pedido.estadoPedido]} punto={pedido.estadoPedido === 'En camino'}>
           {ETIQUETA_ESTADO[pedido.estadoPedido]}
         </Insignia>
-        <span className="ml-auto text-sm font-semibold tabular-nums text-tinta">
-          {formatearBs(pedido.total)}
+        <span className="ml-auto text-[11px] text-tinta-tenue">
+          pedido {tiempoTranscurrido(pedido.fecha)}
         </span>
       </header>
 
-      {/* El mapa primero: es lo que el repartidor mira antes de salir. */}
-      {punto && <MapaUbicacion valor={punto} altura="h-56 sm:h-64" />}
+      {/* Qué cobrar, antes que nada: es lo que no puede olvidarse en la puerta. */}
+      <div
+        className={cn(
+          'flex items-center gap-3 px-4 py-3',
+          cobra ? 'bg-aviso/10 text-aviso' : 'bg-marca-500/8 text-marca-300',
+        )}
+      >
+        {cobra ? (
+          <Banknote className="size-5 shrink-0" aria-hidden />
+        ) : (
+          <CircleCheck className="size-5 shrink-0" aria-hidden />
+        )}
+        <span className="text-sm font-semibold">{pago.texto}</span>
+      </div>
+
+      {/* El mapa: lo que el repartidor mira antes de salir. */}
+      {punto && <MapaUbicacion valor={punto} altura="h-52 sm:h-60" />}
 
       <div className="space-y-3 px-4 py-3.5">
-        <p className="flex items-start gap-2 text-sm text-tinta-suave">
+        <p className="flex items-start gap-2 text-sm text-tinta">
           <MapPin className="mt-0.5 size-4 shrink-0 text-marca-400" aria-hidden />
           <span>
             {ubicacion.calle}
             {ubicacion.numero ? ` ${ubicacion.numero}` : ''}
-            <span className="mt-0.5 block text-[11px] text-tinta-tenue">
-              {ubicacion.referencia}
-            </span>
+            {ubicacion.referencia && (
+              <span className="mt-0.5 block text-[12px] text-tinta-suave">{ubicacion.referencia}</span>
+            )}
           </span>
         </p>
 
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-borde pt-3">
-          <span className="min-w-0 text-[11px] text-tinta-tenue">
-            {cliente.nombreCompleto} · pedido {tiempoTranscurrido(pedido.fecha)}
-          </span>
-
-          {/* Marcar y llamar: lo que hace falta si no encuentra la puerta. */}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="min-w-0 text-[12px] text-tinta-suave">{cliente.nombreCompleto}</span>
+          {/* Llamar: lo que hace falta si no encuentra la puerta. */}
           {cliente.telefono && (
             <a
               href={`tel:${cliente.telefono}`}
-              className="flex shrink-0 items-center gap-1.5 rounded-lg border border-borde px-2.5 py-1.5 text-[11px] text-tinta-suave transition-colors hover:border-marca-500/40 hover:text-marca-300"
+              className="flex shrink-0 items-center gap-1.5 rounded-lg border border-borde px-3 py-2 text-[12px] text-tinta-suave transition-colors hover:border-marca-500/40 hover:text-marca-300"
             >
               <Phone className="size-3.5" aria-hidden />
-              {cliente.telefono}
+              Llamar
             </a>
           )}
         </div>
 
-        {/*
-          El cierre de la entrega se hace acá y no en el tablero general: es el
-          repartidor asignado quien estuvo en la puerta, y desde esta semana el
-          único que puede afirmarlo. Mandarlo a buscar su pedido entre los de
-          todos para cerrarlo sería trabajo de más en el peor momento.
-        */}
-        {(avance || salidas.length > 0) && (
-          <div className="flex flex-col gap-2 border-t border-borde px-4 py-3">
-            {avance && (
-              <Boton
-                variante="primario"
-                className="w-full justify-center"
-                cargando={enCurso === avance}
-                onClick={() => onCerrar(avance)}
-              >
-                {ACCION_HACIA[avance] ?? `Pasar a ${ETIQUETA_ESTADO[avance]}`}
-              </Boton>
-            )}
-            {salidas.map((salida) => (
-              <Boton
-                key={salida}
-                variante="peligro"
-                className="w-full justify-center"
-                cargando={enCurso === salida}
-                onClick={() => onCerrar(salida)}
-              >
-                {ACCION_HACIA[salida] ?? `Pasar a ${ETIQUETA_ESTADO[salida]}`}
-              </Boton>
-            ))}
-          </div>
-        )}
+        {/* Lo que lleva, para revisar la bolsa al recogerla. */}
+        <p className="text-[12px] leading-relaxed text-tinta-tenue">
+          {pedido.items.map((i) => `${i.cantidad}× ${i.nombre}`).join(' · ')}
+        </p>
+
+        <div className="space-y-1 border-t border-borde pt-3">{children}</div>
       </div>
-    </>
+    </motion.li>
+  );
+}
+
+/** Un pedido que todavía está en cocina: se ve, pero no pide nada. */
+function FilaEnCocina({ pedido }: { pedido: PedidoGestion }) {
+  return (
+    <motion.li
+      layout
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="flex items-center gap-3 rounded-2xl border border-borde px-4 py-3"
+    >
+      <ChefHat className="size-4 shrink-0 text-tinta-tenue" aria-hidden />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm text-tinta-suave">
+          {pedido.ubicacion.calle}
+          {pedido.ubicacion.numero ? ` ${pedido.ubicacion.numero}` : ''}
+        </p>
+        <p className="text-[11px] text-tinta-tenue">
+          #{String(pedido.id).padStart(5, '0')} · pedido {tiempoTranscurrido(pedido.fecha)}
+        </p>
+      </div>
+      <span className="shrink-0 text-sm tabular-nums text-tinta-suave">{formatearBs(pedido.total)}</span>
+    </motion.li>
+  );
+}
+
+/**
+ * Confirmación antes de cerrar una entrega.
+ *
+ * Las dos salidas son definitivas: una da el pedido por entregado y cobrado,
+ * la otra lo cancela y avisa al cliente. Antes bastaba un toque en un botón
+ * grande, y un roce con el pulgar no tenía vuelta atrás. La confirmación de
+ * entrega en efectivo es además el recordatorio de cobrar.
+ */
+function DialogoCierre({
+  cierre,
+  enviando,
+  onConfirmar,
+  onCerrar,
+}: {
+  cierre: Cierre | null;
+  enviando: boolean;
+  onConfirmar: () => void;
+  onCerrar: () => void;
+}) {
+  const pedido = cierre?.pedido;
+  const numero = pedido ? `#${String(pedido.id).padStart(5, '0')}` : '';
+  const efectivo = pedido?.metodoPago === 'Efectivo' && pedido.estadoPago !== 'Pagado';
+  const entregando = cierre?.destino === 'Entregado';
+
+  return (
+    <Dialogo
+      abierto={cierre !== null}
+      onCerrar={onCerrar}
+      titulo={entregando ? `¿Entregó el pedido ${numero}?` : `¿No pudo entregar el pedido ${numero}?`}
+      ancho="max-w-md"
+    >
+      {pedido && (
+        <>
+          <p className="text-sm text-tinta-suave">
+            {entregando
+              ? efectivo
+                ? `Confirme que recibió ${formatearBs(pedido.total)} en efectivo de ${pedido.cliente.nombreCompleto}.`
+                : `Ya está pagado con ${pedido.metodoPago === 'QR' ? 'QR' : 'tarjeta'}: no cobre nada.`
+              : 'El pedido se cancela y se le avisa al cliente por correo. La comida vuelve al local.'}
+          </p>
+
+          {!entregando && pedido.cliente.telefono && (
+            <a
+              href={`tel:${pedido.cliente.telefono}`}
+              className="mt-4 flex items-center justify-center gap-2 rounded-xl border border-borde py-2.5 text-sm text-tinta transition-colors hover:border-marca-500/40"
+            >
+              <Phone className="size-4" aria-hidden />
+              Antes, intente llamar al cliente
+            </a>
+          )}
+
+          <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Boton variante="fantasma" onClick={onCerrar} className="justify-center">
+              Volver
+            </Boton>
+            <Boton
+              variante={entregando ? 'primario' : 'peligro'}
+              cargando={enviando}
+              onClick={onConfirmar}
+              className="justify-center"
+            >
+              {entregando
+                ? efectivo
+                  ? 'Sí, entregado y cobrado'
+                  : 'Sí, entregado'
+                : 'Sí, no se pudo entregar'}
+            </Boton>
+          </div>
+        </>
+      )}
+    </Dialogo>
   );
 }

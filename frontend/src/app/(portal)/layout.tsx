@@ -4,7 +4,15 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { Info, LogOut, ReceiptText, ShoppingBasket, Sprout, UserRound } from 'lucide-react';
+import {
+  Info,
+  LogOut,
+  ReceiptText,
+  ShoppingBasket,
+  Sprout,
+  UserRound,
+  UtensilsCrossed,
+} from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { CarritoProvider, useCarrito } from '@/context/CarritoContext';
@@ -18,7 +26,9 @@ import type { Negocio } from '@/types';
 import { cn } from '@/lib/cn';
 
 const ENLACES = [
-  { ruta: '/portal', etiqueta: 'Catálogo', icono: ShoppingBasket, exacta: true },
+  // El catálogo no usa la canasta: esa es del carrito. En el celular se ven
+  // solo los íconos, y dos canastas iguales no se distinguían.
+  { ruta: '/portal', etiqueta: 'Catálogo', icono: UtensilsCrossed, exacta: true },
   { ruta: '/portal/pedidos', etiqueta: 'Mis pedidos', icono: ReceiptText, exacta: false },
   { ruta: '/portal/perfil', etiqueta: 'Mi cuenta', icono: UserRound, exacta: false },
   // RF-PED-03: la informacion del negocio es una pagina mas del portal.
@@ -110,6 +120,10 @@ function Cabecera({ nombre }: { nombre: string }) {
               <Link
                 key={enlace.ruta}
                 href={enlace.ruta}
+                // En el celular el texto se oculta y el enlace quedaba sin
+                // nombre para un lector de pantalla.
+                aria-label={enlace.etiqueta}
+                title={enlace.etiqueta}
                 className={cn(
                   'relative flex items-center gap-2 rounded-xl px-2 py-2 text-sm transition-colors duration-200 sm:px-3',
                   activo ? 'text-tinta' : 'text-tinta-suave hover:text-tinta',

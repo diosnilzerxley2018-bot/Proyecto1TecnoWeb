@@ -98,6 +98,7 @@ export async function iniciarSesion(nombreUsuario: string, contrasena: string): 
       nombreUsuario: usuario.nombre_usuario,
       email: usuario.email,
       rol: usuario.rol.nombre,
+      cargo: usuario.empleado?.cargo.nombre ?? null,
     },
     permisos,
   };
@@ -116,6 +117,7 @@ export async function sesionActual(idUsuario: number): Promise<Omit<SesionDTO, '
       nombreUsuario: usuario.nombre_usuario,
       email: usuario.email,
       rol: usuario.rol.nombre,
+      cargo: usuario.empleado?.cargo.nombre ?? null,
     },
     permisos,
   };

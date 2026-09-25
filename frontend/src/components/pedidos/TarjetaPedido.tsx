@@ -4,7 +4,13 @@ import { Bike, Clock, MapPin, Receipt } from 'lucide-react';
 import { Tarjeta } from '@/components/ui/Tarjeta';
 import { Insignia } from '@/components/ui/Insignia';
 import type { PedidoGestion } from '@/types';
-import { ETIQUETA_ESTADO, TONO_ESTADO, formatearBs, tiempoTranscurrido } from '@/lib/pedidos';
+import {
+  ETIQUETA_ESTADO,
+  TONO_ESTADO,
+  formatearBs,
+  textoDePago,
+  tiempoTranscurrido,
+} from '@/lib/pedidos';
 
 /** Resumen de un pedido en el tablero. Al pulsarla se abre el panel de detalle. */
 export function TarjetaPedido({
@@ -17,7 +23,7 @@ export function TarjetaPedido({
   onAbrir: () => void;
 }) {
   const cantidadItems = pedido.items.reduce((total, item) => total + item.cantidad, 0);
-  const pagado = pedido.estadoPago === 'Pagado';
+  const pago = textoDePago(pedido, 'personal');
 
   return (
     <Tarjeta
@@ -82,11 +88,14 @@ export function TarjetaPedido({
       </div>
 
       <div className="flex items-center justify-between border-t border-borde pt-3">
+        {/* "Efectivo · Pendiente" en naranja se leía como un problema; es
+            simplemente lo que el repartidor tiene que cobrar en la puerta. */}
         <span
-          className={`text-[11px] ${pagado ? 'text-marca-400' : 'text-aviso'}`}
-          title={`Pago ${pedido.estadoPago.toLowerCase()} por ${pedido.metodoPago}`}
+          className={`text-[11px] ${
+            pago.tono === 'marca' ? 'text-marca-400' : pago.tono === 'aviso' ? 'text-aviso' : 'text-tinta-tenue'
+          }`}
         >
-          {pedido.metodoPago} · {pedido.estadoPago}
+          {pago.texto}
         </span>
         <span className="font-semibold tabular-nums text-tinta">
           {formatearBs(pedido.total)}

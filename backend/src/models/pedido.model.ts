@@ -1,6 +1,7 @@
 import { prisma } from '../config/prisma.js';
 import { recorte, rangoDeFechas, type DatosPaginacion } from '../dtos/paginacion.dto.js';
 import type { ClientePrisma } from './stock.model.js';
+import type { MotivoCancelacion } from '../config/dominio.js';
 
 /** Capa Model — clases de análisis tblPedido, tblDetallePedido y tblUbicacion. */
 
@@ -95,8 +96,17 @@ export const buscarDeCliente = (idPedido: number, idCliente: number, tx: Cliente
     include: PEDIDO_COMPLETO,
   });
 
-export const cambiarEstado = (tx: ClientePrisma, idPedido: number, estado: string) =>
-  tx.pedido.update({ where: { id_pedido: idPedido }, data: { estado_pedido: estado } });
+/** `motivo` se guarda solo al cancelar: dice por qué, que el estado no dice. */
+export const cambiarEstado = (
+  tx: ClientePrisma,
+  idPedido: number,
+  estado: string,
+  motivo: MotivoCancelacion | null = null,
+) =>
+  tx.pedido.update({
+    where: { id_pedido: idPedido },
+    data: { estado_pedido: estado, ...(motivo ? { motivo_cancelacion: motivo } : {}) },
+  });
 
 /** Identificador de la transacción del lado de la pasarela, para reclamos. */
 export const registrarReferenciaPago = (idPedido: number, referencia: string | null) =>
@@ -234,10 +244,15 @@ export const actualizarEstado = (
   estado: string,
   fechaEntrega: Date | null,
   tx: ClientePrisma = prisma,
+  motivo: MotivoCancelacion | null = null,
 ) =>
   tx.pedido.update({
     where: { id_pedido: idPedido },
-    data: { estado_pedido: estado, ...(fechaEntrega ? { fecha_entrega: fechaEntrega } : {}) },
+    data: {
+      estado_pedido: estado,
+      ...(fechaEntrega ? { fecha_entrega: fechaEntrega } : {}),
+      ...(motivo ? { motivo_cancelacion: motivo } : {}),
+    },
   });
 
 export const asignarRepartidor = (idPedido: number, idRepartidor: number) =>

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import request from 'supertest';
 import { app } from '../src/app.js';
 import {
@@ -8,6 +8,7 @@ import {
   crearPedido,
   buscarProducto,
 } from './ayudantes.js';
+import { MensajeroSimulado, reiniciarMensajero } from '../src/correo/index.js';
 
 /**
  * CU-PED-02 — Gestionar Pedido, lado del empleado.
@@ -481,5 +482,99 @@ describe('CU-PED-02 · Cerrar la entrega', () => {
 
     expect(r.body.cobro.estado).toBe('Pendiente');
     expect(r.body.estadoPago).toBe('Pendiente');
+  });
+});
+
+/*
+ * Lo que encontró el recorrido de un pedido en efectivo: "Cancelado" a secas
+ * no decía si lo anuló el cliente o si el repartidor no pudo entregarlo, y al
+ * cliente le llegaba "Su pedido fue cancelado" por algo que él no hizo.
+ */
+describe('CU-PED-02 · Por qué se canceló y qué se le dice al cliente', () => {
+  /** Espera a que llegue un aviso cuyo asunto contenga el texto, sin adivinar un plazo. */
+  const esperarAviso = (texto: string) =>
+    vi.waitFor(() =>
+      expect(MensajeroSimulado.enviados.some((m) => m.asunto.includes(texto))).toBe(true),
+    );
+
+  beforeEach(() => reiniciarMensajero());
+
+  async function enCamino() {
+    const staff = await obtenerToken();
+    const cliente = await registrarCliente();
+    const idPedido = await crearPedido(cliente.token, 'Jugo verde');
+    const repartidor = await crearEmpleado('Repartidor');
+    for (const paso of [
+      () => request(app).patch(`/api/gestion/pedidos/${idPedido}/estado`).set(cabecera(staff)).send({ estado: 'En preparacion' }),
+      () => request(app).put(`/api/gestion/pedidos/${idPedido}/repartidor`).set(cabecera(staff)).send({ idRepartidor: repartidor.id }),
+      () => request(app).patch(`/api/gestion/pedidos/${idPedido}/estado`).set(cabecera(staff)).send({ estado: 'En camino' }),
+    ]) {
+      await paso().expect(200);
+    }
+    return { cliente, idPedido, repartidor };
+  }
+
+  const detalle = (token: string, idPedido: number) =>
+    request(app).get(`/api/pedidos/${idPedido}`).set(cabecera(token));
+
+  it('un pedido no entregado lo dice así, y no como una cancelación del cliente', async () => {
+    const { cliente, idPedido, repartidor } = await enCamino();
+    reiniciarMensajero();
+
+    await request(app)
+      .patch(`/api/gestion/pedidos/${idPedido}/estado`)
+      .set(cabecera(repartidor.token))
+      .send({ estado: 'Cancelado' })
+      .expect(200);
+    await esperarAviso('No pudimos entregar');
+
+    expect((await detalle(cliente.token, idPedido)).body.motivoCancelacion).toBe('No entregado');
+
+    const aviso = MensajeroSimulado.enviados[0];
+    expect(aviso.asunto).toContain('No pudimos entregar su pedido');
+    // En efectivo no hubo cobro: no se le habla de reembolsos.
+    expect(aviso.texto).toContain('No se le cobró nada');
+    expect(aviso.texto).not.toContain('reembolso');
+  });
+
+  it('un pedido que cancela el cliente guarda que fue él', async () => {
+    const cliente = await registrarCliente();
+    const idPedido = await crearPedido(cliente.token, 'Jugo verde');
+
+    await request(app)
+      .post(`/api/pedidos/${idPedido}/cancelar`)
+      .set(cabecera(cliente.token))
+      .expect(200);
+
+    expect((await detalle(cliente.token, idPedido)).body.motivoCancelacion).toBe('Cliente');
+  });
+
+  it('un pedido que sigue su curso no tiene motivo de cancelación', async () => {
+    const cliente = await registrarCliente();
+    const idPedido = await crearPedido(cliente.token, 'Jugo verde');
+
+    expect((await detalle(cliente.token, idPedido)).body.motivoCancelacion).toBeNull();
+  });
+
+  it('en efectivo, el aviso de salida recuerda cuánto tener listo y el de entrega, cuánto pagó', async () => {
+    const { idPedido, repartidor } = await enCamino();
+    await esperarAviso('en camino');
+
+    const enCaminoAviso = MensajeroSimulado.enviados.find((m) => m.asunto.includes('en camino'))!;
+    expect(enCaminoAviso.texto).toMatch(/Tenga listos Bs [\d.,]+ para pagarle al repartidor/);
+
+    reiniciarMensajero();
+    await request(app)
+      .patch(`/api/gestion/pedidos/${idPedido}/estado`)
+      .set(cabecera(repartidor.token))
+      .send({ estado: 'Entregado' })
+      .expect(200);
+    await esperarAviso('entregado');
+
+    const entrega = MensajeroSimulado.enviados[0];
+    expect(entrega.asunto).toContain('entregado');
+    expect(entrega.texto).toMatch(/Pagó Bs [\d.,]+ en efectivo/);
+    // Antes decía "figura como entregado", que suena a duda.
+    expect(entrega.texto).not.toContain('figura como');
   });
 });

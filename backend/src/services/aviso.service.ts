@@ -34,38 +34,78 @@ function plantilla(titulo: string, cuerpo: string, pie?: string): string {
 </body></html>`;
 }
 
-/** Cómo se le explica cada estado a quien espera su pedido. */
-const AVISO_POR_ESTADO: Partial<Record<EstadoPedido, { asunto: string; cuerpo: string }>> = {
-  'En preparacion': {
-    asunto: 'Estamos preparando su pedido',
-    cuerpo: 'Su pedido entró a la cocina. Le avisamos de nuevo cuando salga para su dirección.',
-  },
-  'En camino': {
-    asunto: 'Su pedido va en camino',
-    cuerpo: 'Su pedido salió y está en camino a la dirección que indicó. Ya falta poco.',
-  },
-  Entregado: {
-    asunto: 'Su pedido fue entregado',
-    cuerpo: 'Su pedido figura como entregado. Gracias por elegirnos.',
-  },
-  Cancelado: {
-    asunto: 'Su pedido fue cancelado',
-    cuerpo:
-      'Su pedido quedó cancelado. Si había pagado en línea, el reembolso se gestiona por separado.',
-  },
-};
-
 export interface DatosPedidoAviso {
   id: number;
   correoCliente: string;
   nombreCliente: string;
   total: number;
+  /** Cambia lo que hay que decirle: en efectivo, cuánto tener listo y si se cobró. */
+  metodoPago: string;
+  /** Si el dinero ya se cobró: en línea al confirmar, en efectivo al entregar. */
+  pagado: boolean;
 }
 
 const numeroDe = (id: number) => `#${String(id).padStart(5, '0')}`;
 
 const bolivianos = (monto: number) =>
   `Bs ${monto.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+/**
+ * Cómo se le explica cada estado a quien espera su pedido.
+ *
+ * Es una función y no una tabla fija porque el mensaje depende de cómo paga:
+ * a quien paga en efectivo hay que recordarle cuánto tener listo, y a quien no
+ * se le pudo entregar hay que decirle si se le cobró algo.
+ */
+function avisoDeEstado(
+  estado: EstadoPedido,
+  datos: DatosPedidoAviso,
+): { asunto: string; cuerpo: string } | null {
+  const efectivo = datos.metodoPago === 'Efectivo';
+
+  switch (estado) {
+    case 'En preparacion':
+      return {
+        asunto: 'Estamos preparando su pedido',
+        cuerpo: 'Su pedido entró a la cocina. Le avisamos de nuevo cuando salga para su dirección.',
+      };
+    case 'En camino':
+      return {
+        asunto: 'Su pedido va en camino',
+        cuerpo:
+          'Su pedido salió y está en camino a la dirección que indicó. Ya falta poco.' +
+          (efectivo && !datos.pagado
+            ? ` Tenga listos ${bolivianos(datos.total)} para pagarle al repartidor.`
+            : ''),
+      };
+    case 'Entregado':
+      return {
+        asunto: 'Su pedido fue entregado',
+        cuerpo:
+          '¡Buen provecho! Gracias por elegirnos.' +
+          (efectivo ? ` Pagó ${bolivianos(datos.total)} en efectivo al recibirlo.` : ''),
+      };
+    /*
+     * Desde el tablero, un pedido solo se cancela cuando el repartidor no pudo
+     * entregarlo. Antes llegaba como "Su pedido fue cancelado", y quien lo
+     * esperaba entendía que alguien lo había anulado —quizá él mismo por error—
+     * en vez de saber que el repartidor fue y no pudo dejarlo.
+     */
+    case 'Cancelado':
+      return {
+        asunto: 'No pudimos entregar su pedido',
+        cuerpo:
+          'Nuestro repartidor fue a la dirección que indicó y no pudo entregar el pedido, ' +
+          'así que quedó cancelado. ' +
+          (datos.pagado
+            ? 'Como ya lo había pagado en línea, el reembolso se gestiona por separado. '
+            : 'No se le cobró nada. ') +
+          'Puede volver a pedirlo desde el portal cuando quiera.',
+      };
+    default:
+      return null;
+  }
+}
 
 /**
  * Avisa que el pedido quedó registrado.
@@ -75,6 +115,7 @@ const bolivianos = (monto: number) =>
  */
 export async function pedidoConfirmado(datos: DatosPedidoAviso): Promise<void> {
   const numero = numeroDe(datos.id);
+  const efectivo = datos.metodoPago === 'Efectivo';
 
   await mensajero().enviar({
     // Un aviso de pedido es personal: un solo destinatario.
@@ -83,11 +124,13 @@ export async function pedidoConfirmado(datos: DatosPedidoAviso): Promise<void> {
     texto:
       `Hola ${datos.nombreCliente}:\n\n` +
       `Recibimos su pedido ${numero} por ${bolivianos(datos.total)}.\n` +
+      (efectivo ? `Lo paga en efectivo al recibirlo: tenga listos ${bolivianos(datos.total)}.\n` : '') +
       'Le vamos a avisar cuando entre a la cocina y cuando salga para su dirección.\n\n' +
       `${NOMBRE}`,
     html: plantilla(
       `Recibimos su pedido ${numero}`,
       `<p>Hola ${datos.nombreCliente}, su pedido por <strong>${bolivianos(datos.total)}</strong> quedó registrado.</p>
+       ${efectivo ? `<p>Lo paga <strong>en efectivo al recibirlo</strong>: tenga listos ${bolivianos(datos.total)}.</p>` : ''}
        <p>Le avisamos cuando entre a la cocina y cuando salga para su dirección.</p>`,
       'Este es un aviso automático; no hace falta responderlo.',
     ),
@@ -104,7 +147,7 @@ export async function estadoDePedidoCambio(
   datos: DatosPedidoAviso,
   estado: EstadoPedido,
 ): Promise<void> {
-  const aviso = AVISO_POR_ESTADO[estado];
+  const aviso = avisoDeEstado(estado, datos);
   if (!aviso) return;
 
   const numero = numeroDe(datos.id);

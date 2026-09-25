@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowRight, Bike, ExternalLink, MapPin, Phone, User } from 'lucide-react';
 import { PanelLateral } from '@/components/ui/Dialogo';
 import { Boton } from '@/components/ui/Boton';
@@ -16,10 +15,10 @@ import { useAuth } from '@/context/AuthContext';
 import {
   ACCION_HACIA,
   ETIQUETA_ESTADO,
-  TONO_ESTADO,
   formatearBs,
   formatearFecha,
   separarTransiciones,
+  textoDePago,
 } from '@/lib/pedidos';
 
 /**
@@ -49,14 +48,18 @@ export function PanelPedido({
   const { sesion, tienePermiso } = useAuth();
   const [enCurso, setEnCurso] = useState<string | null>(null);
   const [elegido, setElegido] = useState<number | null>(null);
+  /** Con repartidor ya asignado, el selector se abre solo si se pide cambiarlo. */
+  const [cambiandoRepartidor, setCambiandoRepartidor] = useState(false);
 
   useEffect(() => {
     setElegido(pedido?.repartidor?.id ?? null);
+    setCambiandoRepartidor(false);
   }, [pedido?.id, pedido?.repartidor?.id]);
 
   if (!pedido) return null;
 
   const { avance: siguiente, salidas } = separarTransiciones(pedido.transicionesPosibles);
+  const pago = textoDePago(pedido, 'personal');
   const necesitaRepartidor = siguiente === 'En camino' && !pedido.repartidor;
 
   /**
@@ -145,10 +148,44 @@ export function PanelPedido({
         )
       }
     >
+      {/*
+        Orden por tarea: primero qué se pidió —es lo que la cocina prepara—,
+        después a quién y a dónde, y al final quién lo lleva. Antes lo que había
+        que cocinar quedaba al fondo, debajo del bloque de reparto.
+      */}
       <div className="space-y-7">
         <section>
           <Titulo>Seguimiento</Titulo>
-          <LineaDeTiempo estado={pedido.estadoPedido} />
+          <LineaDeTiempo pedido={pedido} para="personal" />
+        </section>
+
+        <section>
+          <Titulo>Qué se pidió</Titulo>
+          <ul className="divide-y divide-borde overflow-hidden rounded-xl border border-borde">
+            {pedido.items.map((item) => (
+              <li
+                key={item.idProducto}
+                className="flex items-center justify-between gap-3 bg-superficie-alta/40 px-3.5 py-3"
+              >
+                <p className="min-w-0 truncate text-sm text-tinta">
+                  <span className="tabular-nums text-tinta-tenue">{item.cantidad}×</span> {item.nombre}
+                </p>
+                <span className="shrink-0 text-sm tabular-nums text-tinta-suave">
+                  {formatearBs(item.subtotal)}
+                </span>
+              </li>
+            ))}
+          </ul>
+
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl bg-marca-500/8 px-3.5 py-3">
+            <Insignia tono={pago.tono}>{pago.texto}</Insignia>
+            <span className="text-lg font-semibold tabular-nums text-marca-300">
+              {formatearBs(pedido.total)}
+            </span>
+          </div>
+          {pedido.referenciaPago && (
+            <p className="mt-2 text-[11px] text-tinta-tenue">Ref. de pago {pedido.referenciaPago}</p>
+          )}
         </section>
 
         <section className="grid gap-2.5">
@@ -174,9 +211,7 @@ export function PanelPedido({
           />
 
           {/* El mapa solo aparece si el cliente marcó el punto: un mapa
-              centrado en la ciudad no dice nada y ocuparía media pantalla.
-              El enlace externo sigue ahí porque es el que abre la navegación
-              paso a paso en el teléfono del repartidor. */}
+              centrado en la ciudad no dice nada y ocuparía media pantalla. */}
           {puntoEntrega && (
             <MapaUbicacion valor={puntoEntrega} altura="h-64 sm:h-72" className="mt-1" />
           )}
@@ -186,99 +221,83 @@ export function PanelPedido({
           <section>
             <Titulo>Repartidor</Titulo>
 
-            {/* RF-PED-07: el sistema propone al de turno con menos entregas.
-                No asigna: quien gestiona puede saber algo que el sistema no,
-                como que alguien ya sale para esa zona. */}
-            <SugerenciaReparto
-              idPedido={pedido.id}
-              onAceptar={(id) => {
-                setElegido(id);
-                return ejecutar('repartidor', () => onAsignar(id));
-              }}
-            />
+            {/*
+              Con el reparto automático casi todos los pedidos llegan ya
+              asignados. Antes el panel mostraba igual la sugerencia con su
+              botón "Asignar", el selector y, al final, "Asignado a…": tres
+              bloques para decir lo mismo, que invitaban a pensar que faltaba
+              asignarlo. Ahora se dice en una línea, y cambiarlo es una acción
+              explícita.
+            */}
+            {pedido.repartidor && !cambiandoRepartidor ? (
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-borde px-3.5 py-3">
+                <span className="flex min-w-0 items-center gap-2 text-sm text-tinta">
+                  <Bike className="size-4 shrink-0 text-marca-400" aria-hidden />
+                  <span className="truncate">{pedido.repartidor.nombreCompleto}</span>
+                </span>
+                <Boton variante="fantasma" tamano="sm" onClick={() => setCambiandoRepartidor(true)}>
+                  Cambiar
+                </Boton>
+              </div>
+            ) : (
+              <>
+                {!pedido.repartidor && (
+                  // RF-PED-07: el sistema propone al de turno con menos entregas.
+                  <SugerenciaReparto
+                    idPedido={pedido.id}
+                    onAceptar={(id) => {
+                      setElegido(id);
+                      return ejecutar('repartidor', () => onAsignar(id));
+                    }}
+                  />
+                )}
 
-            <div className="mt-3 flex flex-col gap-2.5 sm:flex-row sm:items-end">
-              <Selector
-                etiqueta="O elija a otro"
-                className="flex-1"
-                valor={elegido}
-                marcador={repartidores.length ? 'Sin asignar' : 'No hay repartidores'}
-                deshabilitado={repartidores.length === 0}
-                opciones={repartidores.map((r) => ({
-                  valor: r.id,
-                  etiqueta: r.nombreCompleto,
-                  // La carga y el turno se ven al elegir: es lo que permite
-                  // apartarse de la sugerencia con criterio.
-                  descripcion: `${r.entregasEnCurso} en curso · ${r.disponible ? 'de turno' : 'de franco'}`,
-                }))}
-                onCambiar={setElegido}
-              />
-              <Boton
-                variante="contorno"
-                className="h-12 shrink-0"
-                icono={<Bike className="size-4" aria-hidden />}
-                cargando={enCurso === 'repartidor'}
-                disabled={elegido === null || elegido === pedido.repartidor?.id}
-                onClick={() => elegido !== null && ejecutar('repartidor', () => onAsignar(elegido))}
-              >
-                Asignar
-              </Boton>
-            </div>
-            <AnimatePresence>
-              {pedido.repartidor && (
-                <motion.p
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="mt-2 text-xs text-marca-400"
-                >
-                  Asignado a {pedido.repartidor.nombreCompleto}
-                </motion.p>
-              )}
-            </AnimatePresence>
+                <div className="mt-3 flex flex-col gap-2.5 sm:flex-row sm:items-end">
+                  <Selector
+                    etiqueta={pedido.repartidor ? 'Nuevo repartidor' : 'O elija a otro'}
+                    className="flex-1"
+                    valor={elegido}
+                    marcador={repartidores.length ? 'Sin asignar' : 'No hay repartidores'}
+                    deshabilitado={repartidores.length === 0}
+                    opciones={repartidores.map((r) => ({
+                      valor: r.id,
+                      etiqueta: r.nombreCompleto,
+                      // La carga y el turno se ven al elegir: es lo que permite
+                      // apartarse de la sugerencia con criterio.
+                      descripcion: `${r.entregasEnCurso} en curso · ${r.disponible ? 'de turno' : 'de franco'}`,
+                    }))}
+                    onCambiar={setElegido}
+                  />
+                  <Boton
+                    variante="contorno"
+                    className="h-12 shrink-0"
+                    icono={<Bike className="size-4" aria-hidden />}
+                    cargando={enCurso === 'repartidor'}
+                    disabled={elegido === null || elegido === pedido.repartidor?.id}
+                    onClick={() =>
+                      elegido !== null &&
+                      ejecutar('repartidor', async () => {
+                        await onAsignar(elegido);
+                        setCambiandoRepartidor(false);
+                      })
+                    }
+                  >
+                    Asignar
+                  </Boton>
+                </div>
+                {pedido.repartidor && (
+                  <button
+                    type="button"
+                    onClick={() => setCambiandoRepartidor(false)}
+                    className="mt-2 text-xs text-tinta-tenue hover:text-tinta"
+                  >
+                    Mantener a {pedido.repartidor.nombreCompleto}
+                  </button>
+                )}
+              </>
+            )}
           </section>
         )}
-
-        <section>
-          <Titulo>Detalle</Titulo>
-          <ul className="divide-y divide-borde overflow-hidden rounded-xl border border-borde">
-            {pedido.items.map((item) => (
-              <li
-                key={item.idProducto}
-                className="flex items-center justify-between gap-3 bg-superficie-alta/40 px-3.5 py-3"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm text-tinta">{item.nombre}</p>
-                  <p className="mt-0.5 text-xs text-tinta-tenue tabular-nums">
-                    {item.cantidad} × {formatearBs(item.precioUnitario)}
-                  </p>
-                </div>
-                <span className="shrink-0 text-sm tabular-nums text-tinta">
-                  {formatearBs(item.subtotal)}
-                </span>
-              </li>
-            ))}
-          </ul>
-
-          <div className="mt-3 flex items-center justify-between rounded-xl bg-marca-500/8 px-3.5 py-3">
-            <span className="text-sm text-tinta-suave">Total</span>
-            <span className="text-lg font-semibold tabular-nums text-marca-300">
-              {formatearBs(pedido.total)}
-            </span>
-          </div>
-
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <Insignia tono={pedido.estadoPago === 'Pagado' ? 'marca' : 'aviso'}>
-              Pago {pedido.estadoPago.toLowerCase()} · {pedido.metodoPago}
-            </Insignia>
-            {pedido.referenciaPago && (
-              <Insignia tono="neutro">Ref. {pedido.referenciaPago}</Insignia>
-            )}
-            <Insignia tono={TONO_ESTADO[pedido.estadoPedido]}>
-              {ETIQUETA_ESTADO[pedido.estadoPedido]}
-            </Insignia>
-          </div>
-        </section>
       </div>
     </PanelLateral>
   );

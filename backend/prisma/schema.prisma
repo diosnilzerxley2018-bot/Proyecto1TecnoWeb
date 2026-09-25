@@ -228,22 +228,23 @@ model orden_produccion {
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model pedido {
-  id_pedido       Int              @id @default(autoincrement())
-  fecha           DateTime         @default(now()) @db.Timestamp(6)
-  estado_pedido   String           @default("Recibido") @db.VarChar(20)
-  estado_pago     String           @default("Pendiente") @db.VarChar(20)
-  metodo_pago     String           @db.VarChar(20)
-  referencia_pago String?          @db.VarChar(100)
-  total           Decimal          @db.Decimal(12, 2)
-  fecha_entrega   DateTime?        @db.Timestamp(6)
-  id_cliente      Int
-  id_ubicacion    Int
-  id_repartidor   Int?
-  detalle_pedido  detalle_pedido[]
-  pago            pago[]
-  cliente         cliente          @relation(fields: [id_cliente], references: [id_cliente], onDelete: NoAction, onUpdate: NoAction, map: "fk_pedido_cliente")
-  empleado        empleado?        @relation(fields: [id_repartidor], references: [id_empleado], onDelete: NoAction, onUpdate: NoAction, map: "fk_pedido_repartidor")
-  ubicacion       ubicacion        @relation(fields: [id_ubicacion], references: [id_ubicacion], onDelete: NoAction, onUpdate: NoAction, map: "fk_pedido_ubicacion")
+  id_pedido          Int              @id @default(autoincrement())
+  fecha              DateTime         @default(now()) @db.Timestamp(6)
+  estado_pedido      String           @default("Recibido") @db.VarChar(20)
+  estado_pago        String           @default("Pendiente") @db.VarChar(20)
+  metodo_pago        String           @db.VarChar(20)
+  referencia_pago    String?          @db.VarChar(100)
+  total              Decimal          @db.Decimal(12, 2)
+  fecha_entrega      DateTime?        @db.Timestamp(6)
+  id_cliente         Int
+  id_ubicacion       Int
+  id_repartidor      Int?
+  motivo_cancelacion String?          @db.VarChar(20)
+  detalle_pedido     detalle_pedido[]
+  pago               pago[]
+  cliente            cliente          @relation(fields: [id_cliente], references: [id_cliente], onDelete: NoAction, onUpdate: NoAction, map: "fk_pedido_cliente")
+  empleado           empleado?        @relation(fields: [id_repartidor], references: [id_empleado], onDelete: NoAction, onUpdate: NoAction, map: "fk_pedido_repartidor")
+  ubicacion          ubicacion        @relation(fields: [id_ubicacion], references: [id_ubicacion], onDelete: NoAction, onUpdate: NoAction, map: "fk_pedido_ubicacion")
 }
 
 model permiso {

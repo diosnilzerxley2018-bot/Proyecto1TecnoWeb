@@ -8,6 +8,9 @@
 /** Rol que identifica a un actor externo del portal de pedidos. */
 export const ROL_CLIENTE = 'Cliente';
 
+/** Único cargo que reparte pedidos; su pantalla de trabajo es "Mis entregas". */
+export const CARGO_REPARTIDOR = 'Repartidor';
+
 /** Un usuario es personal interno cuando su rol no es el de cliente. */
 export function esPersonalInterno(nombreRol: string): boolean {
   return nombreRol !== ROL_CLIENTE;

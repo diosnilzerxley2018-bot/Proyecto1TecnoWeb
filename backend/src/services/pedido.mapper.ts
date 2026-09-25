@@ -6,7 +6,7 @@ import type {
   PedidoDetalleDTO,
   PedidoResumenDTO,
 } from '../dtos/pedido.dto.js';
-import { esCancelable } from '../config/dominio.js';
+import { esCancelable, type MotivoCancelacion } from '../config/dominio.js';
 
 /**
  * Traducción de fila de base de datos a DTO, compartida por los dos servicios
@@ -43,6 +43,7 @@ function aResumenDTO(pedido: PedidoConDetalle): PedidoResumenDTO {
     total: Number(pedido.total),
     fechaEntrega: pedido.fecha_entrega?.toISOString() ?? null,
     cancelable: esCancelable(estado),
+    motivoCancelacion: (pedido.motivo_cancelacion as MotivoCancelacion | null) ?? null,
   };
 }
 

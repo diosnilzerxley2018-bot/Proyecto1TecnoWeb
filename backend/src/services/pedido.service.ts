@@ -176,6 +176,8 @@ export async function confirmar(
         correoCliente: titular.email,
         nombreCliente: titular.nombre,
         total: pedido.total,
+        metodoPago: pedido.metodoPago,
+        pagado: pedido.estadoPago === 'Pagado',
       }),
     );
   }
@@ -262,7 +264,7 @@ export async function cancelar(idUsuario: number, idPedido: number): Promise<Ped
     }
 
     await reponerAsignaciones(asignacionesDelPedido(pedido), tx);
-    await pedidoModel.cambiarEstado(tx, idPedido, 'Cancelado');
+    await pedidoModel.cambiarEstado(tx, idPedido, 'Cancelado', 'Cliente');
   });
 
   return detalle(idUsuario, idPedido);

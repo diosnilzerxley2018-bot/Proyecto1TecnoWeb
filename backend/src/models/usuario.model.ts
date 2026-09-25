@@ -6,7 +6,9 @@ import { recorte, type DatosPaginacion } from '../dtos/paginacion.dto.js';
 export const buscarPorNombreUsuario = (nombreUsuario: string) =>
   prisma.usuario.findUnique({
     where: { nombre_usuario: nombreUsuario },
-    include: { rol: true },
+    // El cargo viaja en la sesión: decide qué pantallas de trabajo ve cada
+    // empleado (a un cocinero no se le ofrece "Mis entregas").
+    include: { rol: true, empleado: { include: { cargo: true } } },
   });
 
 export const buscarPorId = (id: number) =>

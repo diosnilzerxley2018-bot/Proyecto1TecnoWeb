@@ -7,10 +7,11 @@ import {
   METODOS_PAGO,
   type EstadoPedido,
   type MetodoPago,
+  type MotivoCancelacion,
 } from '../config/dominio.js';
 
 /** El vocabulario del pedido vive en la capa de dominio; aquí solo se usa. */
-export type { EstadoPedido, MetodoPago };
+export type { EstadoPedido, MetodoPago, MotivoCancelacion };
 
 /**
  * CU-PED-03 — Gestionar Ubicación.
@@ -72,6 +73,8 @@ export interface PedidoResumenDTO {
   total: number;
   fechaEntrega: string | null;
   cancelable: boolean;
+  /** Solo en los cancelados; nulo también en los cancelados antes de guardarlo. */
+  motivoCancelacion: MotivoCancelacion | null;
 }
 
 export interface PedidoDetalleDTO extends PedidoResumenDTO {

@@ -12,7 +12,7 @@ import { cn } from '@/lib/cn';
 
 export default function PaginaInicio() {
   const { sesion, tienePermiso } = useAuth();
-  const modulos = modulosAccesibles(tienePermiso);
+  const modulos = modulosAccesibles(tienePermiso, sesion?.usuario.cargo);
   const cantidadPermisos = sesion?.permisos.length ?? 0;
 
   return (

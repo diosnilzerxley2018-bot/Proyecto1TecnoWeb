@@ -27,13 +27,24 @@ export function BarraLateral() {
 
   return (
     <>
-      <button
-        onClick={() => setAbierta(true)}
-        aria-label="Abrir menú"
-        className="fixed left-4 top-4 z-50 grid size-10 place-items-center rounded-xl vidrio text-tinta lg:hidden"
-      >
-        <Menu className="size-5" aria-hidden />
-      </button>
+      {/*
+        En el celular, una barra con fondo y no un botón suelto: el botón
+        flotante quedaba encima del contenido al hacer scroll y tapaba títulos
+        y direcciones, justo en la pantalla que el repartidor usa en la calle.
+      */}
+      <div className="fixed inset-x-0 top-0 z-50 flex h-14 items-center gap-3 border-b border-borde bg-superficie/90 px-4 backdrop-blur-xl lg:hidden">
+        <button
+          onClick={() => setAbierta(true)}
+          aria-label="Abrir menú"
+          className="grid size-10 place-items-center rounded-xl text-tinta transition-colors hover:bg-white/5"
+        >
+          <Menu className="size-5" aria-hidden />
+        </button>
+        <span className="flex items-center gap-2 text-sm font-medium text-tinta">
+          <Sprout className="size-4 text-marca-400" aria-hidden />
+          NutriExpress
+        </span>
+      </div>
 
       <aside className="hidden w-64 shrink-0 lg:block">
         <div className="fixed flex h-screen w-64 flex-col border-r border-borde bg-superficie/70 backdrop-blur-xl">
@@ -76,7 +87,7 @@ export function BarraLateral() {
 
 function Contenido({ rutaActual }: { rutaActual: string }) {
   const { sesion, cerrarSesion, tienePermiso } = useAuth();
-  const modulos = modulosAccesibles(tienePermiso);
+  const modulos = modulosAccesibles(tienePermiso, sesion?.usuario.cargo);
 
   const iniciales = `${sesion?.usuario.nombre?.[0] ?? ''}${sesion?.usuario.apellido?.[0] ?? ''}`;
 

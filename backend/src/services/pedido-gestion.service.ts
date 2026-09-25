@@ -334,7 +334,15 @@ export async function avanzarEstado(
    * comida descontada que nadie recibió.
    */
   await prisma.$transaction(async (tx: ClientePrisma) => {
-    await pedidoModel.actualizarEstado(idPedido, destino, fechaEntrega, tx);
+    // Desde el tablero, "Cancelado" solo se alcanza desde En camino: es el
+    // repartidor diciendo que no pudo entregarlo.
+    await pedidoModel.actualizarEstado(
+      idPedido,
+      destino,
+      fechaEntrega,
+      tx,
+      destino === 'Cancelado' ? 'No entregado' : null,
+    );
 
     if (destino === 'Entregado') {
       await pagoService.cerrarCobroDePedidoEnTransaccion(
@@ -378,6 +386,9 @@ export async function avanzarEstado(
         correoCliente: pedido.cliente.usuario.email,
         nombreCliente: pedido.cliente.usuario.nombre,
         total: Number(pedido.total),
+        metodoPago: pedido.metodo_pago,
+        // Entregar en efectivo es cobrar: tras este cambio ya está pagado.
+        pagado: pedido.estado_pago === 'Pagado' || destino === 'Entregado',
       },
       destino,
     ),

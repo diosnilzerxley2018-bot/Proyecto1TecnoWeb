@@ -515,7 +515,7 @@ async function resolverPedido(tx: ClientePrisma, idPedido: number, estado: Estad
       })),
       tx,
     );
-    await pedidoModel.cambiarEstado(tx, idPedido, 'Cancelado');
+    await pedidoModel.cambiarEstado(tx, idPedido, 'Cancelado', 'Sin pago');
   }
 }
 

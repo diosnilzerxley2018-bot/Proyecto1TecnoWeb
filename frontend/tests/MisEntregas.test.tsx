@@ -37,6 +37,12 @@ vi.mock('@/components/ui/Notificaciones', () => ({
   useNotificaciones: () => ({ notificar }),
 }));
 
+/** El cargo de quien mira; cada prueba puede cambiarlo. */
+let cargo: string | null | undefined = 'Repartidor';
+vi.mock('@/context/AuthContext', () => ({
+  useAuth: () => ({ sesion: { usuario: { id: 9, cargo } } }),
+}));
+
 const pedir = vi.mocked(api.get);
 const enviar = vi.mocked(api.put);
 
@@ -73,8 +79,15 @@ const enCamino = {
   transicionesPosibles: ['Entregado', 'Cancelado'],
 };
 
+/** Un pedido que la cocina está preparando: el repartidor sale con él. */
+const porSalir = { ...enCamino, id: 12, estadoPedido: 'En preparacion', transicionesPosibles: ['En camino'] };
+
+/** Uno que la cocina todavía no empezó. */
+const enCocina = { ...enCamino, id: 13, estadoPedido: 'Recibido', transicionesPosibles: ['En preparacion'] };
+
 beforeEach(() => {
   vi.clearAllMocks();
+  cargo = 'Repartidor';
 });
 
 describe('Mis entregas · turno', () => {
@@ -143,7 +156,19 @@ describe('Mis entregas · cerrar la entrega', () => {
     render(<PaginaEntregas />);
 
     expect(await screen.findByRole('button', { name: 'Registrar entrega' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'No se pudo entregar' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'No pude entregarlo' })).toBeInTheDocument();
+  });
+
+  /** Las dos salidas son definitivas: un roce con el pulgar no debe cerrar nada. */
+  it('no cierra la entrega sin confirmarla', async () => {
+    servidorCon(Promise.resolve({ disponible: true }), [enCamino]);
+    render(<PaginaEntregas />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Registrar entrega' }));
+    expect(api.patch).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Volver' }));
+    expect(api.patch).not.toHaveBeenCalled();
   });
 
   it('registrar la entrega la informa al servidor y recarga la lista', async () => {
@@ -152,23 +177,29 @@ describe('Mis entregas · cerrar la entrega', () => {
     render(<PaginaEntregas />);
 
     await userEvent.click(await screen.findByRole('button', { name: 'Registrar entrega' }));
+    // En efectivo, la confirmación es también el recordatorio de cobrar.
+    expect(screen.getByText(/Confirme que recibió Bs 44,10 en efectivo/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Sí, entregado y cobrado' }));
 
     expect(api.patch).toHaveBeenCalledWith('/gestion/pedidos/11/estado', { estado: 'Entregado' });
-    await waitFor(() => expect(notificar).toHaveBeenCalledWith('exito', 'Entrega registrada'));
+    await waitFor(() =>
+      expect(notificar).toHaveBeenCalledWith('exito', expect.stringContaining('entregado y cobrado')),
+    );
   });
 
-  it('si no había nadie, lo registra como no entregado y avisa que la comida vuelve', async () => {
+  it('si no había nadie, lo registra como no entregado y avisa que se notificó al cliente', async () => {
     servidorCon(Promise.resolve({ disponible: true }), [enCamino]);
     vi.mocked(api.patch).mockResolvedValue({} as never);
     render(<PaginaEntregas />);
 
-    await userEvent.click(await screen.findByRole('button', { name: 'No se pudo entregar' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'No pude entregarlo' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Sí, no se pudo entregar' }));
 
     expect(api.patch).toHaveBeenCalledWith('/gestion/pedidos/11/estado', { estado: 'Cancelado' });
     await waitFor(() =>
       expect(notificar).toHaveBeenCalledWith(
         'exito',
-        'Registrado como no entregado. La comida vuelve al inventario',
+        'Pedido #00011 registrado como no entregado. Se le avisó al cliente',
       ),
     );
   });
@@ -183,6 +214,7 @@ describe('Mis entregas · cerrar la entrega', () => {
     render(<PaginaEntregas />);
 
     await userEvent.click(await screen.findByRole('button', { name: 'Registrar entrega' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Sí, entregado y cobrado' }));
 
     await waitFor(() =>
       expect(notificar).toHaveBeenCalledWith(
@@ -190,6 +222,71 @@ describe('Mis entregas · cerrar la entrega', () => {
         'Solo el repartidor asignado puede cerrar esta entrega.',
       ),
     );
+  });
+});
+
+/**
+ * Lo que encontró el recorrido de un pedido en efectivo, de punta a punta.
+ */
+describe('Mis entregas · la pantalla sigue la tarea del repartidor', () => {
+  it('dice cuánto cobrar en un pedido en efectivo', async () => {
+    servidorCon(Promise.resolve({ disponible: true }), [enCamino]);
+    render(<PaginaEntregas />);
+
+    expect(await screen.findByText('Cobrar Bs 44,10 en efectivo')).toBeInTheDocument();
+  });
+
+  it('avisa que no hay que cobrar un pedido ya pagado en línea', async () => {
+    const pagadoConQr = { ...enCamino, metodoPago: 'QR', estadoPago: 'Pagado' };
+    servidorCon(Promise.resolve({ disponible: true }), [pagadoConQr]);
+    render(<PaginaEntregas />);
+
+    expect(await screen.findByText('Pagado con QR · no cobrar')).toBeInTheDocument();
+  });
+
+  /** El defecto: al marcar "en camino" se le decía "Registrado como no entregado". */
+  it('al salir con un pedido avisa que va en camino, no que no se entregó', async () => {
+    servidorCon(Promise.resolve({ disponible: true }), [porSalir]);
+    vi.mocked(api.patch).mockResolvedValue({} as never);
+    render(<PaginaEntregas />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Salgo con el pedido' }));
+
+    expect(api.patch).toHaveBeenCalledWith('/gestion/pedidos/12/estado', { estado: 'En camino' });
+    await waitFor(() =>
+      expect(notificar).toHaveBeenCalledWith('exito', expect.stringContaining('en camino')),
+    );
+    expect(notificar).not.toHaveBeenCalledWith('exito', expect.stringContaining('no entregado'));
+  });
+
+  it('un pedido todavía en cocina se ve, pero no le pide nada al repartidor', async () => {
+    servidorCon(Promise.resolve({ disponible: true }), [enCocina]);
+    render(<PaginaEntregas />);
+
+    expect(await screen.findByText('En cocina')).toBeInTheDocument();
+    // "Poner en preparación" es trabajo de la cocina, no del repartidor.
+    expect(screen.queryByRole('button', { name: /preparación/ })).toBeNull();
+  });
+
+  it('muestra primero lo que está en la calle', async () => {
+    servidorCon(Promise.resolve({ disponible: true }), [enCocina, porSalir, enCamino]);
+    render(<PaginaEntregas />);
+
+    const titulos = (await screen.findAllByRole('heading', { level: 2 })).map((h) => h.textContent);
+    expect(titulos.map((t) => t?.replace(/\d+$/, '').trim())).toEqual([
+      'En camino',
+      'Por salir',
+      'En cocina',
+    ]);
+  });
+
+  it('a quien no reparte le dice que no es su pantalla, sin consultar entregas', async () => {
+    cargo = 'Cocinero';
+    servidorCon(Promise.resolve({ disponible: true }), [enCamino]);
+    render(<PaginaEntregas />);
+
+    expect(await screen.findByText('Esta pantalla es para repartidores')).toBeInTheDocument();
+    expect(pedir).not.toHaveBeenCalled();
   });
 });
 

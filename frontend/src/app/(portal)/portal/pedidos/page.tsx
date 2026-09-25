@@ -16,7 +16,8 @@ import { LineaDeTiempo } from '@/components/pedidos/LineaDeTiempo';
 import { MapaUbicacion } from '@/components/pedidos/MapaUbicacion';
 import type { Coordenadas } from '@/lib/dominio';
 import type { Pago, PedidoCliente } from '@/types';
-import { ETIQUETA_ESTADO, TONO_ESTADO } from '@/lib/pedidos';
+import { ETIQUETA_ESTADO, TONO_ESTADO, textoDePago } from '@/lib/pedidos';
+import { usarRefrescoPeriodico } from '@/components/ui/usarRefrescoPeriodico';
 import { formatearBs, formatearFecha } from '@/lib/formato';
 
 /** CU-PED-02 — consulta y cancelación de los pedidos propios. */
@@ -43,6 +44,16 @@ export default function PaginaMisPedidos() {
   useEffect(() => {
     void cargar();
   }, [cargar]);
+
+  /*
+   * El seguimiento se actualiza solo mientras haya algún pedido en curso.
+   * Antes el cliente tenía que recargar la página para ver que su pedido había
+   * salido; con todos entregados o cancelados no hay nada que vigilar.
+   */
+  const hayEnCurso = pedidos.some(
+    (p) => p.estadoPedido !== 'Entregado' && p.estadoPedido !== 'Cancelado',
+  );
+  usarRefrescoPeriodico(cargar, 20_000, hayEnCurso);
 
   /**
    * Retoma un pago que quedó a medias.
@@ -75,7 +86,9 @@ export default function PaginaMisPedidos() {
       setPedidos((actuales) =>
         actuales.map((p) => (p.id === actualizado.id ? actualizado : p)),
       );
-      notificar('exito', 'Pedido cancelado. El stock fue devuelto al inventario');
+      // Al cliente no le dice nada "el stock volvió al inventario": eso es
+      // asunto del local. Lo que le importa es que quedó cancelado y sin cobro.
+      notificar('exito', `Pedido #${String(actualizado.id).padStart(5, '0')} cancelado`);
       setPorCancelar(null);
     } catch (e) {
       notificar('error', e instanceof ErrorApi ? e.message : 'No se pudo cancelar el pedido');
@@ -136,8 +149,10 @@ export default function PaginaMisPedidos() {
           <span className="text-tinta">#{String(porCancelar?.id).padStart(5, '0')}</span>?
         </p>
         <p className="mt-2 text-xs text-tinta-tenue">
-          Solo puede cancelarse mientras el pedido no haya salido a reparto. Los productos vuelven
-          al inventario automáticamente.
+          {porCancelar?.estadoPago === 'Pagado'
+            ? 'Como ya lo pagó en línea, el reembolso se gestiona aparte.'
+            : 'No se le cobrará nada.'}{' '}
+          Un pedido puede cancelarse mientras no haya salido a reparto.
         </p>
         <div className="mt-6 flex justify-end gap-2">
           <Boton variante="fantasma" onClick={() => setPorCancelar(null)}>
@@ -179,6 +194,7 @@ function TarjetaPedidoCliente({
 
   /** Único estado en el que queda dinero por cobrar en línea. */
   const esperaPago = pedido.estadoPedido === 'Pendiente de pago';
+  const pago = textoDePago(pedido, 'cliente');
 
   const puntoEntrega: Coordenadas | null =
     pedido.ubicacion.latitud !== null && pedido.ubicacion.longitud !== null
@@ -237,7 +253,7 @@ function TarjetaPedidoCliente({
             className="overflow-hidden border-t border-borde"
           >
             <div className="space-y-5 px-5 py-5">
-              <LineaDeTiempo estado={pedido.estadoPedido} />
+              <LineaDeTiempo pedido={pedido} para="cliente" />
 
               <div className="space-y-2.5">
                 <div className="flex items-start gap-2.5 text-xs text-tinta-suave">
@@ -272,9 +288,7 @@ function TarjetaPedidoCliente({
 
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap gap-2">
-                  <Insignia tono={pedido.estadoPago === 'Pagado' ? 'marca' : 'aviso'}>
-                    Pago {pedido.estadoPago.toLowerCase()} · {pedido.metodoPago}
-                  </Insignia>
+                  <Insignia tono={pago.tono}>{pago.texto}</Insignia>
                   {pedido.referenciaPago && (
                     <Insignia tono="neutro">Ref. {pedido.referenciaPago}</Insignia>
                   )}

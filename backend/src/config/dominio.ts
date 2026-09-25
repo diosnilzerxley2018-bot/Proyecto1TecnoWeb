@@ -83,6 +83,18 @@ export const ESTADOS_CANCELABLES: EstadoPedido[] = [
   'En preparacion',
 ];
 
+/**
+ * Por qué terminó cancelado un pedido (`ck_pedido_motivo_cancelacion`).
+ *
+ * Los tres caminos llegan al mismo estado pero no significan lo mismo para
+ * quien espera la comida: lo anuló él, venció su pago en línea, o el
+ * repartidor no pudo entregarlo. Decirle "Pedido cancelado" en el tercer caso
+ * le atribuía una acción que no hizo.
+ */
+export const MOTIVOS_CANCELACION = ['Cliente', 'No entregado', 'Sin pago'] as const;
+
+export type MotivoCancelacion = (typeof MOTIVOS_CANCELACION)[number];
+
 /** Estado al que se puede pasar desde `origen`, o lista vacía si es terminal. */
 export function transicionesPosibles(origen: EstadoPedido): EstadoPedido[] {
   return FLUJO_DE_ESTADOS[origen];

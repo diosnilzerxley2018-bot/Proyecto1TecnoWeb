@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import request from 'supertest';
 import { app } from '../src/app.js';
 import {
@@ -38,6 +38,23 @@ async function pedir(token: string) {
 }
 
 beforeEach(() => reiniciarMensajero());
+
+describe('El aviso de confirmación dice cómo se paga', () => {
+  it('a quien paga en efectivo le dice cuánto tener listo', async () => {
+    const cliente = await registrarCliente();
+    const pedido = await pedir(cliente.token);
+    expect(pedido.status).toBe(201);
+    const numero = String(pedido.body.id).padStart(5, '0');
+
+    // Se espera **ese** correo y no un tiempo fijo: el aviso sale en segundo
+    // plano, y uno que llega tarde caería en la prueba siguiente.
+    await vi.waitFor(() =>
+      expect(MensajeroSimulado.enviados.some((m) => m.asunto.includes(numero))).toBe(true),
+    );
+    const aviso = MensajeroSimulado.enviados.find((m) => m.asunto.includes(numero))!;
+    expect(aviso.texto).toMatch(/Lo paga en efectivo al recibirlo: tenga listos Bs [\d.,]+/);
+  });
+});
 
 describe('El sistema nace sin enviar correo de verdad', () => {
   it('usa el mensajero simulado por omisión', async () => {

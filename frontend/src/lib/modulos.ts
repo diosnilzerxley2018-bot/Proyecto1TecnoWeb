@@ -1,3 +1,4 @@
+import { CARGO_REPARTIDOR } from './dominio';
 import {
   Bike,
   Boxes,
@@ -25,6 +26,15 @@ export interface Modulo {
   icono: LucideIcon;
   /** Permiso mínimo para acceder. `null` significa que no requiere ninguno. */
   permiso: string | null;
+  /**
+   * Cargos para los que es una pantalla de trabajo. Sin la lista, la ven
+   * todos los que tienen el permiso.
+   *
+   * No es seguridad —la da el permiso, que verifica el servidor—: es enfoque.
+   * "Mis entregas" pide `PEDIDO_LEER`, que tiene todo empleado, y el cocinero
+   * terminaba con una pantalla de reparto en su menú.
+   */
+  cargos?: string[];
   /** Indica si el módulo ya está construido. */
   implementado: boolean;
 }
@@ -37,6 +47,7 @@ export const MODULOS: Modulo[] = [
     ruta: '/entregas',
     icono: Bike,
     permiso: 'PEDIDO_LEER',
+    cargos: [CARGO_REPARTIDOR],
     implementado: true,
   },
   {
@@ -102,6 +113,14 @@ export const MODULOS: Modulo[] = [
  * según los permisos asignados al usuario." Un módulo sin permiso no se muestra
  * en absoluto: mostrarlo deshabilitado revelaría la estructura del sistema.
  */
-export function modulosAccesibles(tienePermiso: (permiso: string) => boolean): Modulo[] {
-  return MODULOS.filter((m) => m.permiso === null || tienePermiso(m.permiso));
+export function modulosAccesibles(
+  tienePermiso: (permiso: string) => boolean,
+  cargo?: string | null,
+): Modulo[] {
+  return MODULOS.filter(
+    (m) =>
+      (m.permiso === null || tienePermiso(m.permiso)) &&
+      // Sin cargo conocido (una sesión anterior) decide solo el permiso.
+      (!m.cargos || cargo === undefined || (cargo !== null && m.cargos.includes(cargo))),
+  );
 }

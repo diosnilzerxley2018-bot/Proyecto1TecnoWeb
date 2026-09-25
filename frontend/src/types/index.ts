@@ -7,6 +7,12 @@ export interface UsuarioSesion {
   nombreUsuario: string;
   email: string;
   rol: string;
+  /**
+   * Cargo del empleado; nulo para un cliente. Opcional porque una sesión
+   * guardada antes de que existiera no lo trae: en ese caso se decide solo
+   * por permisos, como antes.
+   */
+  cargo?: string | null;
 }
 
 export interface Sesion {
@@ -75,6 +81,9 @@ export type EstadoPedido =
   | 'Cancelado';
 
 export type MetodoPago = 'Efectivo' | 'Tarjeta' | 'QR';
+
+/** Por qué terminó cancelado un pedido. Espejo de `MOTIVOS_CANCELACION`. */
+export type MotivoCancelacion = 'Cliente' | 'No entregado' | 'Sin pago';
 
 export interface LineaPedido {
   idProducto: number;
@@ -168,6 +177,8 @@ export interface PedidoGestion {
   total: number;
   fechaEntrega: string | null;
   cancelable: boolean;
+  /** Solo en los cancelados; nulo en los que se cancelaron antes de guardarlo. */
+  motivoCancelacion: MotivoCancelacion | null;
   referenciaPago: string | null;
   ubicacion: UbicacionEntrega;
   items: LineaPedido[];
@@ -799,6 +810,8 @@ export interface PedidoCliente {
   total: number;
   fechaEntrega: string | null;
   cancelable: boolean;
+  /** Solo en los cancelados; nulo en los que se cancelaron antes de guardarlo. */
+  motivoCancelacion: MotivoCancelacion | null;
   referenciaPago: string | null;
   cobro?: Pago | null;
   ubicacion: UbicacionEntrega;

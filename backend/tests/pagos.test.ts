@@ -295,6 +295,8 @@ describe('Cobro de un pedido', () => {
       .set(cabecera(cliente.token));
     expect(detalle.body.estadoPedido).toBe('Cancelado');
     expect(detalle.body.estadoPago).toBe('Vencido');
+    // Y queda dicho por qué: no lo canceló el cliente ni el repartidor.
+    expect(detalle.body.motivoCancelacion).toBe('Sin pago');
 
     const despues = await buscarProducto('Barra de avena');
     expect(despues.stockDisponible).toBe(antes.stockDisponible);

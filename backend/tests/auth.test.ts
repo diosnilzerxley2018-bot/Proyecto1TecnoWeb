@@ -551,3 +551,25 @@ describe('CU-SEG-05 · El administrador nunca queda bloqueado para siempre', () 
     expect(r.body.error).toContain('indefinidamente');
   });
 });
+
+describe('La sesión trae el cargo del empleado', () => {
+  /** Decide qué pantallas de trabajo ve cada uno: "Mis entregas" es del repartidor. */
+  it('un repartidor inicia sesión con su cargo', async () => {
+    const r = await request(app)
+      .post('/api/auth/login')
+      .send({ nombreUsuario: 'repartidor', contrasena: 'Reparto1234!' });
+
+    expect(r.status).toBe(200);
+    expect(r.body.usuario.cargo).toBe('Repartidor');
+  });
+
+  it('un cliente no tiene cargo', async () => {
+    const cliente = await registrarCliente();
+    const r = await request(app)
+      .get('/api/auth/perfil')
+      .set({ Authorization: `Bearer ${cliente.token}` });
+
+    expect(r.status).toBe(200);
+    expect(r.body.usuario.cargo).toBeNull();
+  });
+});
