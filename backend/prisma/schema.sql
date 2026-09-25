@@ -379,6 +379,11 @@ CREATE TABLE pedido (
     referencia_pago     VARCHAR(100),
     total               NUMERIC(12,2) NOT NULL,
     fecha_entrega       TIMESTAMP,
+    -- Por qué terminó cancelado. "Cancelado" a secas se leía igual si lo
+    -- anuló el cliente, si venció su pago o si el repartidor no pudo
+    -- entregarlo, y al cliente se le decía "Pedido cancelado" por algo que él
+    -- no hizo. Nulo en los pedidos que no se cancelaron y en los anteriores.
+    motivo_cancelacion  VARCHAR(20),
     id_cliente          INT NOT NULL,
     id_ubicacion        INT NOT NULL,
     id_repartidor       INT,
@@ -387,7 +392,11 @@ CREATE TABLE pedido (
     CONSTRAINT fk_pedido_repartidor FOREIGN KEY (id_repartidor) REFERENCES empleado(id_empleado),
     CONSTRAINT ck_pedido_estado CHECK (estado_pedido IN ('Pendiente de pago','Recibido','En preparacion','En camino','Entregado','Cancelado')),
     CONSTRAINT ck_pedido_pago   CHECK (estado_pago  IN ('Pendiente','Pagado','Vencido')),
-    CONSTRAINT ck_pedido_metodo CHECK (metodo_pago  IN ('Efectivo','Tarjeta','QR'))
+    CONSTRAINT ck_pedido_metodo CHECK (metodo_pago  IN ('Efectivo','Tarjeta','QR')),
+    CONSTRAINT ck_pedido_motivo_cancelacion CHECK (
+        motivo_cancelacion IS NULL
+        OR (estado_pedido = 'Cancelado' AND motivo_cancelacion IN ('Cliente','No entregado','Sin pago'))
+    )
 );
 
 CREATE TABLE detalle_pedido (

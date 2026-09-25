@@ -107,6 +107,17 @@ const AJUSTES: Ajuste[] = [
       `ALTER TABLE lote_almacen        ALTER COLUMN stock_actual       TYPE NUMERIC(12,3)`,
     ],
   },
+  {
+    nombre: 'pedido.motivo_cancelacion — el cliente sabe por qué se canceló',
+    sentencias: [
+      `ALTER TABLE pedido ADD COLUMN IF NOT EXISTS motivo_cancelacion VARCHAR(20)`,
+      `ALTER TABLE pedido DROP CONSTRAINT IF EXISTS ck_pedido_motivo_cancelacion`,
+      `ALTER TABLE pedido ADD CONSTRAINT ck_pedido_motivo_cancelacion CHECK (
+         motivo_cancelacion IS NULL
+         OR (estado_pedido = 'Cancelado' AND motivo_cancelacion IN ('Cliente','No entregado','Sin pago'))
+       )`,
+    ],
+  },
 ];
 
 const url = process.env.DATABASE_URL;
