@@ -11,11 +11,13 @@ import type {
   ReporteInventarioDTO,
   ReportePedidosDTO,
   ReporteProduccionDTO,
+  TipoItemInventario,
 } from '../dtos/reporte.dto.js';
 import { nombreDeArchivo, type EntregaReporte } from './reporte-entrega.service.js';
 import { rangoDelPeriodo } from '../utils/fechas.js';
 import { ErrorApp } from '../errors/error-app.js';
 import { dosDecimales } from '../utils/dinero.js';
+import { redondearCantidad } from '../utils/cantidad.js';
 
 /**
  * Reportes de pedidos, producción e inventario
@@ -221,7 +223,7 @@ export async function produccion(
     let costo = 0;
 
     const consumos = o.receta.detalle_receta.map((linea) => {
-      const cantidad = dosDecimales(Number(linea.cantidad_requerida) * factor);
+      const cantidad = redondearCantidad(Number(linea.cantidad_requerida) * factor);
       const parcial = dosDecimales(cantidad * Number(linea.ingrediente.costo_unitario));
       costo = dosDecimales(costo + parcial);
       return { linea, cantidad, parcial };
@@ -257,7 +259,7 @@ export async function produccion(
       const id = linea.ingrediente.id_ingrediente;
       const acumulado = insumos.get(id);
       if (acumulado) {
-        acumulado.cantidad = dosDecimales(acumulado.cantidad + cantidad);
+        acumulado.cantidad = redondearCantidad(acumulado.cantidad + cantidad);
         acumulado.costo = dosDecimales(acumulado.costo + historico);
       } else {
         insumos.set(id, {
@@ -394,87 +396,159 @@ export async function inventario(
     reporteModel.egresosDelPeriodo(criterio),
   ]);
 
-  const porItem = new Map<string, { unidad: string; entradas: number; salidas: number }>();
+  /*
+   * Los ítems se agrupan por tipo e identificador, no por nombre. Un insumo y
+   * un producto pueden llamarse igual —la leche que se compra y la leche
+   * saborizada que se vende—, y agrupados por nombre el reporte sumaba litros
+   * con unidades bajo la unidad del que apareciera primero.
+   */
+  const porItem = new Map<
+    string,
+    {
+      tipo: TipoItemInventario;
+      id: number;
+      item: string;
+      unidad: string;
+      entradas: number;
+      salidas: number;
+    }
+  >();
   const movimientos: LineaMovimientoReporteDTO[] = [];
   let costoIngresado = 0;
 
-  const acumular = (item: string, unidad: string, cantidad: number, entrada: boolean) => {
-    const acc = porItem.get(item) ?? { unidad, entradas: 0, salidas: 0 };
-    if (entrada) acc.entradas = dosDecimales(acc.entradas + cantidad);
-    else acc.salidas = dosDecimales(acc.salidas + cantidad);
-    porItem.set(item, acc);
+  const registrar = (
+    linea: {
+      tipoItem: TipoItemInventario;
+      id: number;
+      item: string;
+      unidad: string;
+      cantidad: number;
+      costo: number | null;
+    },
+    nota: { fecha: Date; motivo: string },
+    tipo: 'Ingreso' | 'Egreso',
+    referencia: string | null,
+  ) => {
+    const clave = `${linea.tipoItem}:${linea.id}`;
+    const acumulado = porItem.get(clave) ?? {
+      tipo: linea.tipoItem,
+      id: linea.id,
+      item: linea.item,
+      unidad: linea.unidad,
+      entradas: 0,
+      salidas: 0,
+    };
+    if (tipo === 'Ingreso') {
+      acumulado.entradas = redondearCantidad(acumulado.entradas + linea.cantidad);
+    } else {
+      acumulado.salidas = redondearCantidad(acumulado.salidas + linea.cantidad);
+    }
+    porItem.set(clave, acumulado);
+
+    movimientos.push({
+      fecha: nota.fecha.toISOString(),
+      tipo,
+      motivo: nota.motivo,
+      tipoItem: linea.tipoItem,
+      item: linea.item,
+      unidad: linea.unidad,
+      cantidad: linea.cantidad,
+      costo: linea.costo,
+      referencia,
+    });
   };
 
   for (const nota of ingresos) {
+    const referencia = referenciaDeIngreso(nota);
+
     for (const d of nota.detalle_ingreso_insumo) {
       const insumo = d.ingrediente_almacen.ingrediente;
       const cantidad = Number(d.cantidad);
       const costo = dosDecimales(cantidad * Number(d.costo_unitario));
       costoIngresado = dosDecimales(costoIngresado + costo);
-      acumular(insumo.nombre, insumo.unidad_medida.abreviatura, cantidad, true);
-      movimientos.push({
-        fecha: nota.fecha.toISOString(),
-        tipo: 'Ingreso',
-        motivo: nota.motivo,
-        item: insumo.nombre,
-        unidad: insumo.unidad_medida.abreviatura,
-        cantidad,
-        costo,
-      });
+      registrar(
+        {
+          tipoItem: 'Insumo',
+          id: insumo.id_ingrediente,
+          item: insumo.nombre,
+          unidad: insumo.unidad_medida.abreviatura,
+          cantidad,
+          costo,
+        },
+        nota,
+        'Ingreso',
+        referencia,
+      );
     }
 
     for (const d of nota.detalle_ingreso_producto) {
+      const producto = d.producto_almacen.producto;
       const costo = dosDecimales(d.cantidad * Number(d.costo_unitario));
       costoIngresado = dosDecimales(costoIngresado + costo);
-      const nombre = d.producto_almacen.producto.nombre;
-      acumular(nombre, 'u', d.cantidad, true);
-      movimientos.push({
-        fecha: nota.fecha.toISOString(),
-        tipo: 'Ingreso',
-        motivo: nota.motivo,
-        item: nombre,
-        unidad: 'u',
-        cantidad: d.cantidad,
-        costo,
-      });
+      registrar(
+        {
+          tipoItem: 'Producto',
+          id: producto.id_producto,
+          item: producto.nombre,
+          unidad: 'u',
+          cantidad: d.cantidad,
+          costo,
+        },
+        nota,
+        'Ingreso',
+        referencia,
+      );
     }
   }
 
   for (const nota of egresos) {
+    const referencia = referenciaDeEgreso(nota);
+
     for (const d of nota.detalle_egreso_insumo) {
       const insumo = d.ingrediente_almacen.ingrediente;
-      const cantidad = Number(d.cantidad);
-      acumular(insumo.nombre, insumo.unidad_medida.abreviatura, cantidad, false);
-      movimientos.push({
-        fecha: nota.fecha.toISOString(),
-        tipo: 'Egreso',
-        motivo: nota.motivo,
-        item: insumo.nombre,
-        unidad: insumo.unidad_medida.abreviatura,
-        cantidad,
-        // Una salida no lleva costo propio: el esquema no lo guarda, y
-        // valorizarla exigiría decidir un criterio de costeo que el informe
-        // no define.
-        costo: null,
-      });
+      registrar(
+        {
+          tipoItem: 'Insumo',
+          id: insumo.id_ingrediente,
+          item: insumo.nombre,
+          unidad: insumo.unidad_medida.abreviatura,
+          cantidad: Number(d.cantidad),
+          // Una salida no lleva costo propio: el esquema no lo guarda, y
+          // valorizarla exigiría decidir un criterio de costeo que el informe
+          // no define.
+          costo: null,
+        },
+        nota,
+        'Egreso',
+        referencia,
+      );
     }
 
     for (const d of nota.detalle_egreso_producto) {
-      const nombre = d.producto_almacen.producto.nombre;
-      acumular(nombre, 'u', d.cantidad, false);
-      movimientos.push({
-        fecha: nota.fecha.toISOString(),
-        tipo: 'Egreso',
-        motivo: nota.motivo,
-        item: nombre,
-        unidad: 'u',
-        cantidad: d.cantidad,
-        costo: null,
-      });
+      const producto = d.producto_almacen.producto;
+      registrar(
+        {
+          tipoItem: 'Producto',
+          id: producto.id_producto,
+          item: producto.nombre,
+          unidad: 'u',
+          cantidad: d.cantidad,
+          costo: null,
+        },
+        nota,
+        'Egreso',
+        referencia,
+      );
     }
   }
 
   movimientos.sort((a, b) => a.fecha.localeCompare(b.fecha));
+
+  const items = [...porItem.values()];
+  const existencias = await reporteModel.existenciasActuales(
+    items.filter((i) => i.tipo === 'Insumo').map((i) => i.id),
+    items.filter((i) => i.tipo === 'Producto').map((i) => i.id),
+  );
 
   return {
     desde: filtro.desde,
@@ -486,45 +560,142 @@ export async function inventario(
       egresos: movimientos.filter((m) => m.tipo === 'Egreso').length,
       costoIngresado,
     },
-    porItem: [...porItem]
-      .map(([item, a]) => ({
-        item,
-        unidad: a.unidad,
-        entradas: a.entradas,
-        salidas: a.salidas,
-        neto: dosDecimales(a.entradas - a.salidas),
+    porItem: items
+      .map((i) => ({
+        tipo: i.tipo,
+        item: i.item,
+        unidad: i.unidad,
+        entradas: i.entradas,
+        salidas: i.salidas,
+        neto: redondearCantidad(i.entradas - i.salidas),
+        existencia: redondearCantidad(
+          (i.tipo === 'Insumo' ? existencias.insumos : existencias.productos).get(i.id) ?? 0,
+        ),
       }))
-      .sort((a, b) => Math.abs(b.neto) - Math.abs(a.neto)),
+      /*
+       * Insumos primero y productos después, cada grupo por nombre. Antes se
+       * ordenaba por el tamaño del neto, que mezclaba kilos con unidades: un
+       * "5 u" y un "1,6 kg" no se pueden comparar.
+       */
+      .sort(
+        (a, b) =>
+          ORDEN_DE_TIPO[a.tipo] - ORDEN_DE_TIPO[b.tipo] || a.item.localeCompare(b.item, 'es'),
+      ),
     movimientos,
   };
 }
 
+const ORDEN_DE_TIPO: Record<TipoItemInventario, number> = { Insumo: 0, Producto: 1 };
+
+type NotaIngresoReporte = Awaited<ReturnType<typeof reporteModel.ingresosDelPeriodo>>[number];
+type NotaEgresoReporte = Awaited<ReturnType<typeof reporteModel.egresosDelPeriodo>>[number];
+
+/**
+ * "OP-12 · Pollo a la plancha" cuando la nota la generó una orden de
+ * producción. Es la relación que el reporte no mostraba: por qué salió un
+ * insumo y en qué se convirtió.
+ */
+function referenciaDeProduccion(ordenes: NotaIngresoReporte['orden_produccion']): string | null {
+  const orden = ordenes[0];
+  return orden ? `OP-${orden.id_orden_produccion} · ${orden.receta.producto.nombre}` : null;
+}
+
+function referenciaDeIngreso(nota: NotaIngresoReporte): string | null {
+  const produccion = referenciaDeProduccion(nota.orden_produccion);
+  if (produccion) return produccion;
+  const partes = [nota.proveedor, nota.numero_documento].filter((p): p is string => Boolean(p));
+  return partes.length > 0 ? partes.join(' · ') : null;
+}
+
+function referenciaDeEgreso(nota: NotaEgresoReporte): string | null {
+  return referenciaDeProduccion(nota.orden_produccion) ?? nota.observacion ?? null;
+}
+
+/**
+ * El día en que ocurrió el movimiento, en la hora del negocio.
+ *
+ * `fecha` viaja como ISO en UTC: cortarle los diez primeros caracteres daría
+ * el día de Greenwich, y lo registrado después de las 20:00 en Bolivia
+ * aparecería con fecha del día siguiente.
+ */
+function diaLocal(iso: string): string {
+  const fecha = new Date(iso);
+  const dos = (n: number) => String(n).padStart(2, '0');
+  return `${dos(fecha.getDate())}/${dos(fecha.getMonth() + 1)}/${fecha.getFullYear()}`;
+}
+
+/** Recorta un texto para una celda de PDF, que es de una sola línea. */
+function recortar(texto: string, maximo: number): string {
+  return texto.length <= maximo ? texto : `${texto.slice(0, maximo - 1)}…`;
+}
+
 export function documentoDeInventario(reporte: ReporteInventarioDTO): DocumentoReporte {
+  /*
+   * Con un solo ítem elegido, las cifras dicen **cuánto** entró y salió, en su
+   * unidad. Con todos, solo pueden contar movimientos: no se suman kilos con
+   * litros ni con unidades.
+   */
+  const unico =
+    reporte.filtro !== null && reporte.porItem.length === 1 ? reporte.porItem[0] : null;
+
   return {
     titulo: 'Reporte de movimientos de inventario',
     alcance: `${fechaLegible(reporte.desde)} al ${fechaLegible(reporte.hasta)} · ${
       reporte.filtro ?? 'todos los ítems'
     }`,
     generadoEn: reporte.generadoEn,
-    cifras: [
-      { etiqueta: 'Ingresos', valor: String(reporte.resumen.ingresos) },
-      { etiqueta: 'Egresos', valor: String(reporte.resumen.egresos) },
-      { etiqueta: 'Costo ingresado', valor: bolivianos(reporte.resumen.costoIngresado) },
-    ],
+    cifras: unico
+      ? [
+          { etiqueta: 'Entró', valor: `${unico.entradas} ${unico.unidad}` },
+          { etiqueta: 'Salió', valor: `${unico.salidas} ${unico.unidad}` },
+          { etiqueta: 'Existencia hoy', valor: `${unico.existencia} ${unico.unidad}` },
+          { etiqueta: 'Costo ingresado', valor: bolivianos(reporte.resumen.costoIngresado) },
+        ]
+      : [
+          { etiqueta: 'Movimientos de entrada', valor: String(reporte.resumen.ingresos) },
+          { etiqueta: 'Movimientos de salida', valor: String(reporte.resumen.egresos) },
+          { etiqueta: 'Costo ingresado', valor: bolivianos(reporte.resumen.costoIngresado) },
+        ],
     secciones: [
       {
         titulo: 'Movimiento por ítem',
         columnas: [
-          { titulo: 'Item', proporcion: 0.4 },
-          { titulo: 'Entradas', proporcion: 0.2, alinear: 'right' },
-          { titulo: 'Salidas', proporcion: 0.2, alinear: 'right' },
-          { titulo: 'Neto', proporcion: 0.2, alinear: 'right' },
+          { titulo: 'Item', proporcion: 0.3 },
+          { titulo: 'Tipo', proporcion: 0.12 },
+          { titulo: 'Entradas', proporcion: 0.14, alinear: 'right' },
+          { titulo: 'Salidas', proporcion: 0.14, alinear: 'right' },
+          { titulo: 'Neto período', proporcion: 0.15, alinear: 'right' },
+          { titulo: 'Existencia hoy', proporcion: 0.15, alinear: 'right' },
         ],
         filas: reporte.porItem.map((i) => [
-          i.item,
+          recortar(i.item, 32),
+          i.tipo,
           `${i.entradas} ${i.unidad}`,
           `${i.salidas} ${i.unidad}`,
           `${i.neto} ${i.unidad}`,
+          `${i.existencia} ${i.unidad}`,
+        ]),
+        vacio: 'No hubo movimientos en el período seleccionado.',
+      },
+      {
+        titulo: 'Detalle de movimientos',
+        columnas: [
+          { titulo: 'Fecha', proporcion: 0.11 },
+          { titulo: 'Tipo', proporcion: 0.1 },
+          { titulo: 'Motivo', proporcion: 0.12 },
+          { titulo: 'Item', proporcion: 0.22 },
+          { titulo: 'Cantidad', proporcion: 0.12, alinear: 'right' },
+          { titulo: 'Costo', proporcion: 0.11, alinear: 'right' },
+          { titulo: 'Referencia', proporcion: 0.22 },
+        ],
+        filas: reporte.movimientos.map((m) => [
+          diaLocal(m.fecha),
+          m.tipo,
+          m.motivo,
+          recortar(m.item, 22),
+          `${m.cantidad} ${m.unidad}`,
+          m.costo === null ? '—' : bolivianos(m.costo),
+          recortar(m.referencia ?? '—', 24),
         ]),
         vacio: 'No hubo movimientos en el período seleccionado.',
       },
@@ -559,6 +730,6 @@ export const entregaDeInventario = (r: ReporteInventarioDTO): EntregaReporte => 
   archivo: nombreDeArchivo('inventario', r.desde, r.hasta),
   descripcion:
     `Reporte de movimientos del ${r.desde} al ${r.hasta}. ` +
-    `${r.resumen.ingresos} entrada(s) y ${r.resumen.egresos} salida(s), ` +
+    `${r.resumen.ingresos} movimiento(s) de entrada y ${r.resumen.egresos} de salida, ` +
     `con Bs ${r.resumen.costoIngresado.toFixed(2)} ingresados.`,
 });

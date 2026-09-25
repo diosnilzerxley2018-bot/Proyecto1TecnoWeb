@@ -11,6 +11,7 @@ import { Tooltip } from '@/components/ui/Tooltip';
 import { api, ErrorApi } from '@/lib/api';
 import { useNotificaciones } from '@/components/ui/Notificaciones';
 import type { Insumo, Producto, Receta } from '@/types';
+import { PASO_CANTIDAD } from '@/lib/dominio';
 
 interface LineaInsumo {
   uid: string;
@@ -222,8 +223,8 @@ export function EditorReceta({
                       etiqueta="Cantidad"
                       className="w-32 shrink-0"
                       type="number"
-                      step="0.01"
-                      min="0.01"
+                      step={PASO_CANTIDAD}
+                      min={PASO_CANTIDAD}
                       value={linea.cantidad}
                       onChange={(e) => actualizar(linea.uid, { cantidad: e.target.value })}
                       sufijo={insumo?.unidad.abreviatura}

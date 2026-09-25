@@ -8,6 +8,7 @@ import { Boton } from '@/components/ui/Boton';
 import { Tooltip } from '@/components/ui/Tooltip';
 import type { Almacen, TipoItem } from '@/types';
 import { formatearBs } from '@/lib/formato';
+import { PASO_CANTIDAD } from '@/lib/dominio';
 
 /** Un ítem que puede moverse: insumo o producto terminado. */
 export interface ItemMovible {
@@ -186,8 +187,8 @@ export function EditorLineas({
                     <Campo
                       etiqueta="Cantidad"
                       type="number"
-                      min={entero ? '1' : '0.01'}
-                      step={entero ? '1' : '0.01'}
+                      min={entero ? '1' : PASO_CANTIDAD}
+                      step={entero ? '1' : PASO_CANTIDAD}
                       value={linea.cantidad}
                       onChange={(e) => actualizar(linea.uid, { cantidad: e.target.value })}
                       sufijo={item?.unidad}

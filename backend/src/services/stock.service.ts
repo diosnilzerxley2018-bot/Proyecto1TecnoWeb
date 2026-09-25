@@ -1,6 +1,7 @@
 import * as stockModel from '../models/stock.model.js';
 import type { ClientePrisma } from '../models/stock.model.js';
 import { ErrorApp } from '../errors/error-app.js';
+import { redondearCantidad } from '../utils/cantidad.js';
 
 /**
  * CU-INV-06 — Verificar Disponibilidad de Stock.
@@ -269,9 +270,9 @@ export async function asignarInsumos(
         asignaciones.push({
           idProducto: requerimiento.idItem,
           idAlmacen: existencia.id_almacen,
-          cantidad: Math.round(tomado * 100) / 100,
+          cantidad: redondearCantidad(tomado),
         });
-        restante = Math.round((restante - tomado) * 100) / 100;
+        restante = redondearCantidad(restante - tomado);
       }
     }
 
@@ -279,7 +280,7 @@ export async function asignarInsumos(
       faltantes.push({
         idItem: requerimiento.idItem,
         solicitado: requerimiento.cantidad,
-        disponible: Math.round((requerimiento.cantidad - restante) * 100) / 100,
+        disponible: redondearCantidad(requerimiento.cantidad - restante),
       });
     }
   }

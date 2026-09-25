@@ -220,17 +220,50 @@ export const esquemaReporteInventario = z
     idProducto: z.coerce.number().int().positive().optional(),
   })
   .refine(rangoOrdenado, MENSAJE_ORDEN)
-  .refine(rangoAcotado, MENSAJE_TOPE);
+  .refine(rangoAcotado, MENSAJE_TOPE)
+  /*
+   * Un insumo **o** un producto. Con los dos a la vez el reporte no sabía qué
+   * contestar: rotulaba el insumo y filtraba a medias los dos.
+   */
+  .refine((f) => !(f.idIngrediente && f.idProducto), {
+    message: 'Filtre por un insumo o por un producto, no por ambos a la vez',
+    path: ['idProducto'],
+  });
+
+/** Un ítem del inventario: insumo o producto terminado. */
+export type TipoItemInventario = 'Insumo' | 'Producto';
 
 export interface LineaMovimientoReporteDTO {
   fecha: string;
   tipo: 'Ingreso' | 'Egreso';
   motivo: string;
+  tipoItem: TipoItemInventario;
   item: string;
   unidad: string;
   cantidad: number;
   /** Nulo en los egresos: una salida no tiene costo propio. */
   costo: number | null;
+  /**
+   * De dónde vino o a dónde fue: el proveedor y su documento, o la orden de
+   * producción y el producto que se elaboró. Es lo que responde "¿por qué
+   * salió este arroz?" sin tener que ir a buscar la nota.
+   */
+  referencia: string | null;
+}
+
+export interface ItemReporteInventarioDTO {
+  tipo: TipoItemInventario;
+  item: string;
+  unidad: string;
+  entradas: number;
+  salidas: number;
+  /**
+   * Entradas menos salidas **en el período**. No es la existencia: un -1,6 kg
+   * dice que salió más de lo que entró, no que el stock sea negativo.
+   */
+  neto: number;
+  /** Lo que hay hoy en todos los almacenes, para leer el neto con contexto. */
+  existencia: number;
 }
 
 export interface ReporteInventarioDTO {
@@ -239,18 +272,13 @@ export interface ReporteInventarioDTO {
   filtro: string | null;
   generadoEn: string;
   resumen: {
+    /** Cantidad de líneas de entrada en el período (no cantidad de mercadería). */
     ingresos: number;
+    /** Cantidad de líneas de salida en el período. */
     egresos: number;
     costoIngresado: number;
   };
-  porItem: {
-    item: string;
-    unidad: string;
-    entradas: number;
-    salidas: number;
-    /** Entradas menos salidas. Negativo significa que se consumió más de lo que entró. */
-    neto: number;
-  }[];
+  porItem: ItemReporteInventarioDTO[];
   movimientos: LineaMovimientoReporteDTO[];
 }
 

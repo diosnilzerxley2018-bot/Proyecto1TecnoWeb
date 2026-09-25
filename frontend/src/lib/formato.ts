@@ -32,7 +32,8 @@ export function formatearDia(iso: string): string {
  * enteras; una sola función evita mostrar "3,00 u" donde basta con "3".
  */
 export function formatearCantidad(valor: number): string {
-  return new Intl.NumberFormat('es-BO', { maximumFractionDigits: 2 }).format(valor);
+  // Tres decimales: el gramo y el mililitro. Con dos, 0,125 kg se leía 0,13.
+  return new Intl.NumberFormat('es-BO', { maximumFractionDigits: 3 }).format(valor);
 }
 
 /** Antigüedad en palabras, para saber de un vistazo cuánto lleva algo esperando. */

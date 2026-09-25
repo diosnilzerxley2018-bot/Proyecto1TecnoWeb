@@ -90,6 +90,23 @@ const AJUSTES: Ajuste[] = [
          CHECK ((imagen IS NULL) = (imagen_tipo IS NULL))`,
     ],
   },
+  {
+    nombre: 'cantidades de insumo con tres decimales — el gramo y el mililitro',
+    /*
+     * Solo amplía: de NUMERIC(10,2) a NUMERIC(12,3) crecen a la vez la parte
+     * entera y los decimales, así que todo valor que ya está cabe tal cual y
+     * no se pierde nada. Repetirlo sobre una columna que ya es (12,3) no
+     * cambia nada.
+     */
+    sentencias: [
+      `ALTER TABLE ingrediente         ALTER COLUMN stock_minimo       TYPE NUMERIC(12,3)`,
+      `ALTER TABLE detalle_receta      ALTER COLUMN cantidad_requerida TYPE NUMERIC(12,3)`,
+      `ALTER TABLE ingrediente_almacen ALTER COLUMN stock_actual       TYPE NUMERIC(12,3)`,
+      `ALTER TABLE detalle_ingreso_insumo ALTER COLUMN cantidad        TYPE NUMERIC(12,3)`,
+      `ALTER TABLE detalle_egreso_insumo  ALTER COLUMN cantidad        TYPE NUMERIC(12,3)`,
+      `ALTER TABLE lote_almacen        ALTER COLUMN stock_actual       TYPE NUMERIC(12,3)`,
+    ],
+  },
 ];
 
 const url = process.env.DATABASE_URL;

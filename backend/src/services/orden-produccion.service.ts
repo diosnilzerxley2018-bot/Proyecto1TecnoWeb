@@ -24,6 +24,7 @@ import {
 } from '../config/dominio.js';
 import { ErrorApp } from '../errors/error-app.js';
 import { dosDecimales } from '../utils/dinero.js';
+import { redondearCantidad } from '../utils/cantidad.js';
 
 /**
  * CU-PRO-02 — Gestionar Orden de Producción, con CU-PRO-04 — Cancelar Orden
@@ -59,7 +60,7 @@ function calcularInsumos(
     idIngrediente: linea.id_ingrediente,
     nombre: linea.ingrediente.nombre,
     unidad: linea.ingrediente.unidad_medida.abreviatura,
-    cantidadRequerida: dosDecimales(Number(linea.cantidad_requerida) * factor),
+    cantidadRequerida: redondearCantidad(Number(linea.cantidad_requerida) * factor),
     costoUnitario: Number(linea.ingrediente.costo_unitario),
   }));
 }
@@ -182,7 +183,7 @@ async function resolverInsumos(
     const detalle = faltantes
       .map((f) => {
         const insumo = nombreDe.get(f.idItem)!;
-        const falta = dosDecimales(f.solicitado - f.disponible);
+        const falta = redondearCantidad(f.solicitado - f.disponible);
         return `${insumo.nombre}: faltan ${falta} ${insumo.unidad} (requiere ${f.solicitado}, disponible ${f.disponible})`;
       })
       .join('; ');
@@ -237,6 +238,26 @@ export async function crear(
   // CU-PRO-02, precondición: el producto debe tener una receta activa.
   if (!receta.activa) {
     throw new ErrorApp(409, 'Solo puede producirse a partir de la receta activa del producto');
+  }
+
+  /*
+   * Una receta no divisible se produce en corridas completas.
+   *
+   * Una bandeja de horno o una torta no se hacen "a la cuarta parte": la
+   * producción que dispara una venta ya lo respetaba (`cantidadAProducir`
+   * redondea hacia arriba), pero la orden manual escalaba la receta por
+   * cualquier fracción y registraba un consumo de insumos que en la cocina no
+   * puede ocurrir. Aquí no se redondea en silencio —quien planifica eligió un
+   * número— sino que se rechaza diciendo cuál sería el válido.
+   */
+  if (!receta.divisible && datos.cantidad % receta.rendimiento !== 0) {
+    const sugerida = cantidadAProducir(receta, datos.cantidad);
+    throw new ErrorApp(
+      400,
+      `La receta "${receta.nombre}" no es divisible: cada corrida rinde ` +
+        `${receta.rendimiento} porciones y solo pueden producirse múltiplos de ese número. ` +
+        `Para cubrir ${datos.cantidad} porciones, produzca ${sugerida}.`,
+    );
   }
 
   // Se verifica antes de registrar: si faltan insumos, la orden no llega a existir.

@@ -171,17 +171,67 @@ const SOLO_INSUMO = {
   },
 } as const;
 
+/*
+ * Qué detalle entra en el reporte según el filtro.
+ *
+ * Filtrar por un insumo tiene que dejar **fuera a todos los productos**, y al
+ * revés. Antes el filtro se aplicaba solo a su propia lista: con "Arroz"
+ * elegido, el detalle de insumos se reducía al arroz, pero el de productos
+ * seguía entero, y el reporte del arroz mostraba mousses y ensaladas, contaba
+ * sus líneas como entradas del arroz y sumaba su costo como costo ingresado.
+ */
+const NINGUNO = { in: [] as number[] };
+
+const detalleDeInsumos = (f: FiltroMovimientos) =>
+  f.idProducto
+    ? { id_ingrediente: NINGUNO }
+    : f.idIngrediente
+      ? { id_ingrediente: f.idIngrediente }
+      : {};
+
+const detalleDeProductos = (f: FiltroMovimientos) =>
+  f.idIngrediente
+    ? { id_producto: NINGUNO }
+    : f.idProducto
+      ? { id_producto: f.idProducto }
+      : {};
+
+/** La orden de producción que generó la nota, para nombrar lo que se elaboró. */
+const ORDEN_DE_LA_NOTA = {
+  select: {
+    id_orden_produccion: true,
+    receta: { select: { producto: { select: { nombre: true } } } },
+  },
+} as const;
+
+const SOLO_PRODUCTO = {
+  select: { producto: { select: { id_producto: true, nombre: true } } },
+} as const;
+
 /** Entradas del período: notas de ingreso, con su detalle. */
 export const ingresosDelPeriodo = (filtro: FiltroMovimientos) =>
   prisma.nota_ingreso.findMany({
-    where: { fecha: { gte: filtro.desde, lte: filtro.hasta } },
+    where: {
+      fecha: { gte: filtro.desde, lte: filtro.hasta },
+      // Solo las notas que movieron el ítem pedido: una nota sin líneas de
+      // ese ítem no tiene nada que decir en su reporte.
+      ...(filtro.idIngrediente
+        ? { detalle_ingreso_insumo: { some: { id_ingrediente: filtro.idIngrediente } } }
+        : {}),
+      ...(filtro.idProducto
+        ? { detalle_ingreso_producto: { some: { id_producto: filtro.idProducto } } }
+        : {}),
+    },
     orderBy: { fecha: 'asc' },
     select: {
       id_nota_ingreso: true,
       fecha: true,
       motivo: true,
+      proveedor: true,
+      numero_documento: true,
+      orden_produccion: ORDEN_DE_LA_NOTA,
       detalle_ingreso_insumo: {
-        where: filtro.idIngrediente ? { id_ingrediente: filtro.idIngrediente } : {},
+        where: detalleDeInsumos(filtro),
         select: {
           cantidad: true,
           costo_unitario: true,
@@ -189,11 +239,11 @@ export const ingresosDelPeriodo = (filtro: FiltroMovimientos) =>
         },
       },
       detalle_ingreso_producto: {
-        where: filtro.idProducto ? { id_producto: filtro.idProducto } : {},
+        where: detalleDeProductos(filtro),
         select: {
           cantidad: true,
           costo_unitario: true,
-          producto_almacen: { select: { producto: { select: { id_producto: true, nombre: true } } } },
+          producto_almacen: SOLO_PRODUCTO,
         },
       },
     },
@@ -202,28 +252,68 @@ export const ingresosDelPeriodo = (filtro: FiltroMovimientos) =>
 /** Salidas del período: notas de egreso, con su detalle. */
 export const egresosDelPeriodo = (filtro: FiltroMovimientos) =>
   prisma.nota_egreso.findMany({
-    where: { fecha: { gte: filtro.desde, lte: filtro.hasta } },
+    where: {
+      fecha: { gte: filtro.desde, lte: filtro.hasta },
+      ...(filtro.idIngrediente
+        ? { detalle_egreso_insumo: { some: { id_ingrediente: filtro.idIngrediente } } }
+        : {}),
+      ...(filtro.idProducto
+        ? { detalle_egreso_producto: { some: { id_producto: filtro.idProducto } } }
+        : {}),
+    },
     orderBy: { fecha: 'asc' },
     select: {
       id_nota_egreso: true,
       fecha: true,
       motivo: true,
+      observacion: true,
+      orden_produccion: ORDEN_DE_LA_NOTA,
       detalle_egreso_insumo: {
-        where: filtro.idIngrediente ? { id_ingrediente: filtro.idIngrediente } : {},
+        where: detalleDeInsumos(filtro),
         select: {
           cantidad: true,
           ingrediente_almacen: { select: { ingrediente: SOLO_INSUMO } },
         },
       },
       detalle_egreso_producto: {
-        where: filtro.idProducto ? { id_producto: filtro.idProducto } : {},
+        where: detalleDeProductos(filtro),
         select: {
           cantidad: true,
-          producto_almacen: { select: { producto: { select: { id_producto: true, nombre: true } } } },
+          producto_almacen: SOLO_PRODUCTO,
         },
       },
     },
   });
+
+/**
+ * Existencia de hoy, sumada entre almacenes.
+ *
+ * Acompaña al neto del período: sin ella, un "-1,6 kg" en rojo se leía como
+ * stock negativo, cuando solo dice que en esas fechas salió más de lo que entró.
+ */
+export async function existenciasActuales(idsInsumo: number[], idsProducto: number[]) {
+  const [insumos, productos] = await Promise.all([
+    idsInsumo.length === 0
+      ? []
+      : prisma.ingrediente_almacen.groupBy({
+          by: ['id_ingrediente'],
+          where: { id_ingrediente: { in: idsInsumo } },
+          _sum: { stock_actual: true },
+        }),
+    idsProducto.length === 0
+      ? []
+      : prisma.producto_almacen.groupBy({
+          by: ['id_producto'],
+          where: { id_producto: { in: idsProducto } },
+          _sum: { stock_actual: true },
+        }),
+  ]);
+
+  return {
+    insumos: new Map(insumos.map((f) => [f.id_ingrediente, Number(f._sum.stock_actual ?? 0)])),
+    productos: new Map(productos.map((f) => [f.id_producto, Number(f._sum.stock_actual ?? 0)])),
+  };
+}
 
 export const nombreDeInsumo = (idIngrediente: number) =>
   prisma.ingrediente.findUnique({

@@ -1,7 +1,13 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import request from 'supertest';
 import { app } from '../src/app.js';
-import { crearEmpleado, crearPedido, obtenerToken, registrarCliente } from './ayudantes.js';
+import {
+  crearEmpleado,
+  crearPedido,
+  obtenerToken,
+  registrarCliente,
+  sufijo,
+} from './ayudantes.js';
 import { MensajeroSimulado, reiniciarMensajero } from '../src/correo/index.js';
 
 /**
@@ -455,6 +461,171 @@ describe('Reporte de movimientos de inventario', () => {
       .set(cabecera(staff))
       .send({ ...rangoDeHoy, para: 'almacen@nutriexpress.bo' });
     expect(correo.body.enviado).toBe(true);
+  });
+});
+
+/*
+ * Lo que el reporte de movimientos hacía mal: con un insumo elegido mostraba
+ * también productos que no lo usan, contaba sus líneas como entradas del
+ * insumo y sumaba su costo como costo ingresado.
+ */
+describe('Reporte de movimientos · el filtro deja fuera lo que no se pidió', () => {
+  /** Un producto nuevo con existencias ingresadas hoy. */
+  async function productoConIngreso(token: string, nombre = `Producto ${sufijo()}`) {
+    const categorias = await request(app).get('/api/catalogo/categorias');
+    const producto = await request(app)
+      .post('/api/productos')
+      .set(cabecera(token))
+      .send({ nombre, precioVenta: 20, idCategoria: categorias.body[0].id, tipoConservacion: 'Seco' })
+      .expect(201);
+    await request(app)
+      .post('/api/ingresos')
+      .set(cabecera(token))
+      .send({
+        motivo: 'Ajuste',
+        productos: [
+          {
+            idProducto: producto.body.id,
+            idAlmacen: await idAlmacen(token, 'Almacen Seco'),
+            cantidad: 5,
+            costoUnitario: 7,
+          },
+        ],
+      })
+      .expect(201);
+    return producto.body as { id: number; nombre: string };
+  }
+
+  /** Un insumo nuevo con existencias compradas hoy. */
+  async function insumoConCompra(token: string, nombre = `Insumo ${sufijo()}`) {
+    const unidades = await request(app).get('/api/insumos/unidades').set(cabecera(token));
+    const kg = unidades.body.find((u: { nombre: string }) => u.nombre === 'Kilogramo');
+    const insumo = await request(app)
+      .post('/api/insumos')
+      .set(cabecera(token))
+      .send({ nombre, idUnidad: kg.id, costoUnitario: 4, stockMinimo: 0 })
+      .expect(201);
+    await request(app)
+      .post('/api/ingresos')
+      .set(cabecera(token))
+      .send({
+        motivo: 'Compra',
+        proveedor: 'Distribuidora de pruebas',
+        numeroDocumento: 'FAC-77',
+        insumos: [
+          {
+            idIngrediente: insumo.body.id,
+            idAlmacen: await idAlmacen(token, 'Almacen Seco'),
+            cantidad: 3,
+            costoUnitario: 4,
+          },
+        ],
+      })
+      .expect(201);
+    return insumo.body as { id: number; nombre: string };
+  }
+
+  it('con un insumo elegido no aparecen productos, ni en el detalle ni en las cifras', async () => {
+    const staff = await obtenerToken();
+    const insumo = await insumoConCompra(staff);
+    // Un producto movido el mismo día: antes se colaba en el reporte del insumo.
+    await productoConIngreso(staff);
+
+    const r = await consultar('inventario', staff, { idIngrediente: insumo.id });
+
+    expect(r.status).toBe(200);
+    expect(r.body.porItem).toHaveLength(1);
+    expect(r.body.porItem[0]).toMatchObject({ tipo: 'Insumo', item: insumo.nombre, entradas: 3 });
+    expect(
+      r.body.movimientos.every((m: { item: string }) => m.item === insumo.nombre),
+    ).toBe(true);
+    // Solo su línea, y solo su costo: 3 kg a Bs 4.
+    expect(r.body.resumen.ingresos).toBe(1);
+    expect(r.body.resumen.costoIngresado).toBe(12);
+  });
+
+  it('con un producto elegido no aparecen insumos', async () => {
+    const staff = await obtenerToken();
+    const producto = await productoConIngreso(staff);
+    await insumoConCompra(staff);
+
+    const r = await consultar('inventario', staff, { idProducto: producto.id });
+
+    expect(r.status).toBe(200);
+    expect(r.body.porItem).toHaveLength(1);
+    expect(r.body.porItem[0]).toMatchObject({ tipo: 'Producto', item: producto.nombre, entradas: 5 });
+    expect(r.body.movimientos.every((m: { tipoItem: string }) => m.tipoItem === 'Producto')).toBe(
+      true,
+    );
+    expect(r.body.resumen.costoIngresado).toBe(35);
+  });
+
+  it('rechaza filtrar por un insumo y un producto a la vez', async () => {
+    const staff = await obtenerToken();
+    const insumo = await buscarInsumo(staff, 'Quinua');
+
+    const r = await consultar('inventario', staff, { idIngrediente: insumo.id, idProducto: 1 });
+
+    expect(r.status).toBe(400);
+    expect(r.body.error).toContain('no por ambos');
+  });
+
+  it('un insumo y un producto que se llaman igual son dos filas distintas', async () => {
+    const staff = await obtenerToken();
+    const nombre = `Leche ${sufijo()}`;
+    await insumoConCompra(staff, nombre);
+    await productoConIngreso(staff, nombre);
+
+    const r = await consultar('inventario', staff);
+    const filas = r.body.porItem.filter((i: { item: string }) => i.item === nombre);
+
+    // Agrupados por nombre se sumaban 3 kg con 5 u en una sola fila.
+    expect(filas).toHaveLength(2);
+    expect(filas.map((f: { tipo: string; unidad: string }) => `${f.tipo}:${f.unidad}`).sort()).toEqual(
+      ['Insumo:kg', 'Producto:u'],
+    );
+  });
+
+  it('cada movimiento dice de dónde vino o para qué salió', async () => {
+    const staff = await obtenerToken();
+    const insumo = await insumoConCompra(staff);
+
+    const compra = await consultar('inventario', staff, { idIngrediente: insumo.id });
+    expect(compra.body.movimientos[0].referencia).toBe('Distribuidora de pruebas · FAC-77');
+
+    // El consumo de una orden de producción nombra la orden y lo que se elaboró.
+    const avena = await buscarInsumo(staff, 'Avena');
+    const { idReceta } = await idRecetaDe(staff, 'Barra de avena');
+    await producir(staff, idReceta, 4);
+
+    const consumo = await consultar('inventario', staff, { idIngrediente: avena.id });
+    const salida = consumo.body.movimientos
+      .filter((m: { tipo: string; motivo: string }) => m.tipo === 'Egreso' && m.motivo === 'Produccion')
+      .at(-1);
+    expect(salida.referencia).toMatch(/^OP-\d+ · Barra de avena/);
+  });
+
+  it('acompaña el neto del período con la existencia de hoy', async () => {
+    const staff = await obtenerToken();
+    const insumo = await insumoConCompra(staff);
+
+    const r = await consultar('inventario', staff, { idIngrediente: insumo.id });
+    const stock = await request(app).get(`/api/insumos/${insumo.id}`).set(cabecera(staff));
+
+    // El neto dice cuánto se movió en las fechas elegidas; la existencia, cuánto
+    // queda. Sin ella, un neto negativo se leía como stock negativo.
+    expect(r.body.porItem[0].existencia).toBe(stock.body.stockTotal);
+  });
+
+  it('agrupa los insumos antes que los productos', async () => {
+    const staff = await obtenerToken();
+    await insumoConCompra(staff);
+    await productoConIngreso(staff);
+
+    const r = await consultar('inventario', staff);
+    const tipos = r.body.porItem.map((i: { tipo: string }) => i.tipo);
+
+    expect(tipos.indexOf('Producto')).toBeGreaterThan(tipos.lastIndexOf('Insumo'));
   });
 });
 

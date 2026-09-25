@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { cantidadDeInsumo } from './cantidad.dto.js';
 import { camposDeFecha, camposDePagina } from './paginacion.dto.js';
 import {
   MOTIVOS_EGRESO,
@@ -13,13 +14,10 @@ import {
  * Ambas notas admiten insumos, productos terminados o ambos, por eso el cuerpo
  * lleva dos listas separadas. Los tipos de cantidad difieren porque así los
  * declara el esquema: los productos se cuentan en unidades enteras y los
- * insumos admiten dos decimales.
+ * insumos admiten tres decimales, el gramo o el mililitro.
  */
 
-const cantidadInsumo = z
-  .number()
-  .gt(0, 'la cantidad debe ser mayor a cero')
-  .max(99999999.99);
+const cantidadInsumo = cantidadDeInsumo('la cantidad');
 
 const cantidadProducto = z
   .number()

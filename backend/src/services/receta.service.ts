@@ -9,6 +9,7 @@ import type {
   RecetaDTO,
 } from '../dtos/receta.dto.js';
 import { ErrorApp } from '../errors/error-app.js';
+import { redondearCantidad } from '../utils/cantidad.js';
 
 /**
  * CU-PRO-01 — Gestionar Producto y Receta (parte de receta).
@@ -66,7 +67,8 @@ function consolidarInsumos(insumos: { idIngrediente: number; cantidadRequerida: 
   }
   return [...porInsumo].map(([id_ingrediente, cantidad_requerida]) => ({
     id_ingrediente,
-    cantidad_requerida: cantidad_requerida,
+    // 0,1 + 0,2 no da 0,3 en coma flotante: se deja en la precisión de la columna.
+    cantidad_requerida: redondearCantidad(cantidad_requerida),
   }));
 }
 

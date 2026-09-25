@@ -200,6 +200,8 @@ export const recetaParaPlanificar = (idReceta: number) =>
     where: { id_receta: idReceta },
     select: {
       id_receta: true,
+      // Para nombrar la receta cuando la cantidad pedida no respeta su divisibilidad.
+      nombre: true,
       activa: true,
       rendimiento: true,
       divisible: true,

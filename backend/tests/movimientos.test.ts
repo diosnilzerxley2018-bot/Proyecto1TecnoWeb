@@ -333,16 +333,45 @@ describe('CU-INV-03 El costo del insumo sigue a lo que se paga', () => {
   });
 
   it('el costo actualizado es el que valoriza la producción', async () => {
+    // Insumo y receta propios: tocar el costo de un insumo del seed se filtraría
+    // a las suites que calculan costos con él, según el orden en que corran.
     const staff = await obtenerToken();
     const almacen = await idAlmacen(staff, 'Almacen Seco');
-    const avena = await buscarInsumo(staff, 'Avena');
+    const insumo = await crearInsumoVacio(staff);
+    await comprar(staff, insumo, almacen, 10, 10);
+    await comprar(staff, insumo, almacen, 10, 30); // promedio: 20
 
-    const antes = avena.costoUnitario as number;
-    await comprar(staff, avena, almacen, avena.stockTotal, antes * 3);
+    const categorias = await request(app).get('/api/catalogo/categorias');
+    const producto = await request(app)
+      .post('/api/productos')
+      .set(cabecera(staff))
+      .send({
+        nombre: `Producto ${sufijo()}`,
+        precioVenta: 50,
+        idCategoria: categorias.body[0].id,
+        tipoConservacion: 'Seco',
+      })
+      .expect(201);
+    const receta = await request(app)
+      .post(`/api/productos/${producto.body.id}/recetas`)
+      .set(cabecera(staff))
+      .send({
+        nombre: `Receta ${sufijo()}`,
+        rendimiento: 1,
+        tiempoPreparacionMinutos: 5,
+        activa: true,
+        insumos: [{ idIngrediente: insumo.id, cantidadRequerida: 1 }],
+      })
+      .expect(201);
 
-    // Con el mismo stock comprado al triple, el promedio queda en el doble.
-    const despues = await request(app).get(`/api/insumos/${avena.id}`).set(cabecera(staff));
-    expect(despues.body.costoUnitario).toBeCloseTo(antes * 2, 1);
+    const orden = await request(app)
+      .post('/api/ordenes')
+      .set(cabecera(staff))
+      .send({ idReceta: receta.body.id, cantidad: 1 })
+      .expect(201);
+
+    // 1 kg al costo promedio de 20, no al de alta (10) ni al de la última compra (30).
+    expect(orden.body.costoEstimado).toBe(20);
   });
 });
 

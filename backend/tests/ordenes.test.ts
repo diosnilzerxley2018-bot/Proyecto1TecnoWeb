@@ -638,3 +638,173 @@ describe('CU-PRO-04 Cancelar orden de producción', () => {
     expect(r.body.error).toContain('Cancelada');
   });
 });
+
+/*
+ * Precisión de las cantidades y recetas no divisibles.
+ *
+ * Cada prueba trabaja con insumos y recetas propios: así el costo y el stock de
+ * partida los fija la prueba, y nada de lo que haga aquí se filtra al seed que
+ * usan las demás suites.
+ */
+
+async function insumoConStock(token: string, costo: number, stock: number) {
+  const unidades = await request(app).get('/api/insumos/unidades').set(cabecera(token));
+  const kg = unidades.body.find((u: { nombre: string }) => u.nombre === 'Kilogramo');
+  const insumo = await request(app)
+    .post('/api/insumos')
+    .set(cabecera(token))
+    .send({ nombre: `Insumo ${sufijo()}`, idUnidad: kg.id, costoUnitario: costo, stockMinimo: 0 })
+    .expect(201);
+
+  const almacenes = await request(app).get('/api/almacenes').set(cabecera(token));
+  const seco = almacenes.body.find((a: { nombre: string }) => a.nombre === 'Almacen Seco').id;
+  await request(app)
+    .post('/api/ingresos')
+    .set(cabecera(token))
+    .send({
+      motivo: 'Compra',
+      proveedor: 'Pruebas',
+      numeroDocumento: `DOC-${sufijo()}`,
+      insumos: [{ idIngrediente: insumo.body.id, idAlmacen: seco, cantidad: stock, costoUnitario: costo }],
+    })
+    .expect(201);
+  return insumo.body.id as number;
+}
+
+async function recetaPropia(
+  token: string,
+  insumos: { idIngrediente: number; cantidadRequerida: number }[],
+  { rendimiento = 4, divisible = true } = {},
+) {
+  const categorias = await request(app).get('/api/catalogo/categorias');
+  const producto = await request(app)
+    .post('/api/productos')
+    .set(cabecera(token))
+    .send({
+      nombre: `Producto ${sufijo()}`,
+      precioVenta: 30,
+      idCategoria: categorias.body[0].id,
+      tipoConservacion: 'Seco',
+    })
+    .expect(201);
+
+  return request(app)
+    .post(`/api/productos/${producto.body.id}/recetas`)
+    .set(cabecera(token))
+    .send({
+      nombre: `Receta ${sufijo()}`,
+      rendimiento,
+      tiempoPreparacionMinutos: 10,
+      activa: true,
+      divisible,
+      insumos,
+    });
+}
+
+async function producir(token: string, idReceta: number, cantidad: number) {
+  const orden = await crearOrden(token, idReceta, cantidad);
+  expect(orden.status).toBe(201);
+  await request(app).post(`/api/ordenes/${orden.body.id}/iniciar`).set(cabecera(token)).expect(200);
+  await request(app)
+    .post(`/api/ordenes/${orden.body.id}/finalizar`)
+    .set(cabecera(token))
+    .send({})
+    .expect(200);
+}
+
+async function stockPorId(token: string, id: number) {
+  const r = await request(app).get(`/api/insumos/${id}`).set(cabecera(token));
+  return r.body.stockTotal as number;
+}
+
+describe('CU-PRO-02 · Las cantidades se pesan al gramo', () => {
+  it('una porción de una receta que rinde 4 usa 125 g, no 130 g', async () => {
+    const staff = await obtenerToken();
+    const arroz = await insumoConStock(staff, 5, 10);
+    const pollo = await insumoConStock(staff, 32, 10);
+    const receta = await recetaPropia(staff, [
+      { idIngrediente: arroz, cantidadRequerida: 0.5 },
+      { idIngrediente: pollo, cantidadRequerida: 1 },
+    ]);
+
+    const r = await crearOrden(staff, receta.body.id, 1);
+
+    expect(r.status).toBe(201);
+    const porInsumo = new Map(
+      r.body.insumosRequeridos.map((i: { idIngrediente: number; cantidadRequerida: number }) => [
+        i.idIngrediente,
+        i.cantidadRequerida,
+      ]),
+    );
+    expect(porInsumo.get(arroz)).toBe(0.125);
+    expect(porInsumo.get(pollo)).toBe(0.25);
+    // 0.125 x 5 + 0.25 x 32 = 8.625. Con el arroz redondeado a 0.13 daba 8.65.
+    expect(r.body.costoEstimado).toBe(8.63);
+  });
+
+  it('cuatro corridas de una porción consumen lo mismo que una de cuatro', async () => {
+    const staff = await obtenerToken();
+    const arroz = await insumoConStock(staff, 5, 10);
+    const receta = await recetaPropia(staff, [{ idIngrediente: arroz, cantidadRequerida: 0.5 }]);
+
+    for (let i = 0; i < 4; i++) await producir(staff, receta.body.id, 1);
+
+    // Con dos decimales cada corrida descontaba 0.13 y las cuatro sumaban 0.52:
+    // el sistema daba por consumidos 20 g de arroz que siguen en el almacén.
+    expect(await stockPorId(staff, arroz)).toBe(9.5);
+  });
+
+  it('una receta guarda 5 g de un insumo medido en kilos', async () => {
+    const staff = await obtenerToken();
+    const sal = await insumoConStock(staff, 3, 1);
+
+    const receta = await recetaPropia(staff, [{ idIngrediente: sal, cantidadRequerida: 0.005 }]);
+
+    // Antes se guardaban 0.01: el doble de sal.
+    expect(receta.status).toBe(201);
+    expect(receta.body.insumos[0].cantidadRequerida).toBe(0.005);
+  });
+
+  it('rechaza una cantidad más fina que el gramo en vez de redondearla a cero', async () => {
+    const staff = await obtenerToken();
+    const sal = await insumoConStock(staff, 3, 1);
+
+    const receta = await recetaPropia(staff, [{ idIngrediente: sal, cantidadRequerida: 0.0004 }]);
+
+    // Antes llegaba a la base, se guardaba como 0,00 y violaba `cantidad > 0`:
+    // un 500 sin explicación. Ahora se rechaza al entrar y se dice por qué.
+    expect(receta.status).toBe(400);
+    expect(receta.body.error).toContain('decimales');
+  });
+});
+
+describe('CU-PRO-02 · Recetas no divisibles', () => {
+  it('rechaza producir una fracción de corrida y dice cuánto producir', async () => {
+    const staff = await obtenerToken();
+    const harina = await insumoConStock(staff, 11, 10);
+    const receta = await recetaPropia(staff, [{ idIngrediente: harina, cantidadRequerida: 1 }], {
+      rendimiento: 4,
+      divisible: false,
+    });
+
+    const r = await crearOrden(staff, receta.body.id, 1);
+
+    expect(r.status).toBe(400);
+    expect(r.body.error).toContain('no es divisible');
+    expect(r.body.error).toContain('produzca 4');
+  });
+
+  it('acepta los múltiplos de su rendimiento', async () => {
+    const staff = await obtenerToken();
+    const harina = await insumoConStock(staff, 11, 10);
+    const receta = await recetaPropia(staff, [{ idIngrediente: harina, cantidadRequerida: 1 }], {
+      rendimiento: 4,
+      divisible: false,
+    });
+
+    const r = await crearOrden(staff, receta.body.id, 8);
+
+    expect(r.status).toBe(201);
+    expect(r.body.insumosRequeridos[0].cantidadRequerida).toBe(2);
+  });
+});

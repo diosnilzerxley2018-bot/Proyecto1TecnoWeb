@@ -33,6 +33,7 @@ import { modoCobro } from './configuracion.service.js';
 import { requiereCobroEnLinea, type ModoCobro } from '../config/dominio.js';
 import { exigirEmpleado } from './actor.service.js';
 import { ErrorApp } from '../errors/error-app.js';
+import { redondearCantidad } from '../utils/cantidad.js';
 
 /**
  * CU-VEN-01 — Gestionar Venta.
@@ -366,7 +367,7 @@ async function faltantesDelConjunto(lineas: LineaEvaluacionDTO[]): Promise<Insum
     for (const insumo of linea.insumos) {
       const previo = total.get(insumo.idIngrediente);
       if (previo) {
-        previo.cantidad = Math.round((previo.cantidad + insumo.cantidadRequerida) * 100) / 100;
+        previo.cantidad = redondearCantidad(previo.cantidad + insumo.cantidadRequerida);
       } else {
         total.set(insumo.idIngrediente, {
           nombre: insumo.nombre,

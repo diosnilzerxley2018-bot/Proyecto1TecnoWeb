@@ -4,6 +4,7 @@ import * as almacenModel from '../models/almacen.model.js';
 import type { ClientePrisma } from '../models/stock.model.js';
 import { ErrorApp } from '../errors/error-app.js';
 import { dosDecimales } from '../utils/dinero.js';
+import { redondearCantidad } from '../utils/cantidad.js';
 
 /** Reglas comunes a CU-INV-03 Gestionar Ingreso y CU-INV-04 Gestionar Egreso. */
 
@@ -84,7 +85,7 @@ export function consolidar(lineas: LineaBruta[]): LineaConsolidada[] {
 
   return [...acumulado.values()].map(({ linea, importe }) => ({
     ...linea,
-    cantidad: dosDecimales(linea.cantidad),
+    cantidad: redondearCantidad(linea.cantidad),
     costoUnitario: linea.cantidad > 0 ? dosDecimales(importe / linea.cantidad) : 0,
   }));
 }

@@ -724,26 +724,38 @@ export interface ReporteInventario {
   /** Texto del filtro aplicado, para encabezar el reporte. */
   filtro: string | null;
   generadoEn: string;
+  /** Cantidad de líneas de entrada y de salida, no de mercadería. */
   resumen: { ingresos: number; egresos: number; costoIngresado: number };
   porItem: {
+    tipo: TipoItemReporte;
     item: string;
     unidad: string;
     entradas: number;
     salidas: number;
-    /** Negativo significa que se consumió más de lo que entró. */
+    /**
+     * Entradas menos salidas **en el período**. No es la existencia: negativo
+     * dice que salió más de lo que entró, no que el stock sea negativo.
+     */
     neto: number;
+    /** Lo que hay hoy en todos los almacenes. */
+    existencia: number;
   }[];
   movimientos: {
     fecha: string;
     tipo: 'Ingreso' | 'Egreso';
     motivo: string;
+    tipoItem: TipoItemReporte;
     item: string;
     unidad: string;
     cantidad: number;
     /** Nulo en los egresos: una salida no tiene costo propio. */
     costo: number | null;
+    /** Proveedor y documento, u orden de producción y lo que se elaboró. */
+    referencia: string | null;
   }[];
 }
+
+export type TipoItemReporte = 'Insumo' | 'Producto';
 
 export interface Cliente {
   id: number;

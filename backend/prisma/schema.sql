@@ -172,7 +172,10 @@ CREATE TABLE valor_nutricional (
 CREATE TABLE ingrediente (
     id_ingrediente      INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     nombre              VARCHAR(100) NOT NULL,
-    stock_minimo        NUMERIC(10,2) NOT NULL DEFAULT 0,
+    -- Las cantidades de insumo llevan tres decimales: el gramo y el
+    -- mililitro. Con dos, la resolución era de 10 g y 125 g se guardaban
+    -- como 130 g (utils/cantidad.ts).
+    stock_minimo        NUMERIC(12,3) NOT NULL DEFAULT 0,
     costo_unitario      NUMERIC(10,2) NOT NULL DEFAULT 0,
     activo              BOOLEAN NOT NULL DEFAULT TRUE,
     tipo_conservacion   VARCHAR(20) NOT NULL DEFAULT 'Seco',
@@ -206,7 +209,7 @@ CREATE UNIQUE INDEX ux_receta_activa
 CREATE TABLE detalle_receta (
     id_receta           INT NOT NULL,
     id_ingrediente      INT NOT NULL,
-    cantidad_requerida  NUMERIC(10,2) NOT NULL,
+    cantidad_requerida  NUMERIC(12,3) NOT NULL,
     PRIMARY KEY (id_receta, id_ingrediente),
     CONSTRAINT fk_detreceta_receta      FOREIGN KEY (id_receta)      REFERENCES receta(id_receta),
     CONSTRAINT fk_detreceta_ingrediente FOREIGN KEY (id_ingrediente) REFERENCES ingrediente(id_ingrediente),
@@ -216,7 +219,7 @@ CREATE TABLE detalle_receta (
 CREATE TABLE ingrediente_almacen (
     id_ingrediente  INT NOT NULL,
     id_almacen      INT NOT NULL,
-    stock_actual    NUMERIC(10,2) NOT NULL DEFAULT 0,
+    stock_actual    NUMERIC(12,3) NOT NULL DEFAULT 0,
     PRIMARY KEY (id_ingrediente, id_almacen),
     CONSTRAINT fk_ingalm_ingrediente FOREIGN KEY (id_ingrediente) REFERENCES ingrediente(id_ingrediente),
     CONSTRAINT fk_ingalm_almacen     FOREIGN KEY (id_almacen)     REFERENCES almacen(id_almacen),
@@ -249,7 +252,7 @@ CREATE TABLE detalle_ingreso_insumo (
     id_nota_ingreso INT NOT NULL,
     id_ingrediente  INT NOT NULL,
     id_almacen      INT NOT NULL,
-    cantidad        NUMERIC(10,2) NOT NULL,
+    cantidad        NUMERIC(12,3) NOT NULL,
     costo_unitario  NUMERIC(10,2) NOT NULL,
     PRIMARY KEY (id_nota_ingreso, id_ingrediente, id_almacen),
     CONSTRAINT fk_detingins_nota FOREIGN KEY (id_nota_ingreso) REFERENCES nota_ingreso(id_nota_ingreso),
@@ -285,7 +288,7 @@ CREATE TABLE detalle_egreso_insumo (
     id_nota_egreso  INT NOT NULL,
     id_ingrediente  INT NOT NULL,
     id_almacen      INT NOT NULL,
-    cantidad        NUMERIC(10,2) NOT NULL,
+    cantidad        NUMERIC(12,3) NOT NULL,
     PRIMARY KEY (id_nota_egreso, id_ingrediente, id_almacen),
     CONSTRAINT fk_detegrins_nota FOREIGN KEY (id_nota_egreso) REFERENCES nota_egreso(id_nota_egreso),
     CONSTRAINT fk_detegrins_stock FOREIGN KEY (id_ingrediente, id_almacen)
@@ -431,7 +434,7 @@ CREATE TABLE lote (
 CREATE TABLE lote_almacen (
     id_lote         INT NOT NULL,
     id_almacen      INT NOT NULL,
-    stock_actual    NUMERIC(10,2) NOT NULL DEFAULT 0,
+    stock_actual    NUMERIC(12,3) NOT NULL DEFAULT 0,
     PRIMARY KEY (id_lote, id_almacen),
     CONSTRAINT fk_lotealm_lote    FOREIGN KEY (id_lote)    REFERENCES lote(id_lote),
     CONSTRAINT fk_lotealm_almacen FOREIGN KEY (id_almacen) REFERENCES almacen(id_almacen),

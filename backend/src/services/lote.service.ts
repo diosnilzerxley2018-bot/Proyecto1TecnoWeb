@@ -2,6 +2,7 @@ import * as loteModel from '../models/lote.model.js';
 import * as stockModel from '../models/stock.model.js';
 import type { ClientePrisma } from '../models/stock.model.js';
 import { ErrorApp } from '../errors/error-app.js';
+import { redondearCantidad } from '../utils/cantidad.js';
 
 /**
  * Trazabilidad de lotes de insumos perecederos (hallazgo A6).
@@ -105,7 +106,7 @@ export async function consumir(
     if (restante <= 0) break;
 
     const disponible = Number(fila.stock_actual);
-    const tomado = Math.round(Math.min(restante, disponible) * 100) / 100;
+    const tomado = redondearCantidad(Math.min(restante, disponible));
     if (tomado <= 0) continue;
 
     const descontado = await loteModel.descontar(tx, fila.id_lote, datos.idAlmacen, tomado);
@@ -122,7 +123,7 @@ export async function consumir(
       fechaVencimiento: fila.lote.fecha_vencimiento,
       cantidad: tomado,
     });
-    restante = Math.round((restante - tomado) * 100) / 100;
+    restante = redondearCantidad(restante - tomado);
   }
 
   /**

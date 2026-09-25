@@ -10,6 +10,7 @@ import { api, ErrorApi } from '@/lib/api';
 import { useNotificaciones } from '@/components/ui/Notificaciones';
 import type { Insumo, Producto, Receta } from '@/types';
 import { formatearBs, formatearCantidad } from '@/lib/formato';
+import { redondearCantidad } from '@/lib/dominio';
 
 interface RecetaActiva extends Receta {
   nombreProducto: string;
@@ -90,12 +91,26 @@ export function FormularioOrden({
     const factor = porciones / receta.rendimiento;
     const insumos = receta.insumos.map((insumo) => ({
       ...insumo,
-      requerido: Math.round(insumo.cantidadRequerida * factor * 100) / 100,
+      // Al gramo, igual que el servidor: con dos decimales 125 g se leían 130 g
+      // y el costo salía de esa cantidad inflada.
+      requerido: redondearCantidad(insumo.cantidadRequerida * factor),
       costoUnitario: costoPorInsumo.get(insumo.idIngrediente) ?? 0,
     }));
 
     return { factor, insumos };
   }, [receta, porciones, costoPorInsumo]);
+
+  /**
+   * Una receta no divisible se produce en corridas completas.
+   *
+   * El servidor rechaza la orden igual; avisarlo aquí, con la cantidad que sí
+   * vale, evita que el empleado descubra la regla recién al confirmar.
+   */
+  const corridaIncompleta =
+    receta !== null && !receta.divisible && porciones > 0 && porciones % receta.rendimiento !== 0;
+  const cantidadValida = receta
+    ? Math.max(1, Math.ceil(porciones / receta.rendimiento)) * receta.rendimiento
+    : 0;
 
   async function enviar(evento: React.FormEvent) {
     evento.preventDefault();
@@ -153,18 +168,40 @@ export function FormularioOrden({
       <Campo
         etiqueta="Porciones a producir"
         type="number"
-        step="1"
-        min="1"
+        step={receta && !receta.divisible ? receta.rendimiento : 1}
+        min={receta && !receta.divisible ? receta.rendimiento : 1}
         required
         value={cantidad}
         onChange={(e) => setCantidad(e.target.value)}
         sufijo="porciones"
         ayuda={
           receta
-            ? `Una corrida de esta receta rinde ${receta.rendimiento} ${receta.rendimiento === 1 ? 'porción' : 'porciones'}`
+            ? receta.divisible
+              ? `Una corrida de esta receta rinde ${receta.rendimiento} ${receta.rendimiento === 1 ? 'porción' : 'porciones'}`
+              : `Receta no divisible: se produce en corridas completas de ${receta.rendimiento} porciones`
             : undefined
         }
       />
+
+      {corridaIncompleta && (
+        <div
+          role="alert"
+          className="flex items-start justify-between gap-3 rounded-xl border border-aviso/25 bg-aviso/8 px-3.5 py-2.5 text-xs text-aviso"
+        >
+          <span className="flex items-start gap-2">
+            <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+            Esta receta no se puede hacer por partes: {porciones}{' '}
+            {porciones === 1 ? 'porción no completa' : 'porciones no completan'} una corrida.
+          </span>
+          <button
+            type="button"
+            onClick={() => setCantidad(String(cantidadValida))}
+            className="shrink-0 font-medium underline underline-offset-2"
+          >
+            Producir {cantidadValida}
+          </button>
+        </div>
+      )}
 
       <AnimatePresence mode="wait">
         {calculo && (
@@ -217,7 +254,7 @@ export function FormularioOrden({
         <Boton type="button" variante="fantasma" onClick={onCancelar}>
           Cancelar
         </Boton>
-        <Boton type="submit" variante="primario" cargando={enviando}>
+        <Boton type="submit" variante="primario" cargando={enviando} disabled={corridaIncompleta}>
           Registrar orden
         </Boton>
       </div>

@@ -48,7 +48,7 @@ model detalle_egreso_insumo {
   id_nota_egreso      Int
   id_ingrediente      Int
   id_almacen          Int
-  cantidad            Decimal             @db.Decimal(10, 2)
+  cantidad            Decimal             @db.Decimal(12, 3)
   nota_egreso         nota_egreso         @relation(fields: [id_nota_egreso], references: [id_nota_egreso], onDelete: NoAction, onUpdate: NoAction, map: "fk_detegrins_nota")
   ingrediente_almacen ingrediente_almacen @relation(fields: [id_ingrediente, id_almacen], references: [id_ingrediente, id_almacen], onDelete: NoAction, onUpdate: NoAction, map: "fk_detegrins_stock")
 
@@ -72,7 +72,7 @@ model detalle_ingreso_insumo {
   id_nota_ingreso     Int
   id_ingrediente      Int
   id_almacen          Int
-  cantidad            Decimal             @db.Decimal(10, 2)
+  cantidad            Decimal             @db.Decimal(12, 3)
   costo_unitario      Decimal             @db.Decimal(10, 2)
   nota_ingreso        nota_ingreso        @relation(fields: [id_nota_ingreso], references: [id_nota_ingreso], onDelete: NoAction, onUpdate: NoAction, map: "fk_detingins_nota")
   ingrediente_almacen ingrediente_almacen @relation(fields: [id_ingrediente, id_almacen], references: [id_ingrediente, id_almacen], onDelete: NoAction, onUpdate: NoAction, map: "fk_detingins_stock")
@@ -110,7 +110,7 @@ model detalle_pedido {
 model detalle_receta {
   id_receta          Int
   id_ingrediente     Int
-  cantidad_requerida Decimal     @db.Decimal(10, 2)
+  cantidad_requerida Decimal     @db.Decimal(12, 3)
   ingrediente        ingrediente @relation(fields: [id_ingrediente], references: [id_ingrediente], onDelete: NoAction, onUpdate: NoAction, map: "fk_detreceta_ingrediente")
   receta             receta      @relation(fields: [id_receta], references: [id_receta], onDelete: NoAction, onUpdate: NoAction, map: "fk_detreceta_receta")
 
@@ -147,7 +147,7 @@ model empleado {
 model ingrediente {
   id_ingrediente       Int                   @id @default(autoincrement())
   nombre               String                @db.VarChar(100)
-  stock_minimo         Decimal               @default(0) @db.Decimal(10, 2)
+  stock_minimo         Decimal               @default(0) @db.Decimal(12, 3)
   costo_unitario       Decimal               @default(0) @db.Decimal(10, 2)
   activo               Boolean               @default(true)
   id_unidad            Int
@@ -163,7 +163,7 @@ model ingrediente {
 model ingrediente_almacen {
   id_ingrediente         Int
   id_almacen             Int
-  stock_actual           Decimal                  @default(0) @db.Decimal(10, 2)
+  stock_actual           Decimal                  @default(0) @db.Decimal(12, 3)
   detalle_egreso_insumo  detalle_egreso_insumo[]
   detalle_ingreso_insumo detalle_ingreso_insumo[]
   almacen                almacen                  @relation(fields: [id_almacen], references: [id_almacen], onDelete: NoAction, onUpdate: NoAction, map: "fk_ingalm_almacen")
@@ -425,7 +425,7 @@ model lote {
 model lote_almacen {
   id_lote      Int
   id_almacen   Int
-  stock_actual Decimal @default(0) @db.Decimal(10, 2)
+  stock_actual Decimal @default(0) @db.Decimal(12, 3)
   almacen      almacen @relation(fields: [id_almacen], references: [id_almacen], onDelete: NoAction, onUpdate: NoAction, map: "fk_lotealm_almacen")
   lote         lote    @relation(fields: [id_lote], references: [id_lote], onDelete: NoAction, onUpdate: NoAction, map: "fk_lotealm_lote")
 

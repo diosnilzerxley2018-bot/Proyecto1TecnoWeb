@@ -8,6 +8,7 @@ import { Boton } from '@/components/ui/Boton';
 import { api, ErrorApi } from '@/lib/api';
 import { useNotificaciones } from '@/components/ui/Notificaciones';
 import type { Insumo, TipoConservacion, UnidadMedida } from '@/types';
+import { PASO_CANTIDAD } from '@/lib/dominio';
 
 /**
  * Alta y edición de insumos (CU-INV-01).
@@ -155,7 +156,7 @@ export function FormularioInsumo({
         <Campo
           etiqueta="Stock mínimo"
           type="number"
-          step="0.01"
+          step={PASO_CANTIDAD}
           min="0"
           required
           value={minimo}

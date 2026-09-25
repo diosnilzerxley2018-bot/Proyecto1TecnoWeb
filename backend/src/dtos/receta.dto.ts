@@ -1,13 +1,11 @@
 import { z } from 'zod';
+import { cantidadDeInsumo } from './cantidad.dto.js';
 
 /** CU-PRO-01 — Gestionar Producto y Receta (parte de receta). */
 
 const esquemaLinea = z.object({
   idIngrediente: z.number().int().positive(),
-  cantidadRequerida: z
-    .number()
-    .gt(0, 'la cantidad requerida debe ser mayor a cero')
-    .max(99999999.99),
+  cantidadRequerida: cantidadDeInsumo('la cantidad requerida'),
 });
 
 const cabecera = {

@@ -1,5 +1,21 @@
 import 'dotenv/config';
 
+/*
+ * La zona horaria del negocio, fijada por la aplicación y no heredada de la
+ * máquina.
+ *
+ * Los reportes y los listados arman "el día" con la hora local del proceso
+ * (`utils/fechas.ts`). Eso funcionaba en la máquina de desarrollo, que está en
+ * Bolivia, pero en producción la hora local era otra: Railway corre en UTC y
+ * el VPS en Europe/Berlin. En el VPS un reporte "del 25" cubría desde las
+ * 18:00 del 24 hasta las 18:00 del 25 hora de Bolivia, así que lo vendido y
+ * producido a la noche aparecía en el reporte del día siguiente.
+ *
+ * Se fija aquí, antes de que nada calcule una fecha, y no en el sistema
+ * operativo: el VPS aloja otros proyectos que tienen su propia hora.
+ */
+process.env.TZ = process.env.ZONA_HORARIA ?? 'America/La_Paz';
+
 function requerido(clave: string): string {
   const valor = process.env[clave];
   if (!valor) throw new Error(`Falta la variable de entorno ${clave}`);

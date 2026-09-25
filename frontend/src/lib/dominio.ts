@@ -82,3 +82,21 @@ export const CENTRO_REPARTO: Coordenadas = { lat: -17.783327, lon: -63.18214 };
 export const TIPOS_IMAGEN_PRODUCTO = ['image/jpeg', 'image/png', 'image/webp'];
 
 export const TAMANO_MAXIMO_IMAGEN_PRODUCTO = 3 * 1024 * 1024;
+
+/* --- Precisión de las cantidades de insumo --- */
+
+/**
+ * Espejo de `backend/src/utils/cantidad.ts`.
+ *
+ * Los insumos se miden en kilos y litros: el tercer decimal es el gramo y el
+ * mililitro. Con dos, 125 g se mostraban y se descontaban como 130 g.
+ */
+export const DECIMALES_CANTIDAD = 3;
+
+/** El `step` de un campo de cantidad de insumo: un gramo, un mililitro. */
+export const PASO_CANTIDAD = '0.001';
+
+export function redondearCantidad(valor: number): number {
+  const factor = 10 ** DECIMALES_CANTIDAD;
+  return Math.round(valor * factor) / factor;
+}

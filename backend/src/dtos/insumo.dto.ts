@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { cantidadDeInsumoOCero } from './cantidad.dto.js';
 import type { ExistenciaDTO } from './comun.dto.js';
 import { TIPOS_CONSERVACION, type TipoConservacion } from '../config/dominio.js';
 
@@ -15,7 +16,7 @@ export const esquemaCrearInsumo = z.object({
   nombre: z.string().trim().min(2).max(100),
   idUnidad: z.number().int().positive(),
   costoUnitario: importe('el costo unitario'),
-  stockMinimo: importe('el stock mínimo'),
+  stockMinimo: cantidadDeInsumoOCero('el stock mínimo'),
   /**
    * CU-INV-02: el tipo de conservación decide en qué almacén puede guardarse.
    * Por omisión es Seco, la condición menos restrictiva.
