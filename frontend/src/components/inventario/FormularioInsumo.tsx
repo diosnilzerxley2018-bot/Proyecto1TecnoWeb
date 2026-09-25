@@ -146,6 +146,11 @@ export function FormularioInsumo({
           value={costo}
           onChange={(e) => setCosto(e.target.value)}
           sufijo="Bs"
+          ayuda={
+            editando
+              ? 'Cada compra lo recalcula con el promedio ponderado'
+              : 'Costo de partida. Cada compra lo irá recalculando'
+          }
         />
         <Campo
           etiqueta="Stock mínimo"

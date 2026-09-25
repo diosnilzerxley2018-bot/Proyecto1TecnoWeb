@@ -277,6 +277,75 @@ describe('CU-INV-03 Gestionar ingreso', () => {
   });
 });
 
+describe('CU-INV-03 El costo del insumo sigue a lo que se paga', () => {
+  /** Compra `cantidad` del insumo al precio indicado y devuelve su costo resultante. */
+  async function comprar(
+    token: string,
+    insumo: { id: number },
+    almacen: number,
+    cantidad: number,
+    costoUnitario: number,
+    motivo = 'Compra',
+  ) {
+    await request(app)
+      .post('/api/ingresos')
+      .set(cabecera(token))
+      .send({
+        motivo,
+        proveedor: 'Proveedor de prueba',
+        numeroDocumento: `DOC-${sufijo()}`,
+        insumos: [{ idIngrediente: insumo.id, idAlmacen: almacen, cantidad, costoUnitario }],
+      })
+      .expect(201);
+
+    const r = await request(app).get(`/api/insumos/${insumo.id}`).set(cabecera(token));
+    return r.body.costoUnitario as number;
+  }
+
+  it('la primera compra de un insumo sin existencias fija su costo', async () => {
+    const staff = await tokenEmpleado();
+    const almacen = await idAlmacen(staff, 'Almacen Seco');
+    // Nace declarado en 10 y sin existencias: no hay nada contra qué promediar.
+    const insumo = await crearInsumoVacio(staff);
+
+    expect(await comprar(staff, insumo, almacen, 4, 5)).toBe(5);
+  });
+
+  it('promedia el costo viejo con el nuevo, pesados por cantidad', async () => {
+    const staff = await tokenEmpleado();
+    const almacen = await idAlmacen(staff, 'Almacen Seco');
+    const insumo = await crearInsumoVacio(staff);
+
+    // 4 unidades a 5 y después 5 a 10: (4x5 + 5x10) / 9 = 70/9 = 7.78
+    await comprar(staff, insumo, almacen, 4, 5);
+    expect(await comprar(staff, insumo, almacen, 5, 10)).toBe(7.78);
+  });
+
+  it('un ajuste de inventario no revaloriza lo que ya estaba', async () => {
+    const staff = await tokenEmpleado();
+    const almacen = await idAlmacen(staff, 'Almacen Seco');
+    const insumo = await crearInsumoVacio(staff);
+    await comprar(staff, insumo, almacen, 10, 8);
+
+    // Un conteo que corrige cantidades no es una adquisición: mover el costo
+    // con él permitiría torcerlo sin comprar nada.
+    expect(await comprar(staff, insumo, almacen, 5, 99, 'Ajuste')).toBe(8);
+  });
+
+  it('el costo actualizado es el que valoriza la producción', async () => {
+    const staff = await obtenerToken();
+    const almacen = await idAlmacen(staff, 'Almacen Seco');
+    const avena = await buscarInsumo(staff, 'Avena');
+
+    const antes = avena.costoUnitario as number;
+    await comprar(staff, avena, almacen, avena.stockTotal, antes * 3);
+
+    // Con el mismo stock comprado al triple, el promedio queda en el doble.
+    const despues = await request(app).get(`/api/insumos/${avena.id}`).set(cabecera(staff));
+    expect(despues.body.costoUnitario).toBeCloseTo(antes * 2, 1);
+  });
+});
+
 describe('CU-INV-04 Gestionar egreso', () => {
   it('registra la nota y descuenta el stock', async () => {
     const staff = await tokenEmpleado();

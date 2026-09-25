@@ -14,6 +14,7 @@ import {
 import { exigirEmpleado } from './actor.service.js';
 import * as insumoModel from '../models/insumo.model.js';
 import * as loteService from './lote.service.js';
+import * as costeoService from './costeo.service.js';
 import { ErrorApp } from '../errors/error-app.js';
 
 /**
@@ -80,6 +81,11 @@ export async function registrarEnTransaccion(
     idEmpleado: datos.idEmpleado,
   });
 
+  // Cuánto había antes de sumar esta nota. Se lee ahora porque el incremento
+  // que viene a continuación lo pisa, y el promedio ponderado necesita el
+  // stock previo (CU-INV-03, costeo).
+  const existenciasPrevias = await costeoService.existenciasAntesDelIngreso(tx, insumos);
+
   // Primero el stock: crea la fila que el detalle necesita como clave foránea.
   // Para los insumos, el incremento pasa por el servicio de lotes, que
   // mantiene sincronizados el total consolidado y su desglose por vencimiento.
@@ -132,6 +138,16 @@ export async function registrarEnTransaccion(
       })),
     );
   }
+
+  /*
+   * Lo que se pagó pasa a ser el costo del insumo, promediado con lo que ya
+   * había. Va dentro de la misma transacción: un costo actualizado sobre una
+   * compra que después se revierte describiría existencias que no entraron.
+   *
+   * El producto terminado no necesita el equivalente: su costo se deduce al
+   * consultarlo, promediando sus notas de ingreso (`producto.costoPromedio`).
+   */
+  await costeoService.actualizarCostoPorCompra(tx, datos.motivo, insumos, existenciasPrevias);
 
   return nota.id_nota_ingreso;
 }

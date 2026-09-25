@@ -90,7 +90,7 @@ export default function PaginaInsumos() {
     <>
       <EncabezadoPagina
         titulo="Insumos"
-        descripcion="Catálogo de insumos, con su unidad, costo y nivel de reposición"
+        descripcion="Catálogo de insumos, con su unidad, costo promedio de compra y nivel de reposición"
         acciones={
           puedeGestionar && (
             <Boton
@@ -190,7 +190,7 @@ export default function PaginaInsumos() {
         <div className="superficie-tarjeta overflow-hidden rounded-2xl">
           <div className="hidden grid-cols-[minmax(0,2.2fr)_repeat(3,minmax(0,1fr))_auto] gap-3 border-b border-borde px-4 py-3 text-[10px] font-medium uppercase tracking-wider text-tinta-tenue md:grid">
             <span>Insumo</span>
-            <span>Costo unitario</span>
+            <span>Costo promedio</span>
             <span>Stock mínimo</span>
             <span>Existencias</span>
             {puedeGestionar && <span className="w-[76px]" />}

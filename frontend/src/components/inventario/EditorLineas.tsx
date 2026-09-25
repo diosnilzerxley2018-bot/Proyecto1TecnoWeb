@@ -196,7 +196,7 @@ export function EditorLineas({
 
                     {conCosto && (
                       <Campo
-                        etiqueta="Costo unitario"
+                        etiqueta="Precio pagado por unidad"
                         className="sm:col-span-2"
                         type="number"
                         min="0"
@@ -204,6 +204,7 @@ export function EditorLineas({
                         value={linea.costoUnitario}
                         onChange={(e) => actualizar(linea.uid, { costoUnitario: e.target.value })}
                         sufijo="Bs"
+                        ayuda="Lo que costó en esta compra. Recalcula el costo promedio del insumo"
                       />
                     )}
 

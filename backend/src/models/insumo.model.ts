@@ -138,3 +138,18 @@ export const existentes = (ids: number[], tx: ClientePrisma, soloActivos: boolea
       controla_vencimiento: true,
     },
   });
+
+/** Costo vigente de los insumos indicados, para recalcularlo tras una compra. */
+export const costosActuales = (ids: number[], tx: ClientePrisma) =>
+  tx.ingrediente.findMany({
+    where: { id_ingrediente: { in: ids } },
+    select: { id_ingrediente: true, costo_unitario: true },
+  });
+
+/** Deja el costo del insumo en el promedio ponderado recién calculado. */
+export const fijarCosto = (tx: ClientePrisma, id: number, costo: number) =>
+  tx.ingrediente.update({
+    where: { id_ingrediente: id },
+    data: { costo_unitario: costo },
+    select: { id_ingrediente: true },
+  });

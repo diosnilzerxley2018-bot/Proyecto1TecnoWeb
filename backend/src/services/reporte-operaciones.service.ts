@@ -220,25 +220,12 @@ export async function produccion(
     const factor = o.cantidad / o.receta.rendimiento;
     let costo = 0;
 
-    for (const linea of o.receta.detalle_receta) {
+    const consumos = o.receta.detalle_receta.map((linea) => {
       const cantidad = dosDecimales(Number(linea.cantidad_requerida) * factor);
       const parcial = dosDecimales(cantidad * Number(linea.ingrediente.costo_unitario));
       costo = dosDecimales(costo + parcial);
-
-      const id = linea.ingrediente.id_ingrediente;
-      const acumulado = insumos.get(id);
-      if (acumulado) {
-        acumulado.cantidad = dosDecimales(acumulado.cantidad + cantidad);
-        acumulado.costo = dosDecimales(acumulado.costo + parcial);
-      } else {
-        insumos.set(id, {
-          insumo: linea.ingrediente.nombre,
-          unidad: linea.ingrediente.unidad_medida.abreviatura,
-          cantidad,
-          costo: parcial,
-        });
-      }
-    }
+      return { linea, cantidad, parcial };
+    });
 
     /*
      * El costo que la corrida dejó registrado (H5). Solo se recalcula desde la
@@ -246,6 +233,41 @@ export async function produccion(
      * precio de un insumo no debe reescribir el costo de lo ya producido.
      */
     const costoDeLaCorrida = o.costo_total !== null ? Number(o.costo_total) : costo;
+
+    /*
+     * El desglose se lleva al costo que quedó registrado.
+     *
+     * El total de la corrida es inmutable, pero el desglose por insumo se
+     * reconstruye desde la receta y se valoriza con el costo **de hoy**, que
+     * ya no es el de entonces: desde que cada compra actualiza el costo del
+     * insumo, las dos cifras se separan y el reporte terminaba diciendo que
+     * sus partes no sumaban su propio total.
+     *
+     * No hay desglose histórico guardado —la nota de egreso no lleva costo—,
+     * así que se reparte el costo registrado en la misma proporción en que
+     * los precios actuales reparten el recalculado. Es una aproximación: si
+     * un insumo subió y otro no, el reparto la promedia entre los dos. A
+     * cambio, el reporte deja de contradecirse y el total sigue siendo el que
+     * la corrida dejó escrito.
+     */
+    const ajuste = costo > 0 ? costoDeLaCorrida / costo : 1;
+
+    for (const { linea, cantidad, parcial } of consumos) {
+      const historico = dosDecimales(parcial * ajuste);
+      const id = linea.ingrediente.id_ingrediente;
+      const acumulado = insumos.get(id);
+      if (acumulado) {
+        acumulado.cantidad = dosDecimales(acumulado.cantidad + cantidad);
+        acumulado.costo = dosDecimales(acumulado.costo + historico);
+      } else {
+        insumos.set(id, {
+          insumo: linea.ingrediente.nombre,
+          unidad: linea.ingrediente.unidad_medida.abreviatura,
+          cantidad,
+          costo: historico,
+        });
+      }
+    }
 
     unidades += obtenida;
     merma += Math.max(0, o.cantidad - obtenida);
