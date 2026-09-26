@@ -67,6 +67,16 @@ function detalleDeIngreso(nota: {
   return [nota.proveedor, nota.numeroDocumento].filter(Boolean).join(' · ') || null;
 }
 
+/**
+ * Qué se movió, con nombres: «Leche, Tomate y 2 más» dice lo que «4 ítem(s)»
+ * obligaba a abrir la nota para saber.
+ */
+function resumirLineas(lineas: LineaMovimiento[]): string {
+  const nombres = [...new Set(lineas.map((l) => l.nombre))];
+  if (nombres.length <= 2) return nombres.join(' y ');
+  return `${nombres.slice(0, 2).join(', ')} y ${nombres.length - 2} más`;
+}
+
 export default function PaginaMovimientos() {
   const { tienePermiso } = useAuth();
   const { notificar } = useNotificaciones();
@@ -167,22 +177,25 @@ export default function PaginaMovimientos() {
         descripcion="Notas de ingreso y egreso que documentan cada entrada y salida del inventario"
         acciones={
           <>
-            {puedeIngresar && (
-              <Boton
-                variante="contorno"
-                onClick={() => setRegistrando('ingreso')}
-                icono={<ArrowDownToLine className="size-4" aria-hidden />}
-              >
-                Ingreso
-              </Boton>
-            )}
+            {/* El ingreso va primero y destacado: es lo cotidiano, las compras.
+                El egreso manual es para mermas y ajustes; el de producción lo
+                registra la orden al finalizarse. */}
             {puedeEgresar && (
               <Boton
-                variante="primario"
+                variante="contorno"
                 onClick={() => setRegistrando('egreso')}
                 icono={<ArrowUpFromLine className="size-4" aria-hidden />}
               >
-                Egreso
+                Registrar egreso
+              </Boton>
+            )}
+            {puedeIngresar && (
+              <Boton
+                variante="primario"
+                onClick={() => setRegistrando('ingreso')}
+                icono={<ArrowDownToLine className="size-4" aria-hidden />}
+              >
+                Registrar ingreso
               </Boton>
             )}
           </>
@@ -211,14 +224,26 @@ export default function PaginaMovimientos() {
       ) : movimientos.length === 0 ? (
         <EstadoVacio
           icono={<ArrowLeftRight className="size-6" aria-hidden />}
-          titulo="Sin movimientos registrados"
+          titulo={
+            vista === 'ingreso'
+              ? 'Todavía no hay notas de ingreso'
+              : vista === 'egreso'
+                ? 'Todavía no hay notas de egreso'
+                : 'Sin movimientos registrados'
+          }
           descripcion="Las notas de ingreso documentan lo que entra al almacén; las de egreso, las salidas por producción, merma o ajuste."
           accion={
-            puedeIngresar && (
-              <Boton variante="primario" onClick={() => setRegistrando('ingreso')}>
-                Registrar el primer ingreso
-              </Boton>
-            )
+            vista === 'egreso'
+              ? puedeEgresar && (
+                  <Boton variante="primario" onClick={() => setRegistrando('egreso')}>
+                    Registrar un egreso
+                  </Boton>
+                )
+              : puedeIngresar && (
+                  <Boton variante="primario" onClick={() => setRegistrando('ingreso')}>
+                    Registrar el primer ingreso
+                  </Boton>
+                )
           }
         />
       ) : (
@@ -318,7 +343,7 @@ function TarjetaMovimiento({
             </Insignia>
           </div>
           <p className="mt-1 truncate text-sm text-tinta-suave">
-            {movimiento.detalle ?? `${movimiento.lineas.length} ítem(s)`}
+            {[resumirLineas(movimiento.lineas), movimiento.detalle].filter(Boolean).join(' · ')}
           </p>
           <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-tinta-tenue">
             <User className="size-3" aria-hidden />

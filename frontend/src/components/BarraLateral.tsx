@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Home, LogOut, Menu, Sprout, X } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { modulosAccesibles, type Modulo } from '@/lib/modulos';
+import { modulosAccesibles, type ModuloAccesible } from '@/lib/modulos';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { SelectorTema } from '@/components/ui/SelectorTema';
 import { BotonBuscar } from '@/components/buscador/BuscadorGeneral';
@@ -172,7 +172,13 @@ function Contenido({ rutaActual }: { rutaActual: string }) {
   );
 }
 
-function ElementoModulo({ modulo, rutaActual }: { modulo: Modulo; rutaActual: string }) {
+function ElementoModulo({
+  modulo,
+  rutaActual,
+}: {
+  modulo: ModuloAccesible;
+  rutaActual: string;
+}) {
   const Icono = modulo.icono;
 
   if (!modulo.implementado) {
@@ -189,7 +195,7 @@ function ElementoModulo({ modulo, rutaActual }: { modulo: Modulo; rutaActual: st
 
   return (
     <Enlace
-      href={modulo.ruta}
+      href={modulo.entrada}
       activo={rutaActual.startsWith(modulo.ruta)}
       icono={<Icono className="size-4 shrink-0" aria-hidden />}
       etiqueta={modulo.etiqueta}

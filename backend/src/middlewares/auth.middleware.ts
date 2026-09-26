@@ -90,3 +90,24 @@ export function requierePermiso(nombrePermiso: string) {
     next();
   };
 }
+
+/**
+ * Exige al menos uno de varios permisos. Se consulta igual que el anterior,
+ * en cada petición (RNF-SEG-04).
+ *
+ * Es para las lecturas que necesitan tareas distintas. La lista de productos
+ * la usa quien los administra, pero también quien produce —elige la receta— y
+ * quien mueve inventario —elige qué entra o sale—. Pedir solo el permiso de
+ * administrarlos obligaba a dar el de cambiar precios y recetas a quien solo
+ * tenía que elegir de la lista; sin él, su formulario no cargaba.
+ */
+export function requiereAlgunPermiso(...nombresPermiso: string[]) {
+  return async (req: Request, _res: Response, next: NextFunction) => {
+    if (!req.sesion) throw new ErrorApp(401, 'Sesión no iniciada');
+    const permisos = await permisosDeUsuario(req.sesion.idUsuario);
+    if (!nombresPermiso.some((nombre) => permisos.includes(nombre))) {
+      throw new ErrorApp(403, `Necesita alguno de estos permisos: ${nombresPermiso.join(', ')}`);
+    }
+    next();
+  };
+}

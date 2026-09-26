@@ -36,7 +36,9 @@ export const TONO_MOTIVO: Record<string, Tono> = {
 /** Descripción de qué significa cada motivo, para el formulario de registro. */
 export const AYUDA_MOTIVO: Record<string, string> = {
   Compra: 'Mercadería recibida de un proveedor',
-  Produccion: 'Generado por una orden de producción',
+  // Lo elaborado con una orden ya mueve el stock al finalizarla: la nota
+  // manual es para lo que se produjo sin ella.
+  Produccion: 'Elaboración hecha sin orden de producción',
   Ajuste: 'Corrección de inventario tras un recuento',
   Devolucion: 'Retorno de mercadería previamente entregada',
   Merma: 'Pérdida por deterioro, rotura o vencimiento',

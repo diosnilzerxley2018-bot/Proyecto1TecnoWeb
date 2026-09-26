@@ -44,7 +44,11 @@ export interface Modulo {
   descripcion: string;
   ruta: string;
   icono: LucideIcon;
-  /** Permiso mínimo para acceder. `null` significa que no requiere ninguno. */
+  /**
+   * Permiso del módulo. `null` significa que no requiere ninguno. Con
+   * pestañas, basta con poder abrir una: cada una pide el suyo o, si no
+   * declara ninguno, este.
+   */
   permiso: string | null;
   /**
    * Cargos para los que es una pantalla de trabajo. Sin la lista, la ven
@@ -212,12 +216,26 @@ export function seccionesDe(ruta: string): Seccion[] {
   return MODULOS.find((m) => m.ruta === ruta)?.secciones ?? [];
 }
 
-/** Las pestañas de un módulo que el usuario puede abrir. */
+/**
+ * Las pestañas de un módulo que el usuario puede abrir: con su permiso
+ * propio o, si no declara uno, con el del módulo.
+ */
 export function seccionesAccesibles(
   ruta: string,
   tienePermiso: (permiso: string) => boolean,
 ): Seccion[] {
-  return seccionesDe(ruta).filter((s) => !s.permiso || tienePermiso(s.permiso));
+  const modulo = MODULOS.find((m) => m.ruta === ruta);
+  if (!modulo) return [];
+  return (modulo.secciones ?? []).filter((s) => {
+    const permiso = s.permiso ?? modulo.permiso;
+    return permiso === null || tienePermiso(permiso);
+  });
+}
+
+/** Un módulo que el usuario puede abrir, con la pantalla por la que entra. */
+export interface ModuloAccesible extends Modulo {
+  /** Su primera pestaña permitida, o el propio módulo si no tiene pestañas. */
+  entrada: string;
 }
 
 /**
@@ -226,17 +244,26 @@ export function seccionesAccesibles(
  * RF-SEG-08: "El sistema debe restringir el acceso a cada módulo y operación
  * según los permisos asignados al usuario." Un módulo sin permiso no se muestra
  * en absoluto: mostrarlo deshabilitado revelaría la estructura del sistema.
+ *
+ * Un módulo con pestañas se muestra si alguna se puede abrir, y se entra por
+ * esa. Producción pedía el permiso de gestionar productos para aparecer, y el
+ * cocinero al que solo se le dejó el de órdenes no encontraba sus órdenes; su
+ * raíz, además, llevaba siempre a Productos.
  */
 export function modulosAccesibles(
   tienePermiso: (permiso: string) => boolean,
   cargo?: string | null,
-): Modulo[] {
-  return MODULOS.filter(
-    (m) =>
-      (m.permiso === null || tienePermiso(m.permiso)) &&
-      // Sin cargo conocido (una sesión anterior) decide solo el permiso.
-      (!m.cargos || cargo === undefined || (cargo !== null && m.cargos.includes(cargo))),
-  );
+): ModuloAccesible[] {
+  return MODULOS.flatMap((m) => {
+    // Sin cargo conocido (una sesión anterior) decide solo el permiso.
+    const enfocado = !m.cargos || cargo === undefined || (cargo !== null && m.cargos.includes(cargo));
+    if (!enfocado) return [];
+    if (!m.secciones) {
+      return m.permiso === null || tienePermiso(m.permiso) ? [{ ...m, entrada: m.ruta }] : [];
+    }
+    const [primera] = seccionesAccesibles(m.ruta, tienePermiso);
+    return primera ? [{ ...m, entrada: primera.ruta }] : [];
+  });
 }
 
 /** Un lugar al que se puede ir desde el buscador general. */

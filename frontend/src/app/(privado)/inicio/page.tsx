@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { ArrowUpRight, BriefcaseBusiness, ShieldOff } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { modulosAccesibles, principalesPara, type Modulo } from '@/lib/modulos';
+import { modulosAccesibles, principalesPara, type ModuloAccesible } from '@/lib/modulos';
 import { Pendientes } from '@/components/inicio/Pendientes';
 import { Tarjeta } from '@/components/ui/Tarjeta';
 import { Insignia } from '@/components/ui/Insignia';
@@ -89,7 +89,7 @@ export default function PaginaInicio() {
   );
 }
 
-function TarjetaModulo({ modulo, indice }: { modulo: Modulo; indice: number }) {
+function TarjetaModulo({ modulo, indice }: { modulo: ModuloAccesible; indice: number }) {
   const Icono = modulo.icono;
 
   const cuerpo = (
@@ -146,7 +146,7 @@ function TarjetaModulo({ modulo, indice }: { modulo: Modulo; indice: number }) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, delay: indice * 0.06, ease: 'easeOut' }}
     >
-      <Link href={modulo.ruta} className="block">
+      <Link href={modulo.entrada} className="block">
         <Tarjeta interactiva className="group h-full p-5">
           {cuerpo}
         </Tarjeta>

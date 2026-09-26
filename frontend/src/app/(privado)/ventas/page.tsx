@@ -1,6 +1,9 @@
-import { redirect } from 'next/navigation';
+import { EntradaModulo } from '@/components/EntradaModulo';
 
-/** El módulo abre en el punto de venta, que es su operación cotidiana. */
+/**
+ * El módulo abre en su primera pestaña permitida: el punto de venta, que es
+ * su operación cotidiana, o la que corresponda a quien no vende.
+ */
 export default function PaginaVentas() {
-  redirect('/ventas/registro');
+  return <EntradaModulo ruta="/ventas" />;
 }
