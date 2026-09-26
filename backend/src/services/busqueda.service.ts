@@ -9,7 +9,7 @@ import * as usuarioModel from '../models/usuario.model.js';
 import * as ventaModel from '../models/venta.model.js';
 import { exigirEmpleado } from './actor.service.js';
 import { palabrasDe } from '../utils/texto.js';
-import { redondearCantidad } from '../utils/cantidad.js';
+import { formatearCantidad, redondearCantidad } from '../utils/cantidad.js';
 import type {
   BusquedaGeneralDTO,
   ResultadoGeneralDTO,
@@ -99,9 +99,6 @@ export async function buscar(idUsuario: number, termino: string): Promise<Busque
 /* ------------------------------------------------------------------ */
 
 const nombreDe = (u: { nombre: string; apellido: string }) => `${u.nombre} ${u.apellido}`;
-
-const cantidad = (valor: number) =>
-  valor.toLocaleString('es-BO', { maximumFractionDigits: 3 });
 
 /** Arma un resultado con los campos que no aplican en nulo. */
 function resultado(
@@ -194,7 +191,7 @@ async function insumos({ termino }: Busqueda) {
     const existencia = redondearCantidad(
       i.ingrediente_almacen.reduce((suma, e) => suma + Number(e.stock_actual), 0),
     );
-    const enStock = `${cantidad(existencia)} ${i.unidad_medida.abreviatura} en existencia`;
+    const enStock = `${formatearCantidad(existencia)} ${i.unidad_medida.abreviatura} en existencia`;
     return resultado({
       tipo: 'insumo',
       id: i.id_ingrediente,

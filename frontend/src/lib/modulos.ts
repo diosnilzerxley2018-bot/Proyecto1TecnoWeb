@@ -286,3 +286,22 @@ export function destinosAccesibles(
       }));
     });
 }
+
+/**
+ * Los módulos de trabajo de cada cargo: los que el inicio pone primero.
+ *
+ * Todos los empleados comparten el rol Empleado y ven los mismos módulos, y
+ * el inicio se los mostraba iguales: al cocinero, Ventas pesaba lo mismo que
+ * Producción. No quita nada —eso lo deciden los permisos—: ordena.
+ */
+const PRINCIPALES_POR_CARGO: Record<string, string[]> = {
+  Vendedor: ['/ventas', '/pedidos'],
+  Cocinero: ['/pedidos', '/produccion'],
+  Almacenero: ['/inventario'],
+  [CARGO_REPARTIDOR]: ['/entregas'],
+};
+
+/** Las rutas de los módulos principales de un cargo; ninguna si no tiene. */
+export function principalesPara(cargo?: string | null): string[] {
+  return (cargo && PRINCIPALES_POR_CARGO[cargo]) || [];
+}

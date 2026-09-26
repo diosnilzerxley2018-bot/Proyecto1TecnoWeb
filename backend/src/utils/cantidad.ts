@@ -27,3 +27,17 @@ export const redondearCantidad = (valor: number) => Math.round(valor * FACTOR) /
  */
 export const tienePrecisionAdmitida = (valor: number) =>
   Math.abs(redondearCantidad(valor) - valor) < 1e-9;
+
+/**
+ * Una cantidad como se lee en Bolivia: «0,16 kg», «1.250,5 L».
+ *
+ * Es el mismo formato que `formatearCantidad` en la interfaz. Los PDF de los
+ * reportes escribían el número tal cual, y salía «0.16 kg» en un documento
+ * que en todo lo demás usa coma decimal.
+ */
+export const formatearCantidad = (valor: number) =>
+  valor.toLocaleString('es-BO', { maximumFractionDigits: DECIMALES_CANTIDAD });
+
+/** «12,5 %», con un decimal y coma. */
+export const formatearPorcentaje = (valor: number) =>
+  `${valor.toLocaleString('es-BO', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} %`;

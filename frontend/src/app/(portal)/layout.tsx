@@ -68,7 +68,8 @@ export default function LayoutPortal({ children }: { children: React.ReactNode }
       <CarritoProvider>
         <div className="flex min-h-screen flex-col">
           <Cabecera nombre={sesion.usuario.nombre} />
-          <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-24 pt-8 sm:px-6">
+          <BarraInferior />
+          <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-28 pt-8 sm:px-6 sm:pb-24">
             {/* El catálogo lee `?termino=` con `useSearchParams`, que pide un límite de suspensión. */}
             <Suspense>{children}</Suspense>
           </main>
@@ -111,6 +112,7 @@ function Cabecera({ nombre }: { nombre: string }) {
         </div>
 
         <nav className="ml-auto flex items-center gap-1 sm:ml-0">
+          {/* En el celular estos enlaces viven en la barra de abajo, con su nombre. */}
           {ENLACES.map((enlace) => {
             const activo = enlace.exacta
               ? rutaActual === enlace.ruta
@@ -126,7 +128,7 @@ function Cabecera({ nombre }: { nombre: string }) {
                 aria-label={enlace.etiqueta}
                 title={enlace.etiqueta}
                 className={cn(
-                  'relative flex items-center gap-2 rounded-xl px-2 py-2 text-sm transition-colors duration-200 sm:px-3',
+                  'relative hidden items-center gap-2 rounded-xl px-2 py-2 text-sm transition-colors duration-200 sm:flex sm:px-3',
                   activo ? 'text-tinta' : 'text-tinta-suave hover:text-tinta',
                 )}
               >
@@ -147,7 +149,7 @@ function Cabecera({ nombre }: { nombre: string }) {
             href="/portal/carrito"
             aria-label={`Carrito con ${cantidadTotal} artículo(s)`}
             className={cn(
-              'relative ml-1 flex items-center gap-2 rounded-xl border px-2 py-2 text-sm transition-colors duration-200 sm:px-3',
+              'relative ml-1 hidden items-center gap-2 rounded-xl border px-2 py-2 text-sm transition-colors duration-200 sm:flex sm:px-3',
               cantidadTotal > 0
                 ? 'border-marca-500/40 bg-marca-500/12 text-marca-300'
                 : 'border-borde text-tinta-suave hover:border-borde-fuerte hover:text-tinta',
@@ -183,6 +185,68 @@ function Cabecera({ nombre }: { nombre: string }) {
         </nav>
       </div>
     </header>
+  );
+}
+
+/**
+ * La navegación del portal en el celular: abajo y con el nombre de cada cosa.
+ *
+ * Arriba, en una fila de 360 px, solo cabían los iconos sueltos —un tenedor,
+ * una hoja, una persona, una «i»— y en una pantalla táctil no hay texto al
+ * pasar el dedo: el cliente tenía que adivinar cuál era «Mis pedidos». Abajo,
+ * además, queda al alcance del pulgar.
+ */
+function BarraInferior() {
+  const rutaActual = usePathname();
+  const { cantidadTotal } = useCarrito();
+
+  const [catalogo, pedidos, cuenta, nosotros] = ENLACES;
+  const elementos = [
+    catalogo,
+    pedidos,
+    { ruta: '/portal/carrito', etiqueta: 'Carrito', icono: ShoppingBasket, exacta: false },
+    cuenta,
+    nosotros,
+  ];
+
+  return (
+    <nav
+      aria-label="Navegación del portal"
+      className="fixed inset-x-0 bottom-0 z-50 border-t border-borde vidrio pb-[env(safe-area-inset-bottom)] sm:hidden"
+    >
+      <ul className="grid grid-cols-5">
+        {elementos.map((e) => {
+          const activo = e.exacta ? rutaActual === e.ruta : rutaActual.startsWith(e.ruta);
+          const Icono = e.icono;
+          const esCarrito = e.ruta === '/portal/carrito';
+          return (
+            <li key={e.ruta}>
+              <Link
+                href={e.ruta}
+                aria-current={activo ? 'page' : undefined}
+                className={cn(
+                  'relative flex flex-col items-center gap-1 px-1 pb-2 pt-2.5 text-[10px] transition-colors',
+                  activo ? 'text-marca-300' : 'text-tinta-suave',
+                )}
+              >
+                <span className="relative">
+                  <Icono className="size-5" aria-hidden />
+                  {esCarrito && cantidadTotal > 0 && (
+                    <span className="absolute -right-2.5 -top-1.5 grid size-4 place-items-center rounded-full bg-marca-400 text-[9px] font-semibold text-sobre-marca">
+                      {cantidadTotal}
+                    </span>
+                  )}
+                </span>
+                <span className="truncate">{e.etiqueta}</span>
+                {activo && (
+                  <span className="absolute inset-x-4 top-0 h-0.5 rounded-full bg-marca-400" aria-hidden />
+                )}
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
   );
 }
 

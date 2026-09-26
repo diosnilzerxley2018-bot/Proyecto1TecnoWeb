@@ -46,6 +46,10 @@ export default function PaginaPedidos() {
 
 type Filtro = EstadoPedido | 'Todos';
 
+/** Un estado que llega por la dirección, si es uno de verdad. */
+const estadoDeEnlace = (valor?: string): EstadoPedido | null =>
+  valor !== undefined && valor in ETIQUETA_ESTADO ? (valor as EstadoPedido) : null;
+
 function TableroPedidos() {
   const { notificar } = useNotificaciones();
 
@@ -53,9 +57,34 @@ function TableroPedidos() {
   const [repartidores, setRepartidores] = useState<CandidatoRepartidor[]>([]);
   const [cargando, setCargando] = useState(true);
   const [refrescando, setRefrescando] = useState(false);
-  const [filtro, setFiltro] = useState<Filtro>('Todos');
+  /*
+   * Enlaces directos: `?pedido=` llega del buscador general y `?estado=`, de
+   * los pendientes del inicio («pedidos por preparar»). El pedido puede no
+   * estar en la página visible —es de la semana pasada, o de otro estado—,
+   * así que se pide aparte y el panel lo muestra igual. Van en una sola
+   * lectura: dos, cada una quitando solo lo suyo, se pisaban la dirección.
+   */
+  const enlace = useEnlaceDirecto(['pedido', 'estado'], ({ pedido, estado }) => {
+    const elegido = estadoDeEnlace(estado);
+    if (elegido) cambiarFiltro(elegido);
+
+    const id = Number(pedido);
+    if (!(id > 0)) return;
+    api
+      .get<PedidoGestion>(`/gestion/pedidos/${id}`)
+      .then((encontrado) => {
+        setDeOtraPagina(encontrado);
+        setIdAbierto(encontrado.id);
+      })
+      .catch((e) =>
+        notificar('error', e instanceof ErrorApi ? e.message : `No se pudo abrir el pedido #${id}`),
+      );
+  });
+
+  const [filtro, setFiltro] = useState<Filtro>(() => estadoDeEnlace(enlace.estado) ?? 'Todos');
   const [busqueda, setBusqueda] = useState('');
   const [idAbierto, setIdAbierto] = useState<number | null>(null);
+  const [deOtraPagina, setDeOtraPagina] = useState<PedidoGestion | null>(null);
 
   /*
    * El listado viene por páginas y el filtro por estado lo aplica el servidor
@@ -135,26 +164,6 @@ function TableroPedidos() {
     setFiltro(nuevo);
     setPagina(1);
   }
-
-  /*
-   * `?pedido=` llega del buscador general. El pedido puede no estar en la
-   * página visible —es de la semana pasada, o de otro estado—, así que se
-   * pide aparte y el panel lo muestra igual.
-   */
-  const [deOtraPagina, setDeOtraPagina] = useState<PedidoGestion | null>(null);
-  useEnlaceDirecto(['pedido'], ({ pedido }) => {
-    const id = Number(pedido);
-    if (!(id > 0)) return;
-    api
-      .get<PedidoGestion>(`/gestion/pedidos/${id}`)
-      .then((encontrado) => {
-        setDeOtraPagina(encontrado);
-        setIdAbierto(encontrado.id);
-      })
-      .catch((e) =>
-        notificar('error', e instanceof ErrorApi ? e.message : `No se pudo abrir el pedido #${id}`),
-      );
-  });
 
   const abierto =
     pedidos.find((p) => p.id === idAbierto) ??
@@ -259,24 +268,37 @@ function TableroPedidos() {
           ))}
         </div>
       ) : visibles.length === 0 ? (
+        /*
+         * Lo que distingue los vacíos es el filtro y la búsqueda, no la lista:
+         * con un estado elegido la lista siempre viene vacía cuando no hay de
+         * ese estado, y antes decía «Todavía no hay pedidos» aunque hubiera.
+         */
         <EstadoVacio
           icono={<ClipboardList className="size-6" aria-hidden />}
-          titulo={pedidos.length === 0 ? 'Todavía no hay pedidos' : 'Sin coincidencias'}
+          titulo={
+            busqueda.trim() !== ''
+              ? 'Sin coincidencias'
+              : filtro !== 'Todos'
+                ? `Ningún pedido ${ETIQUETA_ESTADO[filtro].toLowerCase()}`
+                : 'Todavía no hay pedidos'
+          }
           descripcion={
-            pedidos.length === 0
-              ? 'Cuando un cliente confirme un pedido desde el portal, aparecerá aquí para que el personal lo atienda.'
-              : 'Ningún pedido coincide con el filtro y la búsqueda actuales.'
+            busqueda.trim() !== ''
+              ? `Ningún pedido de esta página coincide con «${busqueda.trim()}».`
+              : filtro !== 'Todos'
+                ? 'Cuando haya, aparecerán aquí. Los demás pedidos siguen en «Todos».'
+                : 'Cuando un cliente confirme un pedido desde el portal, aparecerá aquí para que el personal lo atienda.'
           }
           accion={
-            (pedidos.length > 0 || busqueda !== '') && (
+            (filtro !== 'Todos' || busqueda !== '') && (
               <Boton
                 variante="contorno"
                 onClick={() => {
-                  setFiltro('Todos');
+                  cambiarFiltro('Todos');
                   setBusqueda('');
                 }}
               >
-                Limpiar filtros
+                Ver todos los pedidos
               </Boton>
             )
           }

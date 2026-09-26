@@ -58,3 +58,23 @@ export function formatearAntiguedad(segundos: number): string {
   if (minutos < 60) return `hace ${minutos} min`;
   return `hace ${Math.floor(minutos / 60)} h`;
 }
+
+/** «12,5 %», con un decimal y coma, como el resto de los números. */
+export function formatearPorcentaje(valor: number): string {
+  const numero = new Intl.NumberFormat('es-BO', {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  }).format(valor);
+  return `${numero} %`;
+}
+
+/**
+ * «2026-09-25»: el día de una fecha en la hora de quien mira.
+ *
+ * `toISOString` da el día de Greenwich, y pasadas las 20:00 en Bolivia ya es
+ * el día siguiente: «las ventas de hoy» habrían sido las de mañana.
+ */
+export function fechaIsoLocal(fecha: Date = new Date()): string {
+  const dos = (n: number) => String(n).padStart(2, '0');
+  return `${fecha.getFullYear()}-${dos(fecha.getMonth() + 1)}-${dos(fecha.getDate())}`;
+}

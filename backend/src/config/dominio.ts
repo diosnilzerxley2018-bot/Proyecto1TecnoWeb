@@ -167,6 +167,24 @@ export const TAMANO_MAXIMO_IMAGEN_PRODUCTO = 3 * 1024 * 1024;
 export const MOTIVOS_INGRESO = ['Compra', 'Produccion', 'Ajuste', 'Devolucion'] as const;
 export const MOTIVOS_EGRESO = ['Produccion', 'Merma', 'Ajuste'] as const;
 
+/**
+ * Cómo se lee cada motivo de movimiento en un documento.
+ *
+ * El valor guardado va sin tilde —es el de la restricción `CHECK`—, y el PDF
+ * lo mostraba tal cual: «Produccion», «Devolucion». `Venta` y `Pedido` no son
+ * motivos de nota: son las salidas que documentan la venta y el pedido, y el
+ * reporte de movimientos las muestra junto a las notas.
+ */
+export const ETIQUETA_MOTIVO: Record<string, string> = {
+  Compra: 'Compra',
+  Produccion: 'Producción',
+  Ajuste: 'Ajuste',
+  Devolucion: 'Devolución',
+  Merma: 'Merma',
+  Venta: 'Venta',
+  Pedido: 'Pedido',
+};
+
 export type MotivoIngreso = (typeof MOTIVOS_INGRESO)[number];
 export type MotivoEgreso = (typeof MOTIVOS_EGRESO)[number];
 

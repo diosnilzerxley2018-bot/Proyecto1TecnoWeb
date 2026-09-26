@@ -9,6 +9,7 @@ import { MarcoReporte } from '@/components/reportes/MarcoReporte';
 import { Cifra, Cifras, TablaReporte } from '@/components/reportes/PiezasReporte';
 import type { ProductoCatalogo, ReporteProduccion } from '@/types';
 import { formatearBs } from '@/lib/formato';
+import { formatearCantidad } from '@/lib/formato';
 
 /**
  * RF-PRO-08 — reporte de producción por fecha y producto, con el costo de cada
@@ -104,7 +105,7 @@ function ReporteProduccionPantalla() {
               {
                 titulo: 'Cantidad',
                 numerica: true,
-                celda: (i) => `${i.cantidad} ${i.unidad}`,
+                celda: (i) => `${formatearCantidad(i.cantidad)} ${i.unidad}`,
               },
               { titulo: 'Costo', numerica: true, celda: (i) => formatearBs(i.costo) },
             ]}

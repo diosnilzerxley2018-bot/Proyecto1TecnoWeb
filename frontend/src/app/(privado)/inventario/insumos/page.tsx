@@ -17,6 +17,7 @@ import { FormularioInsumo } from '@/components/inventario/FormularioInsumo';
 import { FilaInsumo } from '@/components/inventario/FilaInsumo';
 import type { Insumo } from '@/types';
 import { coincide } from '@/lib/texto';
+import { formatearBs } from '@/lib/formato';
 
 type Vista = 'activos' | 'criticos' | 'todos';
 
@@ -122,7 +123,7 @@ export default function PaginaInsumos() {
         <Estadistica
           indice={2}
           etiqueta="Valor en existencias"
-          valor={`Bs ${valorInventario.toFixed(2)}`}
+          valor={formatearBs(valorInventario)}
           tono="info"
           icono={<Coins className="size-5" aria-hidden />}
         />
@@ -160,11 +161,19 @@ export default function PaginaInsumos() {
       ) : visibles.length === 0 ? (
         <EstadoVacio
           icono={<Boxes className="size-6" aria-hidden />}
-          titulo={insumos.length === 0 ? 'No hay insumos registrados' : 'Sin coincidencias'}
+          titulo={
+            insumos.length === 0
+              ? 'No hay insumos registrados'
+              : vista === 'criticos' && busqueda.trim() === ''
+                ? 'Ningún insumo por reponer'
+                : 'Sin coincidencias'
+          }
           descripcion={
             insumos.length === 0
               ? 'Registre los insumos que utiliza la cocina para poder definir recetas y controlar existencias.'
-              : 'Ningún insumo coincide con la vista y la búsqueda actuales.'
+              : vista === 'criticos' && busqueda.trim() === ''
+                ? 'Todos los insumos activos están por encima de su stock mínimo.'
+                : 'Ningún insumo coincide con la vista y la búsqueda actuales.'
           }
           accion={
             insumos.length === 0

@@ -17,7 +17,8 @@ import { nombreDeArchivo, type EntregaReporte } from './reporte-entrega.service.
 import { rangoDelPeriodo } from '../utils/fechas.js';
 import { ErrorApp } from '../errors/error-app.js';
 import { bolivianos, dosDecimales } from '../utils/dinero.js';
-import { redondearCantidad } from '../utils/cantidad.js';
+import { ETIQUETA_MOTIVO } from '../config/dominio.js';
+import { redondearCantidad, formatearCantidad } from '../utils/cantidad.js';
 
 /**
  * Reportes de pedidos, producción e inventario
@@ -59,13 +60,17 @@ export async function pedidos(
   });
 
   const porEstado = new Map<string, { cantidad: number; total: number }>();
-  const porRepartidor = new Map<string, { entregas: number; minutos: number[] }>();
+  const porRepartidor = new Map<
+    string,
+    { asignados: number; entregas: number; minutos: number[] }
+  >();
   const minutosEntregados: number[] = [];
   let total = 0;
 
   const lineas: LineaPedidoReporteDTO[] = encontrados.map((p) => {
     const importe = Number(p.total);
-    total = dosDecimales(total + importe);
+    // Un cancelado no dejó dinero: figura en su estado, no en el total.
+    if (p.estado_pedido !== 'Cancelado') total = dosDecimales(total + importe);
 
     // El tiempo de entrega no está guardado: se deduce de las dos marcas.
     const minutos = p.fecha_entrega
@@ -82,9 +87,15 @@ export async function pedidos(
       ? `${p.empleado.usuario.nombre} ${p.empleado.usuario.apellido}`
       : null;
 
+    /*
+     * «Entregas» son las que llegaron a destino. Antes contaba todo pedido
+     * asignado, y uno que terminó «No entregado» sumaba como entrega del
+     * repartidor.
+     */
     if (nombre) {
-      const r = porRepartidor.get(nombre) ?? { entregas: 0, minutos: [] };
-      r.entregas += 1;
+      const r = porRepartidor.get(nombre) ?? { asignados: 0, entregas: 0, minutos: [] };
+      r.asignados += 1;
+      if (p.estado_pedido === 'Entregado') r.entregas += 1;
       if (minutos !== null) r.minutos.push(minutos);
       porRepartidor.set(nombre, r);
     }
@@ -117,6 +128,7 @@ export async function pedidos(
     porRepartidor: [...porRepartidor]
       .map(([nombre, r]) => ({
         repartidor: nombre,
+        asignados: r.asignados,
         entregas: r.entregas,
         minutosPromedio: promedio(r.minutos),
       }))
@@ -140,7 +152,7 @@ export function documentoDePedidos(reporte: ReportePedidosDTO): DocumentoReporte
     cifras: [
       { etiqueta: 'Pedidos', valor: String(reporte.resumen.cantidadPedidos) },
       { etiqueta: 'Entregados', valor: String(reporte.resumen.entregados) },
-      { etiqueta: 'Total', valor: bolivianos(reporte.resumen.total) },
+      { etiqueta: 'Total sin cancelados', valor: bolivianos(reporte.resumen.total) },
       {
         etiqueta: 'Entrega promedio',
         valor:
@@ -163,12 +175,14 @@ export function documentoDePedidos(reporte: ReportePedidosDTO): DocumentoReporte
       {
         titulo: 'Por repartidor',
         columnas: [
-          { titulo: 'Repartidor', proporcion: 0.55 },
-          { titulo: 'Entregas', proporcion: 0.2, alinear: 'right' },
-          { titulo: 'Promedio', proporcion: 0.25, alinear: 'right' },
+          { titulo: 'Repartidor', proporcion: 0.4 },
+          { titulo: 'Asignados', proporcion: 0.18, alinear: 'right' },
+          { titulo: 'Entregados', proporcion: 0.18, alinear: 'right' },
+          { titulo: 'Promedio', proporcion: 0.24, alinear: 'right' },
         ],
         filas: reporte.porRepartidor.map((r) => [
           r.repartidor,
+          String(r.asignados),
           String(r.entregas),
           r.minutosPromedio === null ? 'sin datos' : `${r.minutosPromedio} min`,
         ]),
@@ -355,7 +369,7 @@ export function documentoDeProduccion(reporte: ReporteProduccionDTO): DocumentoR
         ],
         filas: reporte.insumosConsumidos.map((i) => [
           i.insumo,
-          `${i.cantidad} ${i.unidad}`,
+          `${formatearCantidad(i.cantidad)} ${i.unidad}`,
           bolivianos(i.costo),
         ]),
       },
@@ -391,9 +405,11 @@ export async function inventario(
     idIngrediente: filtro.idIngrediente,
     idProducto: filtro.idProducto,
   };
-  const [ingresos, egresos] = await Promise.all([
+  const [ingresos, egresos, vendido, pedido] = await Promise.all([
     reporteModel.ingresosDelPeriodo(criterio),
     reporteModel.egresosDelPeriodo(criterio),
+    reporteModel.salidasPorVenta(criterio),
+    reporteModel.salidasPorPedido(criterio),
   ]);
 
   /*
@@ -542,6 +558,47 @@ export async function inventario(
     }
   }
 
+  /*
+   * Lo vendido en el local y lo pedido a domicilio también sale del stock,
+   * aunque no tenga nota de egreso: lo documentan la venta y el pedido. Sin
+   * estas líneas, un producto elaborado y vendido figuraba con 23 u de
+   * entrada, ninguna de salida y 0 u de existencia hoy, y las cuentas del
+   * reporte no cerraban.
+   */
+  for (const d of vendido) {
+    const producto = d.producto_almacen.producto;
+    registrar(
+      {
+        tipoItem: 'Producto',
+        id: producto.id_producto,
+        item: producto.nombre,
+        unidad: 'u',
+        cantidad: d.cantidad,
+        costo: null,
+      },
+      { fecha: d.venta.fecha, motivo: 'Venta' },
+      'Egreso',
+      `Venta V-${String(d.venta.id_venta).padStart(6, '0')}`,
+    );
+  }
+
+  for (const d of pedido) {
+    const producto = d.producto_almacen.producto;
+    registrar(
+      {
+        tipoItem: 'Producto',
+        id: producto.id_producto,
+        item: producto.nombre,
+        unidad: 'u',
+        cantidad: d.cantidad,
+        costo: null,
+      },
+      { fecha: d.pedido.fecha, motivo: 'Pedido' },
+      'Egreso',
+      `Pedido #${String(d.pedido.id_pedido).padStart(5, '0')}`,
+    );
+  }
+
   movimientos.sort((a, b) => a.fecha.localeCompare(b.fecha));
 
   const items = [...porItem.values()];
@@ -646,9 +703,12 @@ export function documentoDeInventario(reporte: ReporteInventarioDTO): DocumentoR
     generadoEn: reporte.generadoEn,
     cifras: unico
       ? [
-          { etiqueta: 'Entró', valor: `${unico.entradas} ${unico.unidad}` },
-          { etiqueta: 'Salió', valor: `${unico.salidas} ${unico.unidad}` },
-          { etiqueta: 'Existencia hoy', valor: `${unico.existencia} ${unico.unidad}` },
+          { etiqueta: 'Entró', valor: `${formatearCantidad(unico.entradas)} ${unico.unidad}` },
+          { etiqueta: 'Salió', valor: `${formatearCantidad(unico.salidas)} ${unico.unidad}` },
+          {
+            etiqueta: 'Existencia hoy',
+            valor: `${formatearCantidad(unico.existencia)} ${unico.unidad}`,
+          },
           { etiqueta: 'Costo ingresado', valor: bolivianos(reporte.resumen.costoIngresado) },
         ]
       : [
@@ -670,10 +730,10 @@ export function documentoDeInventario(reporte: ReporteInventarioDTO): DocumentoR
         filas: reporte.porItem.map((i) => [
           recortar(i.item, 32),
           i.tipo,
-          `${i.entradas} ${i.unidad}`,
-          `${i.salidas} ${i.unidad}`,
-          `${i.neto} ${i.unidad}`,
-          `${i.existencia} ${i.unidad}`,
+          `${formatearCantidad(i.entradas)} ${i.unidad}`,
+          `${formatearCantidad(i.salidas)} ${i.unidad}`,
+          `${formatearCantidad(i.neto)} ${i.unidad}`,
+          `${formatearCantidad(i.existencia)} ${i.unidad}`,
         ]),
         vacio: 'No hubo movimientos en el período seleccionado.',
       },
@@ -691,9 +751,9 @@ export function documentoDeInventario(reporte: ReporteInventarioDTO): DocumentoR
         filas: reporte.movimientos.map((m) => [
           diaLocal(m.fecha),
           m.tipo,
-          m.motivo,
+          ETIQUETA_MOTIVO[m.motivo] ?? m.motivo,
           recortar(m.item, 22),
-          `${m.cantidad} ${m.unidad}`,
+          `${formatearCantidad(m.cantidad)} ${m.unidad}`,
           m.costo === null ? '—' : bolivianos(m.costo),
           recortar(m.referencia ?? '—', 24),
         ]),
@@ -713,7 +773,7 @@ export const entregaDePedidos = (r: ReportePedidosDTO): EntregaReporte => ({
   descripcion:
     `Reporte de pedidos del ${r.desde} al ${r.hasta}. ` +
     `${r.resumen.cantidadPedidos} pedido(s), ${r.resumen.entregados} entregado(s), ` +
-    `por un total de ${bolivianos(r.resumen.total)}.`,
+    `por un total de ${bolivianos(r.resumen.total)} sin contar los cancelados.`,
 });
 
 export const entregaDeProduccion = (r: ReporteProduccionDTO): EntregaReporte => ({

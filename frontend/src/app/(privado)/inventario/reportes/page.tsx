@@ -8,6 +8,7 @@ import { MarcoReporte } from '@/components/reportes/MarcoReporte';
 import { Cifra, Cifras, TablaReporte } from '@/components/reportes/PiezasReporte';
 import type { ExistenciaStock, ReporteInventario } from '@/types';
 import { formatearBs, formatearCantidad } from '@/lib/formato';
+import { ETIQUETA_MOTIVO } from '@/lib/inventario';
 
 /** Valor del selector: todos los ítems, o un insumo o producto concreto. */
 type Eleccion = 'todos' | `insumo:${number}` | `producto:${number}`;
@@ -180,7 +181,7 @@ function CuerpoReporte({ reporte, unItem }: { reporte: ReporteInventario; unItem
               <Insignia tono={m.tipo === 'Ingreso' ? 'marca' : 'aviso'}>{m.tipo}</Insignia>
             ),
           },
-          { titulo: 'Motivo', celda: (m) => m.motivo },
+          { titulo: 'Motivo', celda: (m) => ETIQUETA_MOTIVO[m.motivo] ?? m.motivo },
           {
             titulo: 'Ítem',
             celda: (m) => (

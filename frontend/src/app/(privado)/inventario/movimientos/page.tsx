@@ -50,6 +50,23 @@ const paginaVacia = <T,>(): Pagina<T> => ({
 });
 
 /** CU-INV-03 Gestionar Ingreso y CU-INV-04 Gestionar Egreso. */
+/**
+ * Qué se lee debajo de un ingreso.
+ *
+ * Una orden de producción firma su nota de ingreso con «OP-17» y la de egreso
+ * con «Orden de producción 17»: en la lista, las dos mitades de la misma
+ * orden parecían cosas distintas. Se leen igual; el dato guardado no cambia.
+ */
+function detalleDeIngreso(nota: {
+  motivo: string;
+  proveedor: string | null;
+  numeroDocumento: string | null;
+}): string | null {
+  const orden = /^OP-(\d+)$/.exec(nota.numeroDocumento ?? '');
+  if (nota.motivo === 'Produccion' && orden) return `Orden de producción ${orden[1]}`;
+  return [nota.proveedor, nota.numeroDocumento].filter(Boolean).join(' · ') || null;
+}
+
 export default function PaginaMovimientos() {
   const { tienePermiso } = useAuth();
   const { notificar } = useNotificaciones();
@@ -98,7 +115,7 @@ export default function PaginaMovimientos() {
           registradoPor: n.registradoPor.nombreCompleto,
           lineas: n.lineas,
           total: n.total,
-          detalle: [n.proveedor, n.numeroDocumento].filter(Boolean).join(' · ') || null,
+          detalle: detalleDeIngreso(n),
         })),
         ...egresos.map<Movimiento>((n) => ({
           direccion: 'egreso',

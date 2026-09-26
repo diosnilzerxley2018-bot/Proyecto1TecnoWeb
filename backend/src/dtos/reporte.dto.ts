@@ -153,6 +153,10 @@ export interface ReportePedidosDTO {
     cantidadPedidos: number;
     entregados: number;
     cancelados: number;
+    /**
+     * Lo que suman los pedidos **no cancelados**. Un pedido cancelado no dejó
+     * dinero: sumarlo daba un total que no correspondía con lo que entró.
+     */
     total: number;
     /** Promedio de los entregados. Nulo si ninguno se entregó todavía. */
     minutosPromedio: number | null;
@@ -160,6 +164,9 @@ export interface ReportePedidosDTO {
   porEstado: { estado: string; cantidad: number; total: number }[];
   porRepartidor: {
     repartidor: string;
+    /** Todos los que tuvo asignados, se hayan entregado o no. */
+    asignados: number;
+    /** Solo los que llegó a entregar. */
     entregas: number;
     minutosPromedio: number | null;
   }[];

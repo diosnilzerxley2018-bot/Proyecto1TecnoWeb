@@ -16,6 +16,7 @@ import * as avisoService from './aviso.service.js';
 import { limitesDelDia } from '../utils/fechas.js';
 import { ErrorApp } from '../errors/error-app.js';
 import { bolivianos, dosDecimales } from '../utils/dinero.js';
+import { formatearPorcentaje } from '../utils/cantidad.js';
 
 /**
  * RF-VEN-07 — reporte parametrizado de ventas.
@@ -166,7 +167,7 @@ function documentoDeVentas(reporte: ReporteVentasDTO): DocumentoReporte {
           p.nombre,
           String(p.unidades),
           bolivianos(p.importe),
-          `${p.participacion.toFixed(1)} %`,
+          formatearPorcentaje(p.participacion),
         ]),
         vacio: 'No hubo ventas en el período seleccionado.',
       },

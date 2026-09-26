@@ -10,6 +10,7 @@ import { RequierePermiso } from '@/components/RequierePermiso';
 import { Boton } from '@/components/ui/Boton';
 import { motivoParaNoEliminar } from '@/lib/roles';
 import type { Rol, Permiso } from '@/types';
+import { describirPermiso } from '@/lib/roles';
 
 /** CU-SEG-03 Gestionar Rol y Permisos */
 
@@ -148,12 +149,15 @@ function ContenidoRoles() {
                 {rol.permisos.length === 0 && (
                   <span className="text-xs text-tinta-tenue">Sin permisos asignados</span>
                 )}
+                {/* La frase, y el código al pasar el puntero: el código solo no
+                    le dice nada a quien no escribió el sistema. */}
                 {rol.permisos.map((p) => (
                   <span
                     key={p.id}
-                    className="rounded bg-white/5 px-1.5 py-0.5 font-mono text-[11px] text-tinta-suave"
+                    title={p.nombre}
+                    className="rounded bg-white/5 px-1.5 py-0.5 text-[11px] text-tinta-suave"
                   >
-                    {p.nombre}
+                    {describirPermiso(p.nombre)}
                   </span>
                 ))}
               </div>

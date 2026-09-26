@@ -104,7 +104,7 @@ function CatalogoProductos() {
   return (
     <>
       <EncabezadoPagina
-        titulo="Producción"
+        titulo="Productos"
         descripcion="Productos que ofrece el negocio, su información nutricional y las recetas con que se elaboran"
         acciones={
           puedeGestionar && (

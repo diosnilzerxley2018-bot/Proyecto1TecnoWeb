@@ -633,6 +633,110 @@ describe('Reporte de movimientos · el filtro deja fuera lo que no se pidió', (
 /* Reglas comunes a los tres                                           */
 /* ------------------------------------------------------------------ */
 
+describe('Reporte de movimientos · las ventas y los pedidos también son salidas', () => {
+  /**
+   * Sin estas salidas, un producto elaborado y vendido figuraba con entradas,
+   * ninguna salida y existencia cero: parecía que se había perdido.
+   */
+  it('cuenta lo vendido y lo pedido, y no lo anulado ni lo cancelado', async () => {
+    const staff = await obtenerToken();
+    const producto = (
+      await request(app).get('/api/catalogo').query({ termino: 'Galletas de avena' })
+    ).body[0] as { id: number; nombre: string };
+    const salidas = (r: { body: { porItem: { item: string; salidas: number }[] } }) =>
+      r.body.porItem.find((i) => i.item === producto.nombre)?.salidas ?? 0;
+    const vender = (cantidad: number) =>
+      request(app)
+        .post('/api/ventas')
+        .set(cabecera(staff))
+        .send({ tipoVenta: 'Mesa', metodoPago: 'Efectivo', items: [{ idProducto: producto.id, cantidad }] });
+
+    const antes = await consultar('inventario', staff, { idProducto: producto.id });
+
+    const venta = await vender(2);
+    const anulada = await vender(5);
+    await request(app)
+      .post(`/api/ventas/${anulada.body.id}/anular`)
+      .set(cabecera(staff))
+      .send({ motivo: 'Prueba del reporte' })
+      .expect(200);
+
+    const cliente = await registrarCliente();
+    const idPedido = await crearPedido(cliente.token, 'Galletas de avena');
+    const idCancelado = await crearPedido(cliente.token, 'Galletas de avena');
+    await request(app)
+      .post(`/api/pedidos/${idCancelado}/cancelar`)
+      .set(cabecera(cliente.token))
+      .expect(200);
+
+    const despues = await consultar('inventario', staff, { idProducto: producto.id });
+
+    // 2 de la venta y 1 del pedido; ni las 5 anuladas ni el pedido cancelado.
+    expect(salidas(despues) - salidas(antes)).toBe(3);
+    const referencias = despues.body.movimientos.map(
+      (m: { motivo: string; referencia: string }) => `${m.motivo} ${m.referencia}`,
+    );
+    expect(referencias).toContain(`Venta Venta V-${String(venta.body.id).padStart(6, '0')}`);
+    expect(referencias).toContain(`Pedido Pedido #${String(idPedido).padStart(5, '0')}`);
+    expect(referencias).not.toContain(`Pedido Pedido #${String(idCancelado).padStart(5, '0')}`);
+  });
+
+  it('con un insumo elegido no mezcla ventas de productos', async () => {
+    const staff = await obtenerToken();
+    const insumo = await buscarInsumo(staff, 'Quinua');
+
+    const r = await consultar('inventario', staff, { idIngrediente: insumo.id });
+
+    const motivos = r.body.movimientos.map((m: { motivo: string }) => m.motivo);
+    expect(motivos).not.toContain('Venta');
+    expect(motivos).not.toContain('Pedido');
+  });
+});
+
+describe('Reporte de pedidos · el total y las entregas', () => {
+  it('el total no suma los cancelados, que no dejaron dinero', async () => {
+    const staff = await obtenerToken();
+    const cliente = await registrarCliente();
+    const antes = await consultar('pedidos', staff);
+
+    await crearPedido(cliente.token, 'Barra de avena');
+    const cancelado = await crearPedido(cliente.token, 'Barra de avena');
+    await request(app)
+      .post(`/api/pedidos/${cancelado}/cancelar`)
+      .set(cabecera(cliente.token))
+      .expect(200);
+
+    const despues = await consultar('pedidos', staff);
+    const precio = despues.body.pedidos.find((p: { id: number }) => p.id === cancelado).total;
+
+    // Entró un pedido de cada precio, pero solo uno sigue en pie.
+    expect(despues.body.resumen.total).toBeCloseTo(antes.body.resumen.total + precio, 2);
+  });
+
+  it('separa los pedidos asignados a cada repartidor de los que llegó a entregar', async () => {
+    const staff = await obtenerToken();
+    const cliente = await registrarCliente();
+    const repartidor = await crearEmpleado('Repartidor');
+    const aLaCalle = async () => {
+      const id = await crearPedido(cliente.token, 'Barra de avena');
+      await request(app).patch(`/api/gestion/pedidos/${id}/estado`).set(cabecera(staff)).send({ estado: 'En preparacion' }).expect(200);
+      await request(app).put(`/api/gestion/pedidos/${id}/repartidor`).set(cabecera(staff)).send({ idRepartidor: repartidor.id }).expect(200);
+      await request(app).patch(`/api/gestion/pedidos/${id}/estado`).set(cabecera(repartidor.token)).send({ estado: 'En camino' }).expect(200);
+      return id;
+    };
+    const entregado = await aLaCalle();
+    const noEntregado = await aLaCalle();
+    await request(app).patch(`/api/gestion/pedidos/${entregado}/estado`).set(cabecera(repartidor.token)).send({ estado: 'Entregado' }).expect(200);
+    await request(app).patch(`/api/gestion/pedidos/${noEntregado}/estado`).set(cabecera(repartidor.token)).send({ estado: 'Cancelado' }).expect(200);
+
+    const r = await consultar('pedidos', staff, { idRepartidor: repartidor.id });
+
+    expect(r.body.porRepartidor).toEqual([
+      expect.objectContaining({ asignados: 2, entregas: 1 }),
+    ]);
+  });
+});
+
 describe('Reglas comunes de los reportes de operaciones', () => {
   const rutas = ['pedidos', 'produccion', 'inventario'];
 

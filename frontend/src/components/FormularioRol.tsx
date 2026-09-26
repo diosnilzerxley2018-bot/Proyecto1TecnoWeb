@@ -1,6 +1,6 @@
 'use client';
 
-import { Casilla } from '@/components/ui/Casilla';
+import { ListaPermisos } from '@/components/ListaPermisos';
 
 import { useState } from 'react';
 import { api, ErrorApi } from '@/lib/api';
@@ -83,20 +83,18 @@ export function FormularioRol({
             ({seleccionados.length} de {permisosDisponibles.length})
           </span>
         </p>
-        <div className="grid max-h-64 grid-cols-1 gap-1 sm:grid-cols-2 overflow-y-auto rounded-lg border border-borde p-2">
-          {permisosDisponibles.map((p) => (
-            <Casilla
-              key={p.id}
-              marcada={seleccionados.includes(p.id)}
-              onCambiar={() => alternar(p.id)}
-              etiqueta={<span className="font-mono text-xs text-tinta-suave">{p.nombre}</span>}
-            />
-          ))}
-        </div>
+        <ListaPermisos
+          opciones={permisosDisponibles.map((p) => ({
+            clave: p.id,
+            codigo: p.nombre,
+            marcado: seleccionados.includes(p.id),
+          }))}
+          onAlternar={alternar}
+        />
       </div>
 
       {retirados.length > 0 && (
-        <p className="rounded-lg bg-aviso/10 px-3 py-2 text-sm text-amber-800 ring-1 ring-aviso/25">
+        <p className="rounded-lg bg-aviso/10 px-3 py-2 text-sm text-aviso ring-1 ring-aviso/25">
           Va a retirar {retirados.length} permiso(s). También se quitarán a los usuarios que los
           tuvieran habilitados.
         </p>

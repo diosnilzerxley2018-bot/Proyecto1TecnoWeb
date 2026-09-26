@@ -286,6 +286,55 @@ export const egresosDelPeriodo = (filtro: FiltroMovimientos) =>
   });
 
 /**
+ * Lo vendido en el local durante el período, línea por línea.
+ *
+ * Las ventas no tienen nota de egreso —las documenta su detalle, que registra
+ * el almacén de origen—, pero el producto sale del stock igual. Las anuladas
+ * no cuentan: su stock volvió al almacén.
+ */
+export const salidasPorVenta = (filtro: FiltroMovimientos) =>
+  filtro.idIngrediente
+    ? Promise.resolve([])
+    : prisma.detalle_venta.findMany({
+        where: {
+          ...(filtro.idProducto ? { id_producto: filtro.idProducto } : {}),
+          venta: {
+            fecha: { gte: filtro.desde, lte: filtro.hasta },
+            estado_pago: { not: 'Anulado' },
+          },
+        },
+        select: {
+          cantidad: true,
+          venta: { select: { id_venta: true, fecha: true } },
+          producto_almacen: SOLO_PRODUCTO,
+        },
+      });
+
+/**
+ * Lo pedido a domicilio durante el período, línea por línea.
+ *
+ * El stock se aparta al confirmar el pedido y vuelve si se cancela, así que
+ * sale todo pedido que no terminó cancelado, esté en la cocina o ya entregado.
+ */
+export const salidasPorPedido = (filtro: FiltroMovimientos) =>
+  filtro.idIngrediente
+    ? Promise.resolve([])
+    : prisma.detalle_pedido.findMany({
+        where: {
+          ...(filtro.idProducto ? { id_producto: filtro.idProducto } : {}),
+          pedido: {
+            fecha: { gte: filtro.desde, lte: filtro.hasta },
+            estado_pedido: { not: 'Cancelado' },
+          },
+        },
+        select: {
+          cantidad: true,
+          pedido: { select: { id_pedido: true, fecha: true } },
+          producto_almacen: SOLO_PRODUCTO,
+        },
+      });
+
+/**
  * Existencia de hoy, sumada entre almacenes.
  *
  * Acompaña al neto del período: sin ella, un "-1,6 kg" en rojo se leía como

@@ -1,10 +1,10 @@
 'use client';
 
-import { Casilla } from '@/components/ui/Casilla';
 
 import { useEffect, useState } from 'react';
 import { api, ErrorApi } from '@/lib/api';
 import type { PermisoUsuario } from '@/types';
+import { ListaPermisos } from '@/components/ListaPermisos';
 
 /** CU-SEG-04 Asignar Permisos a Usuario */
 export function PanelPermisos({
@@ -62,16 +62,14 @@ export function PanelPermisos({
           El rol de este usuario no tiene permisos definidos. Configúrelos primero en Gestionar rol y permisos.
         </p>
       ) : (
-        <div className="max-h-72 space-y-1 overflow-y-auto rounded-lg border border-borde p-2">
-          {permisos.map((p) => (
-            <Casilla
-              key={p.idRolPermiso}
-              marcada={p.habilitado}
-              onCambiar={() => alternar(p.idRolPermiso)}
-              etiqueta={<span className="font-mono text-sm text-tinta-suave">{p.permiso}</span>}
-            />
-          ))}
-        </div>
+        <ListaPermisos
+          opciones={permisos.map((p) => ({
+            clave: p.idRolPermiso,
+            codigo: p.permiso,
+            marcado: p.habilitado,
+          }))}
+          onAlternar={alternar}
+        />
       )}
 
       <p className="text-xs text-tinta-tenue">

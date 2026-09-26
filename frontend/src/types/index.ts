@@ -697,7 +697,14 @@ export interface ReportePedidos {
     minutosPromedio: number | null;
   };
   porEstado: { estado: string; cantidad: number; total: number }[];
-  porRepartidor: { repartidor: string; entregas: number; minutosPromedio: number | null }[];
+  porRepartidor: {
+    repartidor: string;
+    /** Todos los que tuvo asignados, se hayan entregado o no. */
+    asignados: number;
+    /** Solo los que llegó a entregar. */
+    entregas: number;
+    minutosPromedio: number | null;
+  }[];
   pedidos: {
     id: number;
     fecha: string;

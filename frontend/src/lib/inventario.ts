@@ -19,6 +19,10 @@ export const ETIQUETA_MOTIVO: Record<string, string> = {
   Ajuste: 'Ajuste',
   Devolucion: 'Devolución',
   Merma: 'Merma',
+  // No son motivos de nota: son las salidas que documentan la venta y el
+  // pedido, y el reporte de movimientos las muestra junto a las notas.
+  Venta: 'Venta',
+  Pedido: 'Pedido',
 };
 
 export const TONO_MOTIVO: Record<string, Tono> = {

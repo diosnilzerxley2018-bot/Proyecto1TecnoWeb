@@ -11,6 +11,7 @@ import { EstadoVacio } from '@/components/ui/EstadoVacio';
 import { Campo } from '@/components/ui/Campo';
 import { Boton } from '@/components/ui/Boton';
 import { Dialogo } from '@/components/ui/Dialogo';
+import { fechaIsoLocal } from '@/lib/formato';
 
 /**
  * El armazón común a los cuatro reportes del sistema (RF-VEN-07, RF-PED-10,
@@ -46,9 +47,10 @@ interface Props<R> {
 /** El mes en curso, que es el período que se consulta por omisión. */
 function mesEnCurso(): { desde: string; hasta: string } {
   const hoy = new Date();
-  const iso = (d: Date) =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  return { desde: iso(new Date(hoy.getFullYear(), hoy.getMonth(), 1)), hasta: iso(hoy) };
+  return {
+    desde: fechaIsoLocal(new Date(hoy.getFullYear(), hoy.getMonth(), 1)),
+    hasta: fechaIsoLocal(hoy),
+  };
 }
 
 export function MarcoReporte<R>({

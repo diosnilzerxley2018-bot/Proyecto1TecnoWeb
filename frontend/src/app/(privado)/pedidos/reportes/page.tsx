@@ -86,7 +86,12 @@ function ReportePedidosPantalla() {
           <Cifras>
             <Cifra etiqueta="Pedidos" valor={String(reporte.resumen.cantidadPedidos)} />
             <Cifra etiqueta="Entregados" valor={String(reporte.resumen.entregados)} />
-            <Cifra etiqueta="Total" valor={formatearBs(reporte.resumen.total)} destacada />
+            {/* Sin los cancelados: un pedido cancelado no dejó dinero. */}
+            <Cifra
+              etiqueta="Total sin cancelados"
+              valor={formatearBs(reporte.resumen.total)}
+              destacada
+            />
             <Cifra
               etiqueta="Entrega promedio"
               valor={minutos(reporte.resumen.minutosPromedio)}
@@ -110,7 +115,8 @@ function ReportePedidosPantalla() {
             clave={(r) => r.repartidor}
             columnas={[
               { titulo: 'Repartidor', celda: (r) => r.repartidor },
-              { titulo: 'Entregas', numerica: true, celda: (r) => r.entregas },
+              { titulo: 'Asignados', numerica: true, celda: (r) => r.asignados },
+              { titulo: 'Entregados', numerica: true, celda: (r) => r.entregas },
               {
                 titulo: 'Tiempo promedio',
                 numerica: true,

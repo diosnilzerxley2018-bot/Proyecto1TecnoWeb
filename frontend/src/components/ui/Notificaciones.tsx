@@ -71,7 +71,8 @@ export function ProveedorNotificaciones({ children }: { children: React.ReactNod
         createPortal(
           <div
             aria-live="polite"
-            className="pointer-events-none fixed bottom-4 right-4 z-200 flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-2"
+            // En el celular, por encima de la barra de navegación del portal.
+            className="pointer-events-none fixed bottom-[calc(5rem+env(safe-area-inset-bottom))] right-4 z-200 flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-2 sm:bottom-4"
           >
             <AnimatePresence initial={false}>
               {lista.map((n) => (

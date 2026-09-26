@@ -8,6 +8,7 @@ import { MarcoReporte } from '@/components/reportes/MarcoReporte';
 import { Cifra, Cifras, TablaReporte } from '@/components/reportes/PiezasReporte';
 import type { ProductoCatalogo, ReporteVentas } from '@/types';
 import { formatearBs } from '@/lib/formato';
+import { formatearPorcentaje } from '@/lib/formato';
 
 /**
  * RF-VEN-07 — reporte parametrizado de ventas por rango de fechas y producto,
@@ -84,7 +85,7 @@ function Reportes() {
               {
                 titulo: '% del total',
                 numerica: true,
-                celda: (p) => `${p.participacion.toFixed(1)} %`,
+                celda: (p) => formatearPorcentaje(p.participacion),
               },
             ]}
           />

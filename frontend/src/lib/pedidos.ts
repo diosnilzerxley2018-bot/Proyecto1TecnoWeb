@@ -1,5 +1,6 @@
 import type { EstadoPedido, MetodoPago, MotivoCancelacion } from '@/types';
 import type { Tono } from '@/components/ui/Insignia';
+import { formatearBs } from './formato';
 
 /**
  * Presentación del ciclo de vida del pedido.
@@ -80,9 +81,6 @@ interface PedidoConPago {
   motivoCancelacion?: MotivoCancelacion | null;
 }
 
-const bs = (monto: number) =>
-  `Bs ${monto.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
 /**
  * El estado del pago en palabras, según quién lo lee.
  *
@@ -112,9 +110,19 @@ export function textoDePago(
     if (pagado) {
       return { texto: para === 'cliente' ? 'Pagado en efectivo' : 'Cobrado en efectivo', tono: 'marca' };
     }
+    /*
+     * Entregado y sin cobro anotado: son pedidos de antes de que entregar
+     * cerrara el cobro. «Cobrar Bs X» sobre un pedido que ya está en manos
+     * del cliente invitaba a cobrarlo dos veces.
+     */
+    if (pedido.estadoPedido === 'Entregado') {
+      return para === 'cliente'
+        ? { texto: 'Pago en efectivo al recibir', tono: 'neutro' }
+        : { texto: 'Entregado · cobro no registrado en el sistema', tono: 'neutro' };
+    }
     return para === 'cliente'
-      ? { texto: `Paga ${bs(pedido.total)} en efectivo al recibir`, tono: 'neutro' }
-      : { texto: `Cobrar ${bs(pedido.total)} en efectivo`, tono: 'aviso' };
+      ? { texto: `Paga ${formatearBs(pedido.total)} en efectivo al recibir`, tono: 'neutro' }
+      : { texto: `Cobrar ${formatearBs(pedido.total)} en efectivo`, tono: 'aviso' };
   }
 
   if (pagado) {
@@ -191,11 +199,11 @@ export function avisoTrasAccion(numero: number, destino: EstadoPedido, pedido: P
       return `Pedido ${n} en preparación`;
     case 'En camino':
       return pedido.metodoPago === 'Efectivo' && pedido.estadoPago !== 'Pagado'
-        ? `Pedido ${n} en camino. Recuerde cobrar ${bs(pedido.total)} en efectivo`
+        ? `Pedido ${n} en camino. Recuerde cobrar ${formatearBs(pedido.total)} en efectivo`
         : `Pedido ${n} en camino`;
     case 'Entregado':
       return pedido.metodoPago === 'Efectivo'
-        ? `Pedido ${n} entregado y cobrado: ${bs(pedido.total)} en efectivo`
+        ? `Pedido ${n} entregado y cobrado: ${formatearBs(pedido.total)} en efectivo`
         : `Pedido ${n} entregado`;
     case 'Cancelado':
       return `Pedido ${n} registrado como no entregado. Se le avisó al cliente`;

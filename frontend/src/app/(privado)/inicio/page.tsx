@@ -2,9 +2,10 @@
 
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { ArrowUpRight, KeyRound, ShieldOff } from 'lucide-react';
+import { ArrowUpRight, BriefcaseBusiness, ShieldOff } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { modulosAccesibles, type Modulo } from '@/lib/modulos';
+import { modulosAccesibles, principalesPara, type Modulo } from '@/lib/modulos';
+import { Pendientes } from '@/components/inicio/Pendientes';
 import { Tarjeta } from '@/components/ui/Tarjeta';
 import { Insignia } from '@/components/ui/Insignia';
 import { EstadoVacio } from '@/components/ui/EstadoVacio';
@@ -12,8 +13,17 @@ import { cn } from '@/lib/cn';
 
 export default function PaginaInicio() {
   const { sesion, tienePermiso } = useAuth();
-  const modulos = modulosAccesibles(tienePermiso, sesion?.usuario.cargo);
-  const cantidadPermisos = sesion?.permisos.length ?? 0;
+  const cargo = sesion?.usuario.cargo;
+  const modulos = modulosAccesibles(tienePermiso, cargo);
+
+  /*
+   * Primero los módulos de su trabajo y después el resto. Todos los empleados
+   * comparten el rol y los mismos permisos, y el inicio les mostraba lo mismo
+   * a todos: al cocinero, Ventas y Producción con el mismo peso.
+   */
+  const principales = principalesPara(cargo);
+  const propios = modulos.filter((m) => principales.includes(m.ruta));
+  const otros = modulos.filter((m) => !principales.includes(m.ruta));
 
   return (
     <>
@@ -27,34 +37,54 @@ export default function PaginaInicio() {
         <h1 className="mt-1 text-3xl font-semibold tracking-tight text-tinta">
           {sesion?.usuario.nombre} {sesion?.usuario.apellido}
         </h1>
+        {/* El cargo dice qué hace; la cantidad de permisos no le decía nada a nadie. */}
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <Insignia tono="marca">{sesion?.usuario.rol}</Insignia>
-          <Insignia tono="neutro">
-            <KeyRound className="size-3" aria-hidden />
-            {cantidadPermisos} {cantidadPermisos === 1 ? 'permiso' : 'permisos'}
-          </Insignia>
+          {cargo && cargo !== sesion?.usuario.rol && (
+            <Insignia tono="neutro">
+              <BriefcaseBusiness className="size-3" aria-hidden />
+              {cargo}
+            </Insignia>
+          )}
         </div>
       </motion.header>
 
-      <section>
-        <h2 className="mb-4 text-[10px] font-medium uppercase tracking-wider text-tinta-tenue">
-          Módulos disponibles
-        </h2>
+      <Pendientes />
 
-        {modulos.length === 0 ? (
-          <EstadoVacio
-            icono={<ShieldOff className="size-6" aria-hidden />}
-            titulo="Todavía no tiene módulos habilitados"
-            descripcion="Solicite al administrador que le asigne los permisos correspondientes a su rol."
-          />
-        ) : (
+      {propios.length > 0 && (
+        <section className="mb-9">
+          <h2 className="mb-4 text-[10px] font-medium uppercase tracking-wider text-tinta-tenue">
+            Su trabajo
+          </h2>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {modulos.map((modulo, indice) => (
+            {propios.map((modulo, indice) => (
               <TarjetaModulo key={modulo.ruta} modulo={modulo} indice={indice} />
             ))}
           </div>
-        )}
-      </section>
+        </section>
+      )}
+
+      {(otros.length > 0 || modulos.length === 0) && (
+        <section>
+          <h2 className="mb-4 text-[10px] font-medium uppercase tracking-wider text-tinta-tenue">
+            {propios.length > 0 ? 'Otros módulos' : 'Módulos disponibles'}
+          </h2>
+
+          {modulos.length === 0 ? (
+            <EstadoVacio
+              icono={<ShieldOff className="size-6" aria-hidden />}
+              titulo="Todavía no tiene módulos habilitados"
+              descripcion="Solicite al administrador que le asigne los permisos correspondientes a su rol."
+            />
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {otros.map((modulo, indice) => (
+                <TarjetaModulo key={modulo.ruta} modulo={modulo} indice={propios.length + indice} />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
     </>
   );
 }

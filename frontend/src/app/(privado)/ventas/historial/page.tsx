@@ -80,8 +80,9 @@ function Historial() {
   }
 
   /** De la página visible; el total lo dice el pie del listado. */
+  /** Lo anulado no se recaudó: su dinero se devolvió y su stock volvió al almacén. */
   const recaudadoVisible = useMemo(
-    () => ventas.reduce((suma, v) => suma + v.total, 0),
+    () => ventas.reduce((suma, v) => (v.estadoPago === 'Anulado' ? suma : suma + v.total), 0),
     [ventas],
   );
 

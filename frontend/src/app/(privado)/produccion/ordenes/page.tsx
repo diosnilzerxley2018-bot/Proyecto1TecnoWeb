@@ -413,8 +413,14 @@ function TarjetaOrden({
         </div>
 
         <div className="flex shrink-0 items-center gap-3">
-          <span className="hidden text-sm tabular-nums text-tinta-suave sm:block">
-            {formatearBs(orden.costoEstimado)}
+          {/* Con su rótulo: suelto, el importe se confundía con un precio de venta. */}
+          <span className="hidden text-right sm:block">
+            <span className="block text-[10px] uppercase tracking-wider text-tinta-tenue">
+              {orden.estado === 'Finalizada' ? 'Costo' : 'Costo estimado'}
+            </span>
+            <span className="text-sm tabular-nums text-tinta-suave">
+              {formatearBs(orden.costoEstimado)}
+            </span>
           </span>
           <motion.span
             animate={{ rotate: abierta ? 180 : 0 }}

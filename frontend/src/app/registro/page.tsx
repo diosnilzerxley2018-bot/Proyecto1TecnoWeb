@@ -97,7 +97,7 @@ export default function PaginaRegistro() {
             <CampoTexto id="email" etiqueta="Correo electrónico" type="email" required
               autoComplete="email"
               value={datos.email} onChange={(e) => actualizar('email', e.target.value)} />
-            <CampoTexto id="telefono" etiqueta="Teléfono" autoComplete="tel"
+            <CampoTexto id="telefono" etiqueta="Teléfono (opcional)" autoComplete="tel"
               value={datos.telefono} onChange={(e) => actualizar('telefono', e.target.value)} />
           </div>
 

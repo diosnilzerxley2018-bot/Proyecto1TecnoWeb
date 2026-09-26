@@ -6,7 +6,7 @@ import { Insignia } from '@/components/ui/Insignia';
 import { Boton } from '@/components/ui/Boton';
 import { Tooltip } from '@/components/ui/Tooltip';
 import type { Insumo } from '@/types';
-import { formatearCantidad } from '@/lib/formato';
+import { formatearBs, formatearCantidad } from '@/lib/formato';
 import { cn } from '@/lib/cn';
 
 /**
@@ -65,7 +65,7 @@ export function FilaInsumo({
       </div>
 
       <Celda etiqueta="Costo">
-        <span className="tabular-nums">Bs {insumo.costoUnitario.toFixed(2)}</span>
+        <span className="tabular-nums">{formatearBs(insumo.costoUnitario)}</span>
       </Celda>
 
       <Celda etiqueta="Mínimo">
@@ -90,7 +90,9 @@ export function FilaInsumo({
         </div>
         {insumo.existencias.length > 0 && (
           <p className="mt-1 truncate text-[11px] text-tinta-tenue">
-            {insumo.existencias.map((e) => `${e.almacen}: ${e.stock}`).join(' · ')}
+            {insumo.existencias
+              .map((e) => `${e.almacen}: ${formatearCantidad(e.stock)}`)
+              .join(' · ')}
           </p>
         )}
       </Celda>
