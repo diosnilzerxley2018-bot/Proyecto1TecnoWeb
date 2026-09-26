@@ -1,4 +1,6 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '../config/prisma.js';
+import { contieneTodas, limite } from './busqueda-texto.js';
 import type { ClientePrisma } from './stock.model.js';
 
 /**
@@ -32,11 +34,40 @@ export interface FiltroInsumos {
   soloActivos?: boolean;
 }
 
-export const listar = (filtro: FiltroInsumos) =>
+/** Insumos cuyo nombre contiene todas las palabras buscadas, sin importar tildes. */
+export async function idsQueCoinciden(termino: string, tope?: number): Promise<number[]> {
+  const filas = await prisma.$queryRaw<{ id_ingrediente: number }[]>`
+    SELECT id_ingrediente FROM ingrediente
+    WHERE ${contieneTodas(Prisma.sql`nombre`, termino)}
+    ORDER BY nombre
+    ${limite(tope)}`;
+  return filas.map((f) => f.id_ingrediente);
+}
+
+/** Condición de búsqueda por texto, lista para un `where`. */
+export const porTexto = async (termino?: string) =>
+  termino ? { id_ingrediente: { in: await idsQueCoinciden(termino) } } : {};
+
+/** Los primeros insumos que coinciden, con su existencia, para el buscador general. */
+export async function coincidencias(termino: string, tope: number) {
+  return prisma.ingrediente.findMany({
+    where: { id_ingrediente: { in: await idsQueCoinciden(termino, tope) } },
+    select: {
+      id_ingrediente: true,
+      nombre: true,
+      activo: true,
+      unidad_medida: { select: { abreviatura: true } },
+      ingrediente_almacen: { select: { stock_actual: true } },
+    },
+    orderBy: { nombre: 'asc' },
+  });
+}
+
+export const listar = async (filtro: FiltroInsumos) =>
   prisma.ingrediente.findMany({
     where: {
       ...(filtro.soloActivos ? { activo: true } : {}),
-      ...(filtro.termino ? { nombre: { contains: filtro.termino, mode: 'insensitive' } } : {}),
+      ...(await porTexto(filtro.termino)),
     },
     select: CAMPOS,
     orderBy: { nombre: 'asc' },

@@ -1,24 +1,32 @@
 'use client';
 
 import type { UsuarioLista } from '@/types';
+import { TextoResaltado } from '@/components/ui/TextoResaltado';
 
-/** Traduce el estado del usuario a una etiqueta visual. */
+/**
+ * Traduce el estado del usuario a una etiqueta visual.
+ *
+ * La baja se mira primero, igual que en los filtros del servidor: una cuenta
+ * dada de baja que además quedó bloqueada es «De baja», porque ya no puede
+ * entrar de ninguna forma y desbloquearla no cambiaría nada.
+ */
 function EtiquetaEstado({ usuario }: { usuario: UsuarioLista }) {
+  if (!usuario.activo) {
+    return <span className="rounded-full bg-white/5 px-2 py-0.5 text-xs text-tinta-tenue">De baja</span>;
+  }
   if (usuario.bloqueado) {
     return (
       <span className="rounded-full bg-peligro/10 px-2 py-0.5 text-xs text-peligro">Bloqueado</span>
     );
   }
-  if (usuario.activo) {
-    return (
-      <span className="rounded-full bg-marca-500/12 px-2 py-0.5 text-xs text-marca-300">Activo</span>
-    );
-  }
-  return <span className="rounded-full bg-white/5 px-2 py-0.5 text-xs text-tinta-tenue">De baja</span>;
+  return (
+    <span className="rounded-full bg-marca-500/12 px-2 py-0.5 text-xs text-marca-300">Activo</span>
+  );
 }
 
 interface AccionesDisponibles {
   puedeEditar: boolean;
+  /** Dar de baja y reactivar: el mismo permiso, `USUARIO_BAJA`. */
   puedeDarDeBaja: boolean;
   puedeAsignarPermisos: boolean;
 }
@@ -31,6 +39,17 @@ interface Props {
   onDesbloquear: (id: number) => void;
   onPermisos: (usuario: UsuarioLista) => void;
   onDarDeBaja: (usuario: UsuarioLista) => void;
+  onReactivar: (usuario: UsuarioLista) => void;
+  /**
+   * La cuenta de quien mira. En su fila no se ofrecen la baja ni los
+   * permisos: el servidor los rechaza, porque son cambios que se los tiene
+   * que hacer otro administrador.
+   */
+  idPropio?: number;
+  /** Lo que se está buscando, para resaltarlo en cada fila. */
+  busqueda?: string;
+  /** Qué mostrar cuando no hay filas: no es lo mismo "no hay usuarios" que "no coincide ninguno". */
+  vacio?: React.ReactNode;
 }
 
 const COLUMNAS = ['Usuario', 'Nombre completo', 'Correo', 'Rol', 'Estado'];
@@ -43,6 +62,10 @@ export function TablaUsuarios({
   onDesbloquear,
   onPermisos,
   onDarDeBaja,
+  onReactivar,
+  idPropio,
+  busqueda = '',
+  vacio = 'Sin usuarios registrados',
 }: Props) {
   const totalColumnas = COLUMNAS.length + 1;
 
@@ -68,7 +91,9 @@ export function TablaUsuarios({
           </tr>
         </thead>
 
-        <tbody className="divide-y divide-slate-100">
+        {/* Tokens del tema y no colores crudos: `divide-slate-100` dibujaba
+            líneas casi blancas entre filas en el modo noche. */}
+        <tbody className="divide-y divide-borde">
           {cargando && (
             <tr>
               <td colSpan={totalColumnas} className="px-4 py-8 text-center text-tinta-tenue">
@@ -80,16 +105,27 @@ export function TablaUsuarios({
           {!cargando && usuarios.length === 0 && (
             <tr>
               <td colSpan={totalColumnas} className="px-4 py-8 text-center text-tinta-tenue">
-                Sin usuarios registrados
+                {vacio}
               </td>
             </tr>
           )}
 
           {usuarios.map((usuario) => (
             <tr key={usuario.id} className="hover:bg-white/[0.03]">
-              <td className="px-4 py-3 font-mono text-tinta-suave">{usuario.nombreUsuario}</td>
-              <td className="px-4 py-3 text-tinta">{usuario.nombreCompleto}</td>
-              <td className="px-4 py-3 text-tinta-suave">{usuario.email}</td>
+              <td className="px-4 py-3 font-mono text-tinta-suave">
+                <TextoResaltado texto={usuario.nombreUsuario} busqueda={busqueda} />
+                {usuario.id === idPropio && (
+                  <span className="ml-2 rounded-full bg-marca-500/12 px-1.5 py-0.5 font-sans text-[10px] text-marca-300">
+                    usted
+                  </span>
+                )}
+              </td>
+              <td className="px-4 py-3 text-tinta">
+                <TextoResaltado texto={usuario.nombreCompleto} busqueda={busqueda} />
+              </td>
+              <td className="px-4 py-3 text-tinta-suave">
+                <TextoResaltado texto={usuario.email} busqueda={busqueda} />
+              </td>
               <td className="px-4 py-3">
                 <span className="rounded-full bg-white/5 px-2 py-0.5 text-xs text-tinta-suave">
                   {usuario.rol}
@@ -100,15 +136,15 @@ export function TablaUsuarios({
               </td>
               <td className="px-4 py-3">
                 <div className="flex justify-end gap-3 text-xs">
-                  {usuario.bloqueado && acciones.puedeEditar && (
+                  {usuario.activo && usuario.bloqueado && acciones.puedeEditar && (
                     <button
                       onClick={() => onDesbloquear(usuario.id)}
-                      className="font-medium text-amber-600 hover:underline"
+                      className="font-medium text-aviso hover:underline"
                     >
                       Desbloquear
                     </button>
                   )}
-                  {acciones.puedeAsignarPermisos && (
+                  {acciones.puedeAsignarPermisos && usuario.id !== idPropio && (
                     <button
                       onClick={() => onPermisos(usuario)}
                       className="font-medium text-tinta-suave hover:underline"
@@ -124,12 +160,20 @@ export function TablaUsuarios({
                       Editar
                     </button>
                   )}
-                  {usuario.activo && acciones.puedeDarDeBaja && (
+                  {usuario.activo && acciones.puedeDarDeBaja && usuario.id !== idPropio && (
                     <button
                       onClick={() => onDarDeBaja(usuario)}
                       className="font-medium text-peligro hover:underline"
                     >
                       Dar de baja
+                    </button>
+                  )}
+                  {!usuario.activo && acciones.puedeDarDeBaja && (
+                    <button
+                      onClick={() => onReactivar(usuario)}
+                      className="font-medium text-marca-300 hover:underline"
+                    >
+                      Reactivar
                     </button>
                   )}
                 </div>

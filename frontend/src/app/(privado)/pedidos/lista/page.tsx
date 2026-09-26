@@ -31,7 +31,9 @@ import type {
   Repartidor,
 } from '@/types';
 import { ETIQUETA_ESTADO, ORDEN_FLUJO, avisoTrasAccion } from '@/lib/pedidos';
-import { usarRefrescoPeriodico } from '@/components/ui/usarRefrescoPeriodico';
+import { useRefrescoPeriodico } from '@/components/ui/usarRefrescoPeriodico';
+import { coincide } from '@/lib/texto';
+import { useEnlaceDirecto } from '@/components/ui/usarEnlaceDirecto';
 
 /** CU-PED-02 — Gestionar Pedido, lado del empleado (Etapa 1). */
 export default function PaginaPedidos() {
@@ -103,7 +105,7 @@ function TableroPedidos() {
 
   // Un pedido nuevo aparece solo: antes esperaba en el servidor hasta que
   // alguien pulsara "Actualizar", y la cocina no se enteraba de que había llegado.
-  usarRefrescoPeriodico(() => cargar(true), 30_000);
+  useRefrescoPeriodico(() => cargar(true), 30_000);
 
   /** Todos los pedidos del sistema, para el chip «Todos». */
   const totalDeTodos = useMemo(
@@ -117,17 +119,16 @@ function TableroPedidos() {
    * campos de tablas distintas; mientras tanto, el estado —que es como el
    * personal filtra de verdad— sí lo aplica el servidor.
    */
-  const visibles = useMemo(() => {
-    const termino = busqueda.trim().toLowerCase();
-    if (termino === '') return pedidos;
-
-    return pedidos.filter(
-      (pedido) =>
-        pedido.cliente.nombreCompleto.toLowerCase().includes(termino) ||
-        String(pedido.id).includes(termino) ||
-        pedido.ubicacion.calle.toLowerCase().includes(termino),
-    );
-  }, [pedidos, busqueda]);
+  const visibles = useMemo(
+    () =>
+      pedidos.filter((pedido) =>
+        coincide(
+          `${pedido.id} ${pedido.cliente.nombreCompleto} ${pedido.ubicacion.calle}`,
+          busqueda.replace('#', ''),
+        ),
+      ),
+    [pedidos, busqueda],
+  );
 
   /** Cambiar de filtro vuelve a la primera página: la cuarta puede no existir. */
   function cambiarFiltro(nuevo: Filtro) {
@@ -135,7 +136,29 @@ function TableroPedidos() {
     setPagina(1);
   }
 
-  const abierto = pedidos.find((p) => p.id === idAbierto) ?? null;
+  /*
+   * `?pedido=` llega del buscador general. El pedido puede no estar en la
+   * página visible —es de la semana pasada, o de otro estado—, así que se
+   * pide aparte y el panel lo muestra igual.
+   */
+  const [deOtraPagina, setDeOtraPagina] = useState<PedidoGestion | null>(null);
+  useEnlaceDirecto(['pedido'], ({ pedido }) => {
+    const id = Number(pedido);
+    if (!(id > 0)) return;
+    api
+      .get<PedidoGestion>(`/gestion/pedidos/${id}`)
+      .then((encontrado) => {
+        setDeOtraPagina(encontrado);
+        setIdAbierto(encontrado.id);
+      })
+      .catch((e) =>
+        notificar('error', e instanceof ErrorApi ? e.message : `No se pudo abrir el pedido #${id}`),
+      );
+  });
+
+  const abierto =
+    pedidos.find((p) => p.id === idAbierto) ??
+    (deOtraPagina?.id === idAbierto ? deOtraPagina : null);
 
   /** Refresca la lista tras una operación y mantiene el panel sincronizado. */
   async function operar(accion: () => Promise<PedidoGestion>, exito: string) {
@@ -144,6 +167,7 @@ function TableroPedidos() {
       setPedidos((actuales) =>
         actuales.map((p) => (p.id === actualizado.id ? actualizado : p)),
       );
+      setDeOtraPagina((p) => (p?.id === actualizado.id ? actualizado : p));
       notificar('exito', exito);
     } catch (e) {
       notificar('error', e instanceof ErrorApi ? e.message : 'No se pudo completar la operación');

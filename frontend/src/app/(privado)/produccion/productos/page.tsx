@@ -31,6 +31,8 @@ import type { Categoria, Producto } from '@/types';
 import { formatearBs, formatearCantidad } from '@/lib/formato';
 import { cn } from '@/lib/cn';
 import { urlImagenProducto } from '@/lib/imagenes';
+import { coincide } from '@/lib/texto';
+import { useEnlaceDirecto } from '@/components/ui/usarEnlaceDirecto';
 
 /** CU-PRO-01 Gestionar Producto y Receta, con CU-PRO-03 como extensión. */
 export default function PaginaProduccion() {
@@ -55,6 +57,11 @@ function CatalogoProductos() {
   const [busqueda, setBusqueda] = useState('');
   const [creando, setCreando] = useState(false);
   const [idAbierto, setIdAbierto] = useState<number | null>(null);
+
+  // `?producto=` llega del buscador general: abre el panel de ese producto.
+  useEnlaceDirecto(['producto'], ({ producto }) => {
+    if (Number(producto) > 0) setIdAbierto(Number(producto));
+  });
 
   const puedeGestionar = tienePermiso('PRODUCTO_GESTIONAR');
 
@@ -86,12 +93,9 @@ function CatalogoProductos() {
   const visibles = useMemo(() => {
     const base =
       vista === 'todos' ? productos : vista === 'sinNutricion' ? sinNutricion : activos;
-    const termino = busqueda.trim().toLowerCase();
-
     return base.filter((producto) => {
       const coincideCategoria = idCategoria === null || producto.categoria.id === idCategoria;
-      const coincideTexto = !termino || producto.nombre.toLowerCase().includes(termino);
-      return coincideCategoria && coincideTexto;
+      return coincideCategoria && coincide(producto.nombre, busqueda);
     });
   }, [productos, activos, sinNutricion, vista, idCategoria, busqueda]);
 

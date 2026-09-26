@@ -1,4 +1,6 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '../config/prisma.js';
+import { contieneTodas, limite } from './busqueda-texto.js';
 import { recorte, rangoDeFechas, type DatosPaginacion } from '../dtos/paginacion.dto.js';
 import type { ClientePrisma } from './stock.model.js';
 import type { MotivoCancelacion } from '../config/dominio.js';
@@ -262,3 +264,64 @@ export const asignarRepartidor = (idPedido: number, idRepartidor: number) =>
   });
 
 export type PedidoParaGestion = NonNullable<Awaited<ReturnType<typeof buscarPorId>>>;
+
+/* ------------------------------------------------------------------ */
+/* Seguimiento del repartidor                                           */
+/* ------------------------------------------------------------------ */
+
+/** Cuántos pedidos lleva ahora mismo en la calle un repartidor. */
+export const cuantosEnCamino = (idRepartidor: number, tx: ClientePrisma = prisma) =>
+  tx.pedido.count({ where: { id_repartidor: idRepartidor, estado_pedido: 'En camino' } });
+
+/** Lo justo para decidir quién puede seguir el pedido y a quién seguir. */
+export const repartoDe = (idPedido: number) =>
+  prisma.pedido.findUnique({
+    where: { id_pedido: idPedido },
+    select: {
+      estado_pedido: true,
+      id_cliente: true,
+      id_repartidor: true,
+      empleado: { select: { usuario: { select: { nombre: true } } } },
+    },
+  });
+
+/* ------------------------------------------------------------------ */
+/* Buscador general del personal                                        */
+/* ------------------------------------------------------------------ */
+
+const PEDIDO_EN_BUSQUEDA = {
+  id_pedido: true,
+  fecha: true,
+  estado_pedido: true,
+  total: true,
+  cliente: { select: { usuario: { select: { nombre: true, apellido: true } } } },
+} as const;
+
+/** Pedidos de los clientes cuyo nombre contiene lo buscado, los más recientes primero. */
+async function idsPorCliente(termino: string, tope: number): Promise<number[]> {
+  const filas = await prisma.$queryRaw<{ id_pedido: number }[]>`
+    SELECT p.id_pedido FROM pedido p
+    JOIN usuario u ON u.id_usuario = p.id_cliente
+    WHERE ${contieneTodas(Prisma.sql`concat_ws(' ', u.nombre, u.apellido)`, termino)}
+    ORDER BY p.id_pedido DESC
+    ${limite(tope)}`;
+  return filas.map((f) => f.id_pedido);
+}
+
+/**
+ * Pedidos por su número o por el nombre de quien los hizo.
+ *
+ * El número se compara exacto: «12» es el pedido 12, no el 112 ni el 120.
+ */
+export async function coincidencias(
+  busqueda: { numero: number | null; termino: string },
+  tope: number,
+) {
+  const ids =
+    busqueda.numero !== null ? [busqueda.numero] : await idsPorCliente(busqueda.termino, tope);
+  return prisma.pedido.findMany({
+    where: { id_pedido: { in: ids } },
+    select: PEDIDO_EN_BUSQUEDA,
+    orderBy: { id_pedido: 'desc' },
+  });
+}

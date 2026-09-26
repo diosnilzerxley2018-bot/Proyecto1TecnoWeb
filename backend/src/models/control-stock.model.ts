@@ -1,12 +1,15 @@
 import { prisma } from '../config/prisma.js';
+import * as insumoModel from './insumo.model.js';
+import * as productoModel from './producto.model.js';
 
 /**
  * Capa Model — consulta de existencias para CU-INV-05 Control de Stock.
  *
- * El filtro por almacén se aplica dentro de la relación y no en memoria, de
- * modo que la base devuelve solo las filas pedidas. Un ítem sin existencias en
- * el almacén consultado llega con la lista vacía: el caso de uso pide
- * presentarlo con stock cero, no ocultarlo.
+ * Cada ítem llega con sus existencias en **todos** los almacenes, aunque se
+ * consulte uno solo: el servicio separa lo del almacén pedido, pero la
+ * reposición se decide contra la existencia de todo el negocio. Son pocos
+ * almacenes, así que traerlos todos no cuesta y evita una segunda consulta
+ * solo para los totales.
  */
 
 export interface FiltroStock {
@@ -14,35 +17,28 @@ export interface FiltroStock {
   termino?: string;
 }
 
-const porNombre = (termino?: string) =>
-  termino ? { nombre: { contains: termino, mode: 'insensitive' as const } } : {};
-
-const porAlmacen = (idAlmacen?: number) => (idAlmacen ? { id_almacen: idAlmacen } : {});
-
-export const existenciasDeInsumos = (filtro: FiltroStock) =>
+export const existenciasDeInsumos = async (filtro: FiltroStock) =>
   prisma.ingrediente.findMany({
-    where: { activo: true, ...porNombre(filtro.termino) },
+    where: { activo: true, ...(await insumoModel.porTexto(filtro.termino)) },
     select: {
       id_ingrediente: true,
       nombre: true,
       stock_minimo: true,
       unidad_medida: { select: { abreviatura: true } },
       ingrediente_almacen: {
-        where: porAlmacen(filtro.idAlmacen),
         select: { stock_actual: true, almacen: { select: { id_almacen: true, nombre: true } } },
       },
     },
     orderBy: { nombre: 'asc' },
   });
 
-export const existenciasDeProductos = (filtro: FiltroStock) =>
+export const existenciasDeProductos = async (filtro: FiltroStock) =>
   prisma.producto.findMany({
-    where: { activo: true, ...porNombre(filtro.termino) },
+    where: { activo: true, ...(await productoModel.porTexto(filtro.termino)) },
     select: {
       id_producto: true,
       nombre: true,
       producto_almacen: {
-        where: porAlmacen(filtro.idAlmacen),
         select: { stock_actual: true, almacen: { select: { id_almacen: true, nombre: true } } },
       },
     },

@@ -8,6 +8,7 @@ import type {
   UnidadMedidaDTO,
 } from '../dtos/insumo.dto.js';
 import { ErrorApp } from '../errors/error-app.js';
+import { redondearCantidad } from '../utils/cantidad.js';
 import type { TipoConservacion } from '../config/dominio.js';
 
 /**
@@ -39,7 +40,9 @@ function aDTO(insumo: InsumoConsultado): InsumoDTO {
     activo: insumo.activo,
     tipoConservacion: insumo.tipo_conservacion as TipoConservacion,
     controlaVencimiento: insumo.controla_vencimiento,
-    stockTotal: existencias.reduce((total, e) => total + e.stock, 0),
+    // Sumar decimales en coma flotante deja restos (0,1 + 0,2 = 0,30000000000000004):
+    // se redondea a los tres decimales que guarda la base.
+    stockTotal: redondearCantidad(existencias.reduce((total, e) => total + e.stock, 0)),
     existencias,
   };
 }

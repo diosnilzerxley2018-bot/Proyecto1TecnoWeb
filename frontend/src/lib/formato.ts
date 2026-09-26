@@ -45,3 +45,16 @@ export function tiempoTranscurrido(iso: string): string {
   if (horas < 24) return `hace ${horas} h`;
   return `hace ${Math.floor(horas / 24)} d`;
 }
+
+/**
+ * Hace cuánto, con segundos: para lo que se renueva a cada rato, como la
+ * posición del repartidor. «Hace 1 min» diría lo mismo de algo de hace 5
+ * segundos que de hace 110.
+ */
+export function formatearAntiguedad(segundos: number): string {
+  if (segundos < 10) return 'recién';
+  if (segundos < 60) return `hace ${segundos} s`;
+  const minutos = Math.floor(segundos / 60);
+  if (minutos < 60) return `hace ${minutos} min`;
+  return `hace ${Math.floor(minutos / 60)} h`;
+}

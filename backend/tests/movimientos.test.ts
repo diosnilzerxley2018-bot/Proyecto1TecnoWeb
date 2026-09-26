@@ -574,6 +574,35 @@ describe('CU-INV-05 Control de stock', () => {
     }
   });
 
+  it('al filtrar por almacén, la reposición sigue mirando todos los almacenes', async () => {
+    // 10 kg en el depósito y nada en la cámara: mirando la cámara no está
+    // «por reponer», porque el mínimo es del insumo y no del almacén.
+    const staff = await tokenEmpleado();
+    const insumo = await crearInsumoVacio(staff, 3);
+    const seco = await idAlmacen(staff, 'Almacen Seco');
+    const camara = await idAlmacen(staff, 'Camara Refrigerada');
+    await request(app)
+      .post('/api/ingresos')
+      .set(cabecera(staff))
+      .send({ insumos: [{ idIngrediente: insumo.id, idAlmacen: seco, cantidad: 10, costoUnitario: 4 }] })
+      .expect(201);
+
+    const consultar = (almacen: number) =>
+      request(app)
+        .get('/api/stock')
+        .query({ almacen, termino: insumo.nombre, tipo: 'insumo' })
+        .set(cabecera(staff));
+    const [enCamara, enSeco] = await Promise.all([consultar(camara), consultar(seco)]);
+
+    expect(enCamara.body[0]).toMatchObject({
+      stockTotal: 0,
+      stockGeneral: 10,
+      bajoMinimo: false,
+      existencias: [],
+    });
+    expect(enSeco.body[0]).toMatchObject({ stockTotal: 10, stockGeneral: 10, bajoMinimo: false });
+  });
+
   it('presenta con stock cero al insumo sin existencias y lo incluye en alertas', async () => {
     const staff = await tokenEmpleado();
     const insumo = await crearInsumoVacio(staff, 3);

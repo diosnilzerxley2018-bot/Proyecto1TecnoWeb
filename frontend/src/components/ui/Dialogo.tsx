@@ -7,7 +7,7 @@ import { X } from 'lucide-react';
 import { cn } from '@/lib/cn';
 
 /** Bloquea el desplazamiento del fondo mientras haya una capa superpuesta. */
-function useDesplazamientoBloqueado(activo: boolean) {
+export function useDesplazamientoBloqueado(activo: boolean) {
   useEffect(() => {
     if (!activo) return;
     const previo = document.body.style.overflow;
@@ -18,7 +18,8 @@ function useDesplazamientoBloqueado(activo: boolean) {
   }, [activo]);
 }
 
-function useEscape(activo: boolean, alCerrar: () => void) {
+/** Cierra la capa con Escape. */
+export function useEscape(activo: boolean, alCerrar: () => void) {
   useEffect(() => {
     if (!activo) return;
     const alTeclear = (e: KeyboardEvent) => e.key === 'Escape' && alCerrar();

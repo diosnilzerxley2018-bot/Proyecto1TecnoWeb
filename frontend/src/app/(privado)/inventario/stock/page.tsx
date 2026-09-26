@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   AlertTriangle,
@@ -27,8 +27,13 @@ import { BarraStock } from '@/components/inventario/BarraStock';
 import type { Almacen, AlertaStock, ExistenciaStock, LoteVigente, TipoItem } from '@/types';
 import { formatearCantidad } from '@/lib/formato';
 import { cn } from '@/lib/cn';
+import { coincide } from '@/lib/texto';
+import { useEnlaceDirecto } from '@/components/ui/usarEnlaceDirecto';
 
 type Vista = 'todos' | TipoItem;
+
+/** El identificador de almacén de un enlace, o ninguno si no es válido. */
+const almacenDe = (valor?: string) => (Number(valor) > 0 ? Number(valor) : null);
 
 /** CU-INV-05 — Control de Stock. */
 export default function PaginaStock() {
@@ -41,12 +46,34 @@ export default function PaginaStock() {
   const [cargando, setCargando] = useState(true);
   const [refrescando, setRefrescando] = useState(false);
 
+  /*
+   * `?almacen=` y `?buscar=` llegan desde otras pantallas: la tarjeta de un
+   * almacén y el buscador general. Los valores iniciales salen de la
+   * dirección, para que la primera consulta ya venga filtrada; los que llegan
+   * después —estando ya aquí— se aplican al recibirlos.
+   */
+  const enlace = useEnlaceDirecto(['almacen', 'buscar'], ({ almacen, buscar }) => {
+    if (almacen !== undefined) setIdAlmacen(almacenDe(almacen));
+    if (buscar !== undefined) {
+      setBusqueda(buscar);
+      setVista('todos');
+    }
+  });
+
   const [vista, setVista] = useState<Vista>('todos');
-  const [idAlmacen, setIdAlmacen] = useState<number | null>(null);
-  const [busqueda, setBusqueda] = useState('');
+  const [idAlmacen, setIdAlmacen] = useState<number | null>(() => almacenDe(enlace.almacen));
+  const [busqueda, setBusqueda] = useState(enlace.buscar ?? '');
+
+  /**
+   * Número de la última consulta. Al cambiar de almacén rápido, dos consultas
+   * se cruzan, y la respuesta vieja no debe pisar a la nueva: se vería el
+   * stock de un almacén con el nombre de otro en el selector.
+   */
+  const ultimaConsulta = useRef(0);
 
   const cargar = useCallback(
     async (silencioso = false) => {
+      const numero = ++ultimaConsulta.current;
       if (silencioso) setRefrescando(true);
       try {
         const parametros = new URLSearchParams();
@@ -60,6 +87,7 @@ export default function PaginaStock() {
           // Horizonte de un mes: lo que hay que usar o retirar pronto.
           api.get<LoteVigente[]>('/stock/vencimientos?dias=30'),
         ]);
+        if (numero !== ultimaConsulta.current) return;
         setExistencias(lista);
         setAlertas(listaAlertas);
         setAlmacenes(listaAlmacenes);
@@ -78,6 +106,12 @@ export default function PaginaStock() {
     void cargar();
   }, [cargar]);
 
+  /** Los lotes también siguen al filtro: mirando un almacén, los de otro no vencen aquí. */
+  const lotesVisibles = useMemo(
+    () => (idAlmacen === null ? lotes : lotes.filter((l) => l.idAlmacen === idAlmacen)),
+    [lotes, idAlmacen],
+  );
+
   const insumos = useMemo(() => existencias.filter((e) => e.tipo === 'insumo'), [existencias]);
   const productos = useMemo(() => existencias.filter((e) => e.tipo === 'producto'), [existencias]);
 
@@ -88,9 +122,7 @@ export default function PaginaStock() {
    */
   const visibles = useMemo(() => {
     const base = vista === 'todos' ? existencias : existencias.filter((e) => e.tipo === vista);
-    const termino = busqueda.trim().toLowerCase();
-    if (!termino) return base;
-    return base.filter((e) => e.nombre.toLowerCase().includes(termino));
+    return base.filter((e) => coincide(e.nombre, busqueda));
   }, [existencias, vista, busqueda]);
 
   return (
@@ -139,7 +171,7 @@ export default function PaginaStock() {
       </AnimatePresence>
 
       <AnimatePresence>
-        {lotes.length > 0 && <PanelVencimientos lotes={lotes} />}
+        {lotesVisibles.length > 0 && <PanelVencimientos lotes={lotesVisibles} />}
       </AnimatePresence>
 
       <div className="mb-4 flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
@@ -212,7 +244,12 @@ export default function PaginaStock() {
           <ul className="divide-y divide-borde">
             <AnimatePresence mode="popLayout">
               {visibles.map((item, indice) => (
-                <FilaStock key={`${item.tipo}-${item.id}`} item={item} indice={indice} />
+                <FilaStock
+                  key={`${item.tipo}-${item.id}`}
+                  item={item}
+                  indice={indice}
+                  filtrado={idAlmacen !== null}
+                />
               ))}
             </AnimatePresence>
           </ul>
@@ -353,8 +390,26 @@ function PanelVencimientos({ lotes }: { lotes: LoteVigente[] }) {
   );
 }
 
-function FilaStock({ item, indice }: { item: ExistenciaStock; indice: number }) {
+/**
+ * Una fila del control de stock.
+ *
+ * Con filtro por almacén, la cantidad grande es la de ese almacén, pero la
+ * barra y la alerta miran la existencia general: el mínimo es del insumo, no
+ * del almacén. Antes las dos comparaban lo de un solo almacén, y un insumo
+ * con de sobra en el depósito aparecía «por reponer» al mirar la cámara.
+ */
+function FilaStock({
+  item,
+  indice,
+  filtrado,
+}: {
+  item: ExistenciaStock;
+  indice: number;
+  /** Se está mirando un solo almacén. */
+  filtrado: boolean;
+}) {
   const esInsumo = item.tipo === 'insumo';
+  const hayEnOtros = filtrado && item.stockGeneral !== item.stockTotal;
 
   return (
     <motion.li
@@ -391,11 +446,17 @@ function FilaStock({ item, indice }: { item: ExistenciaStock; indice: number }) 
           </span>
           {item.bajoMinimo && <Insignia tono="aviso">Reponer</Insignia>}
         </div>
+        {hayEnOtros && (
+          <p className="mt-0.5 text-[11px] text-tinta-tenue tabular-nums">
+            de {formatearCantidad(item.stockGeneral)} {item.unidad} en todos los almacenes
+          </p>
+        )}
         {item.stockMinimo !== null && (
           <>
-            <BarraStock stock={item.stockTotal} minimo={item.stockMinimo} className="mt-2" />
+            <BarraStock stock={item.stockGeneral} minimo={item.stockMinimo} className="mt-2" />
             <p className="mt-1 text-[11px] text-tinta-tenue tabular-nums">
               mínimo {formatearCantidad(item.stockMinimo)} {item.unidad}
+              {filtrado && ', sumando todos los almacenes'}
             </p>
           </>
         )}
@@ -403,7 +464,9 @@ function FilaStock({ item, indice }: { item: ExistenciaStock; indice: number }) 
 
       <div className="min-w-0">
         {item.existencias.length === 0 ? (
-          <span className="text-xs text-tinta-tenue">Sin existencias en ningún almacén</span>
+          <span className="text-xs text-tinta-tenue">
+            {item.stockGeneral > 0 ? 'Nada en este almacén' : 'Sin existencias en ningún almacén'}
+          </span>
         ) : (
           <div className="flex flex-wrap gap-1.5">
             {item.existencias.map((e) => (

@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect } from 'react';
+import { Suspense, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Sprout } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/context/AuthContext';
 import { BarraLateral } from '@/components/BarraLateral';
 import { ProveedorNotificaciones } from '@/components/ui/Notificaciones';
+import { ProveedorBuscador } from '@/components/buscador/BuscadorGeneral';
 import { PieVisitas } from '@/components/ui/PieVisitas';
 import { esPersonalInterno } from '@/lib/dominio';
 
@@ -29,15 +30,21 @@ export default function LayoutPrivado({ children }: { children: React.ReactNode 
 
   return (
     <ProveedorNotificaciones>
-      <div className="flex min-h-screen">
-        <BarraLateral />
-        <div className="flex min-w-0 flex-1 flex-col">
-          <main className="flex-1 px-4 pb-12 pt-20 sm:px-6 lg:px-10 lg:pt-10">{children}</main>
-          <footer className="border-t border-borde px-4 py-5 sm:px-6 lg:px-10">
-            <PieVisitas />
-          </footer>
+      <ProveedorBuscador>
+        <div className="flex min-h-screen">
+          <BarraLateral />
+          <div className="flex min-w-0 flex-1 flex-col">
+            <main className="flex-1 px-4 pb-12 pt-20 sm:px-6 lg:px-10 lg:pt-10">
+              {/* Las pantallas leen los enlaces directos (`?pedido=`, `?buscar=`)
+                  con `useSearchParams`, que pide un límite de suspensión. */}
+              <Suspense>{children}</Suspense>
+            </main>
+            <footer className="border-t border-borde px-4 py-5 sm:px-6 lg:px-10">
+              <PieVisitas />
+            </footer>
+          </div>
         </div>
-      </div>
+      </ProveedorBuscador>
     </ProveedorNotificaciones>
   );
 }

@@ -1,5 +1,7 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '../config/prisma.js';
 import type { ClientePrisma } from './stock.model.js';
+import { contieneTodas, limite } from './busqueda-texto.js';
 
 /** Capa Model — clases de análisis tblProducto, tblCategoria y tblValorNutricional. */
 
@@ -39,22 +41,49 @@ export interface FiltroCatalogo {
 }
 
 /**
- * Consulta los productos activos por coincidencia parcial de nombre y por
- * categoría (CU-PED-01). La comparación no distingue mayúsculas.
+ * Productos cuyo nombre o categoría contienen todas las palabras buscadas,
+ * sin importar tildes ni mayúsculas: «jugo limon» encuentra el «Jugo de
+ * limón», que antes no aparecía ni por la tilde ni por el «de» del medio.
  */
-export const buscarActivos = (filtro: FiltroCatalogo) =>
+export async function idsQueCoinciden(termino: string, tope?: number): Promise<number[]> {
+  const filas = await prisma.$queryRaw<{ id_producto: number }[]>`
+    SELECT p.id_producto FROM producto p
+    JOIN categoria c ON c.id_categoria = p.id_categoria
+    WHERE ${contieneTodas(Prisma.sql`concat_ws(' ', p.nombre, c.nombre)`, termino)}
+    ORDER BY p.nombre
+    ${limite(tope)}`;
+  return filas.map((f) => f.id_producto);
+}
+
+/** Condición de búsqueda por texto, lista para un `where`. */
+export const porTexto = async (termino?: string) =>
+  termino ? { id_producto: { in: await idsQueCoinciden(termino) } } : {};
+
+/** Los primeros productos que coinciden, activos o no, para el buscador general. */
+export async function coincidencias(termino: string, tope: number) {
+  return prisma.producto.findMany({
+    where: { id_producto: { in: await idsQueCoinciden(termino, tope) } },
+    select: {
+      id_producto: true,
+      nombre: true,
+      precio_venta: true,
+      activo: true,
+      categoria: { select: { nombre: true } },
+    },
+    orderBy: { nombre: 'asc' },
+  });
+}
+
+/**
+ * Consulta los productos activos por coincidencia parcial de nombre y por
+ * categoría (CU-PED-01), sin distinguir tildes ni mayúsculas.
+ */
+export const buscarActivos = async (filtro: FiltroCatalogo) =>
   prisma.producto.findMany({
     where: {
       activo: true,
       ...(filtro.idCategoria ? { id_categoria: filtro.idCategoria } : {}),
-      ...(filtro.termino
-        ? {
-            OR: [
-              { nombre: { contains: filtro.termino, mode: 'insensitive' } },
-              { categoria: { nombre: { contains: filtro.termino, mode: 'insensitive' } } },
-            ],
-          }
-        : {}),
+      ...(await porTexto(filtro.termino)),
     },
     select: CAMPOS_PUBLICOS,
     orderBy: [{ id_categoria: 'asc' }, { nombre: 'asc' }],
@@ -121,12 +150,12 @@ export interface FiltroGestion {
   incluirInactivos?: boolean;
 }
 
-export const listarParaGestion = (filtro: FiltroGestion) =>
+export const listarParaGestion = async (filtro: FiltroGestion) =>
   prisma.producto.findMany({
     where: {
       ...(filtro.incluirInactivos ? {} : { activo: true }),
       ...(filtro.idCategoria ? { id_categoria: filtro.idCategoria } : {}),
-      ...(filtro.termino ? { nombre: { contains: filtro.termino, mode: 'insensitive' } } : {}),
+      ...(await porTexto(filtro.termino)),
     },
     select: CAMPOS_GESTION,
     orderBy: [{ id_categoria: 'asc' }, { nombre: 'asc' }],

@@ -16,6 +16,7 @@ import { Dialogo } from '@/components/ui/Dialogo';
 import { FormularioInsumo } from '@/components/inventario/FormularioInsumo';
 import { FilaInsumo } from '@/components/inventario/FilaInsumo';
 import type { Insumo } from '@/types';
+import { coincide } from '@/lib/texto';
 
 type Vista = 'activos' | 'criticos' | 'todos';
 
@@ -66,9 +67,8 @@ export default function PaginaInsumos() {
 
   const visibles = useMemo(() => {
     const base = vista === 'todos' ? insumos : vista === 'criticos' ? criticos : activos;
-    const termino = busqueda.trim().toLowerCase();
-    if (!termino) return base;
-    return base.filter((i) => i.nombre.toLowerCase().includes(termino));
+    // Sin tildes ni mayúsculas: «limon» encuentra el «Limón».
+    return base.filter((i) => coincide(i.nombre, busqueda));
   }, [insumos, activos, criticos, vista, busqueda]);
 
   async function eliminar() {

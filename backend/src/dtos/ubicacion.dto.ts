@@ -8,7 +8,7 @@ import { z } from 'zod';
  * de al lado, y más dígitos los rechazaría el motor.
  */
 
-const coordenada = (limite: number) =>
+export const coordenada = (limite: number) =>
   z
     .number()
     .min(-limite)

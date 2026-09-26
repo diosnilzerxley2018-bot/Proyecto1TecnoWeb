@@ -75,9 +75,6 @@ export function generarPdf(documento: DocumentoReporte): Promise<Buffer> {
 /* Formato compartido por los reportes                                 */
 /* ------------------------------------------------------------------ */
 
-export const bolivianos = (monto: number) =>
-  `Bs ${monto.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
 export const fechaLegible = (iso: string) => {
   const [anio, mes, dia] = iso.slice(0, 10).split('-');
   return `${dia}/${mes}/${anio}`;

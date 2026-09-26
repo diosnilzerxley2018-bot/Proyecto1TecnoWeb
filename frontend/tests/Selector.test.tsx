@@ -222,6 +222,81 @@ describe('Selector · el menú escapa de contenedores con recorte', () => {
 
     await usuario.click(screen.getByRole('combobox'));
 
-    expect(screen.getByRole('listbox')).toHaveStyle({ position: 'fixed' });
+    // Lo que se posiciona es el contenedor del menú, que además puede llevar
+    // el buscador: un campo de texto no puede vivir dentro de un listbox.
+    expect(screen.getByRole('listbox').parentElement).toHaveStyle({ position: 'fixed' });
+  });
+});
+
+/** Veinte insumos: por encima del umbral, el selector trae buscador. */
+const MUCHOS: Opcion<number>[] = [
+  'Aceite de oliva', 'Almendras', 'Arroz', 'Avena en hojuelas', 'Harina integral',
+  'Leche', 'Lechuga romana', 'Limón', 'Pechuga de pollo', 'Quinua real',
+  'Tomate', 'Yogur griego natural', 'Azúcar morena', 'Café', 'Sal marina',
+].map((etiqueta, i) => ({ valor: i + 1, etiqueta, descripcion: i % 2 ? 'Refrigerado' : 'Seco' }));
+
+describe('Selector · con muchas opciones trae buscador', () => {
+  it('con pocas opciones no muestra buscador', async () => {
+    const usuario = userEvent.setup();
+    render(<SelectorDePrueba />);
+
+    await usuario.click(screen.getByRole('combobox'));
+
+    expect(screen.queryByRole('searchbox')).toBeNull();
+  });
+
+  it('filtra sin importar tildes ni mayúsculas y dice cuántas quedan', async () => {
+    const usuario = userEvent.setup();
+    render(<SelectorDePrueba opciones={MUCHOS} />);
+
+    await usuario.click(screen.getByRole('combobox'));
+    await usuario.type(screen.getByRole('searchbox'), 'LIMON');
+
+    const opciones = within(screen.getByRole('listbox')).getAllByRole('option');
+    expect(opciones).toHaveLength(1);
+    expect(opciones[0]).toHaveTextContent('Limón');
+    expect(screen.getByText(`1 de ${MUCHOS.length}`)).toBeInTheDocument();
+  });
+
+  it('busca varias palabras en cualquier orden', async () => {
+    const usuario = userEvent.setup();
+    render(<SelectorDePrueba opciones={MUCHOS} />);
+
+    await usuario.click(screen.getByRole('combobox'));
+    await usuario.type(screen.getByRole('searchbox'), 'pollo pechuga');
+
+    expect(within(screen.getByRole('listbox')).getAllByRole('option')).toHaveLength(1);
+  });
+
+  it('Enter elige la primera coincidencia', async () => {
+    const usuario = userEvent.setup();
+    const alCambiar = vi.fn();
+    render(<SelectorDePrueba opciones={MUCHOS} onCambiar={alCambiar} />);
+
+    await usuario.click(screen.getByRole('combobox'));
+    await usuario.type(screen.getByRole('searchbox'), 'quinua{Enter}');
+
+    expect(alCambiar).toHaveBeenCalledWith(10);
+    expect(screen.getByRole('combobox')).toHaveTextContent('Quinua real');
+  });
+
+  it('escribir sobre el selector cerrado lo abre ya buscando', async () => {
+    const usuario = userEvent.setup();
+    render(<SelectorDePrueba opciones={MUCHOS} />);
+
+    screen.getByRole('combobox').focus();
+    await usuario.keyboard('c');
+
+    expect(screen.getByRole('searchbox')).toHaveValue('c');
+  });
+
+  it('dice qué se buscó cuando no hay coincidencias', async () => {
+    const usuario = userEvent.setup();
+    render(<SelectorDePrueba opciones={MUCHOS} />);
+
+    await usuario.click(screen.getByRole('combobox'));
+    await usuario.type(screen.getByRole('searchbox'), 'chocolate');
+
+    expect(screen.getByText('Sin coincidencias para «chocolate»')).toBeInTheDocument();
   });
 });

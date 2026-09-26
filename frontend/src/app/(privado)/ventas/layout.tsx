@@ -3,23 +3,16 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { ChartColumn, History, ScanLine, Users } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { seccionesAccesibles } from '@/lib/modulos';
 import { cn } from '@/lib/cn';
-
-const PESTANAS = [
-  { ruta: '/ventas/registro', etiqueta: 'Punto de venta', icono: ScanLine, permiso: 'VENTA_REGISTRAR' },
-  { ruta: '/ventas/historial', etiqueta: 'Historial', icono: History, permiso: 'VENTA_LEER' },
-  { ruta: '/ventas/clientes', etiqueta: 'Clientes', icono: Users, permiso: 'CLIENTE_GESTIONAR' },
-  { ruta: '/ventas/reportes', etiqueta: 'Reportes', icono: ChartColumn, permiso: 'VENTA_LEER' },
-];
 
 /** Contenedor del subsistema de ventas: CU-VEN-01 y CU-VEN-02. */
 export default function LayoutVentas({ children }: { children: React.ReactNode }) {
   const rutaActual = usePathname();
   const { tienePermiso } = useAuth();
 
-  const visibles = PESTANAS.filter((p) => tienePermiso(p.permiso));
+  const visibles = seccionesAccesibles('/ventas', tienePermiso);
 
   return (
     <>

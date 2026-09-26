@@ -14,7 +14,7 @@ import { useEffect, useRef } from 'react';
  * por qué gastar datos ni batería— y consulta al volver a ella, que es cuando
  * más importa lo que pasó mientras tanto.
  */
-export function usarRefrescoPeriodico(
+export function useRefrescoPeriodico(
   refrescar: () => unknown,
   milisegundos: number,
   activo = true,

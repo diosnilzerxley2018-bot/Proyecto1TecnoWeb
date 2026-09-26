@@ -14,10 +14,11 @@ import { Dialogo } from '@/components/ui/Dialogo';
 import { DialogoCobro } from '@/components/ventas/DialogoCobro';
 import { LineaDeTiempo } from '@/components/pedidos/LineaDeTiempo';
 import { MapaUbicacion } from '@/components/pedidos/MapaUbicacion';
+import { SeguimientoEnVivo } from '@/components/pedidos/SeguimientoEnVivo';
 import type { Coordenadas } from '@/lib/dominio';
 import type { Pago, PedidoCliente } from '@/types';
 import { ETIQUETA_ESTADO, TONO_ESTADO, textoDePago } from '@/lib/pedidos';
-import { usarRefrescoPeriodico } from '@/components/ui/usarRefrescoPeriodico';
+import { useRefrescoPeriodico } from '@/components/ui/usarRefrescoPeriodico';
 import { formatearBs, formatearFecha } from '@/lib/formato';
 
 /** CU-PED-02 — consulta y cancelación de los pedidos propios. */
@@ -53,7 +54,7 @@ export default function PaginaMisPedidos() {
   const hayEnCurso = pedidos.some(
     (p) => p.estadoPedido !== 'Entregado' && p.estadoPedido !== 'Cancelado',
   );
-  usarRefrescoPeriodico(cargar, 20_000, hayEnCurso);
+  useRefrescoPeriodico(cargar, 20_000, hayEnCurso);
 
   /**
    * Retoma un pago que quedó a medias.
@@ -265,8 +266,21 @@ function TarjetaPedidoCliente({
                   </span>
                 </div>
 
-                {/* Solo si marcó el punto: confirma a dónde irá el repartidor. */}
-                {puntoEntrega && <MapaUbicacion valor={puntoEntrega} altura="h-64 sm:h-72" />}
+                {/*
+                  En camino, el mapa muestra también por dónde viene el
+                  repartidor: el cliente sabe si de verdad está en camino sin
+                  llamar a nadie. Antes, solo el punto elegido, y únicamente
+                  si lo marcó: confirma a dónde irá el repartidor.
+                */}
+                {pedido.estadoPedido === 'En camino' ? (
+                  <SeguimientoEnVivo
+                    ruta={`/pedidos/${pedido.id}/seguimiento`}
+                    destino={puntoEntrega}
+                    para="cliente"
+                  />
+                ) : (
+                  puntoEntrega && <MapaUbicacion valor={puntoEntrega} altura="h-64 sm:h-72" />
+                )}
               </div>
 
               <ul className="divide-y divide-borde overflow-hidden rounded-xl border border-borde">

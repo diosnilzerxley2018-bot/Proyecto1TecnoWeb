@@ -8,6 +8,7 @@ import { Insignia } from '@/components/ui/Insignia';
 import { Selector } from '@/components/ui/Selector';
 import { LineaDeTiempo } from './LineaDeTiempo';
 import { MapaUbicacion } from './MapaUbicacion';
+import { SeguimientoEnVivo } from './SeguimientoEnVivo';
 import type { Coordenadas } from '@/lib/dominio';
 import type { CandidatoRepartidor, EstadoPedido, PedidoGestion } from '@/types';
 import { SugerenciaReparto } from './SugerenciaReparto';
@@ -210,10 +211,19 @@ export function PanelPedido({
             enlace={coordenadas ? `https://www.google.com/maps?q=${coordenadas}` : undefined}
           />
 
-          {/* El mapa solo aparece si el cliente marcó el punto: un mapa
-              centrado en la ciudad no dice nada y ocuparía media pantalla. */}
-          {puntoEntrega && (
-            <MapaUbicacion valor={puntoEntrega} altura="h-64 sm:h-72" className="mt-1" />
+          {/* En camino, el mapa sigue al repartidor. Antes de salir, solo
+              aparece si el cliente marcó el punto: un mapa centrado en la
+              ciudad no dice nada y ocuparía media pantalla. */}
+          {pedido.estadoPedido === 'En camino' ? (
+            <SeguimientoEnVivo
+              ruta={`/gestion/pedidos/${pedido.id}/seguimiento`}
+              destino={puntoEntrega}
+              para="personal"
+            />
+          ) : (
+            puntoEntrega && (
+              <MapaUbicacion valor={puntoEntrega} altura="h-64 sm:h-72" className="mt-1" />
+            )
           )}
         </section>
 

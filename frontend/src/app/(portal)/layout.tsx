@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
@@ -69,7 +69,8 @@ export default function LayoutPortal({ children }: { children: React.ReactNode }
         <div className="flex min-h-screen flex-col">
           <Cabecera nombre={sesion.usuario.nombre} />
           <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-24 pt-8 sm:px-6">
-            {children}
+            {/* El catálogo lee `?termino=` con `useSearchParams`, que pide un límite de suspensión. */}
+            <Suspense>{children}</Suspense>
           </main>
           <Pie />
         </div>

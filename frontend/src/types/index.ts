@@ -31,6 +31,14 @@ export interface UsuarioLista {
   bloqueado: boolean;
 }
 
+/** Cuántas cuentas hay en cada estado; los tres suman el total. */
+export interface ResumenUsuarios {
+  total: number;
+  activos: number;
+  bloqueados: number;
+  bajas: number;
+}
+
 export interface UsuarioDetalle extends UsuarioLista {
   nombre: string;
   apellido: string;
@@ -348,10 +356,14 @@ export interface ExistenciaStock {
   id: number;
   nombre: string;
   unidad: string;
+  /** Lo que hay en el almacén consultado; sin filtro, en todos. */
   stockTotal: number;
+  /** Lo que hay sumando todos los almacenes: contra esto se decide la reposición. */
+  stockGeneral: number;
   /** Solo los insumos declaran stock mínimo en el esquema. */
   stockMinimo: number | null;
   bajoMinimo: boolean;
+  /** Solo las del almacén consultado; sin filtro, todas. */
   existencias: Existencia[];
 }
 
@@ -831,4 +843,61 @@ export interface LoteVigente {
   /** Días que faltan; negativo si el lote ya está vencido. */
   diasParaVencer: number;
   vencido: boolean;
+}
+
+/* ------------------------------------------------------------------ */
+/* Buscador general del personal                                        */
+/* ------------------------------------------------------------------ */
+
+export type TipoResultado =
+  | 'pedido'
+  | 'venta'
+  | 'orden'
+  | 'cliente'
+  | 'producto'
+  | 'insumo'
+  | 'almacen'
+  | 'usuario';
+
+export interface ResultadoGeneral {
+  tipo: TipoResultado;
+  id: number;
+  titulo: string;
+  /** Una línea de contexto: el cliente, la categoría, el rol, la existencia… */
+  detalle: string;
+  /** Estado del pedido, de la venta o de la orden, tal como lo guarda la base. */
+  estado: string | null;
+  monto: number | null;
+  /** ISO 8601. */
+  fecha: string | null;
+  /** Lo que lo distingue en su pantalla (usuario, correo, nombre), para abrirla filtrada. */
+  referencia: string | null;
+}
+
+export interface BusquedaGeneral {
+  termino: string;
+  resultados: ResultadoGeneral[];
+}
+
+/* ------------------------------------------------------------------ */
+/* Seguimiento del repartidor en vivo                                   */
+/* ------------------------------------------------------------------ */
+
+export interface PosicionRepartidor {
+  latitud: number;
+  longitud: number;
+  /** Radio de incertidumbre en metros, según el teléfono. */
+  precision: number | null;
+  actualizadaEn: string;
+  /** Segundos desde el último envío, medidos por el servidor. */
+  antiguedadSegundos: number;
+}
+
+export interface SeguimientoPedido {
+  /** El pedido está en camino: hay algo que seguir. */
+  enCamino: boolean;
+  /** Nombre de pila de quien lo lleva. */
+  repartidor: string | null;
+  /** Última posición conocida; `null` si todavía no compartió ninguna. */
+  posicion: PosicionRepartidor | null;
 }

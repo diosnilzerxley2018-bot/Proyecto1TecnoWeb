@@ -2,7 +2,18 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Banknote, Bike, ChefHat, CircleCheck, MapPin, Phone, PowerOff, Zap } from 'lucide-react';
+import {
+  Banknote,
+  Bike,
+  ChefHat,
+  CircleCheck,
+  LocateFixed,
+  LocateOff,
+  MapPin,
+  Phone,
+  PowerOff,
+  Zap,
+} from 'lucide-react';
 import { api, ErrorApi } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { useNotificaciones } from '@/components/ui/Notificaciones';
@@ -14,7 +25,13 @@ import { Insignia } from '@/components/ui/Insignia';
 import { Boton } from '@/components/ui/Boton';
 import { Dialogo } from '@/components/ui/Dialogo';
 import { MapaUbicacion } from '@/components/pedidos/MapaUbicacion';
-import { usarRefrescoPeriodico } from '@/components/ui/usarRefrescoPeriodico';
+import { useRefrescoPeriodico } from '@/components/ui/usarRefrescoPeriodico';
+import {
+  useCompartirUbicacion,
+  type EstadoUbicacion,
+} from '@/components/pedidos/usarCompartirUbicacion';
+import { distanciaEnMetros, formatearDistancia } from '@/lib/geo';
+import type { Coordenadas } from '@/lib/dominio';
 import type { Disponibilidad, EstadoPedido, PedidoGestion } from '@/types';
 import { CARGO_REPARTIDOR } from '@/lib/dominio';
 import { ETIQUETA_ESTADO, TONO_ESTADO, avisoTrasAccion, textoDePago } from '@/lib/pedidos';
@@ -94,7 +111,7 @@ function MisEntregas() {
   }, [cargarEntregas, cargarTurno, noReparte]);
 
   // Una entrega nueva aparece sola: el repartidor no tiene por qué recargar.
-  usarRefrescoPeriodico(cargarEntregas, 20_000, !noReparte);
+  useRefrescoPeriodico(cargarEntregas, 20_000, !noReparte);
 
   const grupos = useMemo(
     () => ({
@@ -104,6 +121,13 @@ function MisEntregas() {
     }),
     [entregas],
   );
+
+  /*
+   * Mientras lleva un pedido en camino, comparte su ubicación con quien lo
+   * espera. Se enciende al marcar «Salgo con el pedido» y se apaga al cerrar
+   * la última entrega: no hay que acordarse de activarla ni de apagarla.
+   */
+  const ubicacion = useCompartirUbicacion(grupos.enCamino.length > 0 && !noReparte);
 
   /**
    * Mueve el pedido y vuelve a leer la lista. Se recarga en vez de retocarla
@@ -219,9 +243,16 @@ function MisEntregas() {
         />
       ) : (
         <div className="space-y-8">
+          {grupos.enCamino.length > 0 && (
+            <AvisoUbicacion
+              estado={ubicacion.estado}
+              precision={ubicacion.posicion?.precision ?? null}
+            />
+          )}
+
           <Grupo titulo="En camino" cantidad={grupos.enCamino.length}>
             {grupos.enCamino.map((pedido) => (
-              <TarjetaEntrega key={pedido.id} pedido={pedido}>
+              <TarjetaEntrega key={pedido.id} pedido={pedido} miPosicion={ubicacion.posicion}>
                 <Boton
                   variante="primario"
                   tamano="lg"
@@ -318,7 +349,16 @@ function Grupo({
 }
 
 /** Una entrega que está por salir o en la calle: todo lo que hace falta para llevarla. */
-function TarjetaEntrega({ pedido, children }: { pedido: PedidoGestion; children: React.ReactNode }) {
+function TarjetaEntrega({
+  pedido,
+  miPosicion = null,
+  children,
+}: {
+  pedido: PedidoGestion;
+  /** Dónde está el repartidor, para verse a sí mismo y al destino en el mismo mapa. */
+  miPosicion?: (Coordenadas & { precision: number }) | null;
+  children: React.ReactNode;
+}) {
   const { ubicacion, cliente } = pedido;
   const pago = textoDePago(pedido, 'personal');
   const cobra = pedido.metodoPago === 'Efectivo' && pedido.estadoPago !== 'Pagado';
@@ -326,6 +366,8 @@ function TarjetaEntrega({ pedido, children }: { pedido: PedidoGestion; children:
     ubicacion.latitud !== null && ubicacion.longitud !== null
       ? { lat: ubicacion.latitud, lon: ubicacion.longitud }
       : null;
+  const distancia =
+    punto && miPosicion ? formatearDistancia(distanciaEnMetros(miPosicion, punto)) : null;
 
   return (
     <motion.li
@@ -362,8 +404,17 @@ function TarjetaEntrega({ pedido, children }: { pedido: PedidoGestion; children:
         <span className="text-sm font-semibold">{pago.texto}</span>
       </div>
 
-      {/* El mapa: lo que el repartidor mira antes de salir. */}
-      {punto && <MapaUbicacion valor={punto} altura="h-52 sm:h-60" />}
+      {/* El mapa: lo que el repartidor mira antes de salir y, ya en la calle,
+          dónde está él respecto de la puerta, sin salir a otra aplicación. */}
+      {(punto || miPosicion) && (
+        <MapaUbicacion valor={punto} repartidor={miPosicion} altura="h-52 sm:h-60" />
+      )}
+      {distancia && (
+        <p className="border-b border-borde px-4 py-2 text-[12px] text-tinta-suave">
+          Está a <span className="font-medium text-tinta">{distancia}</span> del destino, en
+          línea recta
+        </p>
+      )}
 
       <div className="space-y-3 px-4 py-3.5">
         <p className="flex items-start gap-2 text-sm text-tinta">
@@ -401,6 +452,78 @@ function TarjetaEntrega({ pedido, children }: { pedido: PedidoGestion; children:
     </motion.li>
   );
 }
+
+/**
+ * Cómo anda la ubicación compartida.
+ *
+ * Solo se muestra con un pedido en camino. Lo que importa es que el
+ * repartidor sepa si el cliente lo está viendo, y si no, qué hacer: sin
+ * permiso de ubicación, el mapa del cliente se queda sin su punto.
+ */
+function AvisoUbicacion({
+  estado,
+  precision,
+}: {
+  estado: EstadoUbicacion;
+  precision: number | null;
+}) {
+  const aviso = AVISOS_UBICACION[estado];
+  if (!aviso) return null;
+
+  const bien = estado === 'compartiendo';
+  return (
+    <section
+      aria-live="polite"
+      className={cn(
+        'flex items-start gap-3 rounded-2xl border p-4',
+        bien ? 'border-info/30 bg-info/[0.06]' : 'border-aviso/30 bg-aviso/[0.06]',
+        estado === 'buscando' && 'border-borde bg-white/[0.02]',
+      )}
+    >
+      {bien || estado === 'buscando' ? (
+        <LocateFixed
+          className={cn('mt-0.5 size-5 shrink-0', bien ? 'text-info' : 'text-tinta-tenue')}
+          aria-hidden
+        />
+      ) : (
+        <LocateOff className="mt-0.5 size-5 shrink-0 text-aviso" aria-hidden />
+      )}
+      <div className="min-w-0">
+        <p className="text-sm text-tinta">{aviso.titulo}</p>
+        <p className="mt-0.5 text-[12px] text-tinta-tenue">
+          {aviso.detalle}
+          {bien && precision !== null && ` Precisión: ±${Math.round(precision)} m.`}
+        </p>
+      </div>
+    </section>
+  );
+}
+
+const AVISOS_UBICACION: Record<EstadoUbicacion, { titulo: string; detalle: string } | null> = {
+  apagada: null,
+  buscando: {
+    titulo: 'Buscando su ubicación…',
+    detalle: 'Si el navegador pregunta, permita el acceso a la ubicación.',
+  },
+  compartiendo: {
+    titulo: 'Quien espera el pedido ve por dónde va',
+    detalle:
+      'Mantenga esta pantalla abierta mientras reparte: con la pantalla apagada el teléfono deja de informarla.',
+  },
+  denegada: {
+    titulo: 'La ubicación está bloqueada en este navegador',
+    detalle:
+      'Permítala en los permisos del sitio (el candado junto a la dirección) para que el cliente vea por dónde va.',
+  },
+  'sin-senal': {
+    titulo: 'Sin señal de ubicación por ahora',
+    detalle: 'Se vuelve a intentar sola. Al aire libre el GPS la encuentra antes.',
+  },
+  'no-disponible': {
+    titulo: 'Este navegador no puede compartir la ubicación',
+    detalle: 'Abra el sistema con Chrome o Safari actualizados en el teléfono.',
+  },
+};
 
 /** Un pedido que todavía está en cocina: se ve, pero no pide nada. */
 function FilaEnCocina({ pedido }: { pedido: PedidoGestion }) {

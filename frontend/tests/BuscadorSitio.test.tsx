@@ -83,8 +83,10 @@ describe('BuscadorSitio', () => {
 
     await usuario.type(caja(), 'avena');
 
-    expect(await screen.findByText('Barra de avena')).toBeInTheDocument();
-    expect(screen.getByText('Horario de atención')).toBeInTheDocument();
+    // Por el nombre del botón y no por el texto exacto: lo buscado va resaltado
+    // y parte el texto en dos («Barra de **avena**»).
+    expect(await screen.findByRole('button', { name: /Barra de avena/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Horario de atención/ })).toBeInTheDocument();
     expect(screen.getByText('Bs 12.00')).toBeInTheDocument();
   });
 
@@ -94,7 +96,7 @@ describe('BuscadorSitio', () => {
     render(<BuscadorSitio />);
 
     await usuario.type(caja(), 'avena');
-    await usuario.click(await screen.findByText('Barra de avena'));
+    await usuario.click(await screen.findByRole('button', { name: /Barra de avena/ }));
 
     expect(empujar).toHaveBeenCalledWith('/portal?termino=Barra%20de%20avena');
   });
@@ -104,7 +106,7 @@ describe('BuscadorSitio', () => {
     render(<BuscadorSitio />);
 
     await usuario.type(caja(), 'avena');
-    await usuario.click(await screen.findByText('Horario de atención'));
+    await usuario.click(await screen.findByRole('button', { name: /Horario de atención/ }));
 
     expect(empujar).toHaveBeenCalledWith('/portal/nosotros');
   });
@@ -114,7 +116,7 @@ describe('BuscadorSitio', () => {
     render(<BuscadorSitio />);
 
     await usuario.type(caja(), 'avena');
-    await usuario.click(await screen.findByText('Barra de avena'));
+    await usuario.click(await screen.findByRole('button', { name: /Barra de avena/ }));
 
     expect(caja()).toHaveValue('');
   });
@@ -149,6 +151,6 @@ describe('BuscadorSitio', () => {
     await usuario.click(screen.getByLabelText('Borrar la búsqueda'));
 
     expect(caja()).toHaveValue('');
-    expect(screen.queryByText('Barra de avena')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Barra de avena/ })).not.toBeInTheDocument();
   });
 });

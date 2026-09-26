@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import * as permisoService from '../services/permiso.service.js';
+import { idUsuarioDeSesion } from '../utils/sesion.js';
 
 /** Clase de análisis ctrlAsignarPermiso. */
 
@@ -14,5 +15,7 @@ export async function obtenerDeUsuario(req: Request, res: Response) {
 
 export async function asignar(req: Request, res: Response) {
   const { idsRolPermiso } = req.body as z.infer<typeof esquemaAsignar>;
-  res.json(await permisoService.asignarPermisos(Number(req.params.id), idsRolPermiso));
+  res.json(
+    await permisoService.asignarPermisos(Number(req.params.id), idsRolPermiso, idUsuarioDeSesion(req)),
+  );
 }

@@ -6,6 +6,7 @@ import * as permisoModel from '../models/permiso.model.js';
 import * as avisoService from './aviso.service.js';
 import * as pagoService from './pago.service.js';
 import * as repartoService from './reparto.service.js';
+import * as seguimientoService from './seguimiento.service.js';
 import { reponerAsignaciones } from './stock.service.js';
 import type { ClientePrisma } from '../models/stock.model.js';
 import type { PedidoParaGestion } from '../models/pedido.model.js';
@@ -343,6 +344,12 @@ export async function avanzarEstado(
       tx,
       destino === 'Cancelado' ? 'No entregado' : null,
     );
+
+    // Con su última entrega cerrada, el repartidor deja de estar en la calle:
+    // su ubicación se olvida en la misma transacción.
+    if (esCierreDeEntrega(destino) && pedido.id_repartidor !== null) {
+      await seguimientoService.olvidarSiTermino(pedido.id_repartidor, tx);
+    }
 
     if (destino === 'Entregado') {
       await pagoService.cerrarCobroDePedidoEnTransaccion(

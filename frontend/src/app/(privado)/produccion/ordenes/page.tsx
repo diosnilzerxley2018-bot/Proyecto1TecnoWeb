@@ -32,6 +32,7 @@ import type { EstadoOrden, OrdenProduccion, Pagina } from '@/types';
 import { ACCION_ORDEN, CONSECUENCIA_ORDEN, FLUJO_ORDEN, TONO_ORDEN } from '@/lib/ordenes';
 import { formatearBs, formatearCantidad, formatearFecha } from '@/lib/formato';
 import { cn } from '@/lib/cn';
+import { useEnlaceDirecto } from '@/components/ui/usarEnlaceDirecto';
 
 type Filtro = EstadoOrden | 'Todas';
 
@@ -102,6 +103,37 @@ function TableroOrdenes() {
     setPagina(1);
   }
 
+  /*
+   * `?orden=` llega del buscador general. La orden puede no estar en la
+   * página visible, así que se pide aparte y se muestra arriba, desplegada.
+   */
+  const [buscada, setBuscada] = useState<OrdenProduccion | null>(null);
+  useEnlaceDirecto(['orden'], ({ orden }) => {
+    const id = Number(orden);
+    if (!(id > 0)) return;
+    api
+      .get<OrdenProduccion>(`/ordenes/${id}`)
+      .then(setBuscada)
+      .catch((e) =>
+        notificar('error', e instanceof ErrorApi ? e.message : `No se pudo abrir la orden #${id}`),
+      );
+  });
+
+  /** La orden cambió: se refleja en la lista y, si es la buscada, también arriba. */
+  function reemplazar(actualizada: OrdenProduccion) {
+    setOrdenes((actuales) => actuales.map((o) => (o.id === actualizada.id ? actualizada : o)));
+    setBuscada((o) => (o?.id === actualizada.id ? actualizada : o));
+  }
+
+  /**
+   * Finalizar no es un cambio de estado más: exige elegir el almacén de
+   * destino del producto terminado.
+   */
+  function avanzar(orden: OrdenProduccion, destino: EstadoOrden) {
+    if (destino === 'Finalizada') return setPorFinalizar(orden);
+    void operar(orden, 'iniciar', 'Orden iniciada');
+  }
+
 
   async function operar(
     orden: OrdenProduccion,
@@ -115,9 +147,7 @@ function TableroOrdenes() {
         `/ordenes/${orden.id}/${ruta}`,
         cuerpo,
       );
-      setOrdenes((actuales) =>
-        actuales.map((o) => (o.id === actualizada.id ? actualizada : o)),
-      );
+      reemplazar(actualizada);
       notificar('exito', exito);
       setPorCancelar(null);
     } catch (e) {
@@ -167,6 +197,30 @@ function TableroOrdenes() {
         />
       </div>
 
+      {buscada && (
+        <section className="mb-6" aria-label={`Orden buscada #${buscada.id}`}>
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-tinta-tenue">
+              Orden buscada
+            </p>
+            <Boton tamano="sm" variante="fantasma" onClick={() => setBuscada(null)}>
+              Quitar
+            </Boton>
+          </div>
+          <ul>
+            <TarjetaOrden
+              key={`buscada-${buscada.id}`}
+              orden={buscada}
+              indice={0}
+              inicialAbierta
+              ocupada={ocupada === buscada.id}
+              onAvanzar={(destino) => avanzar(buscada, destino)}
+              onCancelar={() => setPorCancelar(buscada)}
+            />
+          </ul>
+        </section>
+      )}
+
       <div className="mb-5">
         <ChipsFiltro<Filtro>
           idGrupo="filtro-ordenes"
@@ -186,21 +240,25 @@ function TableroOrdenes() {
       {cargando ? (
         <EsqueletoFilas filas={4} alto="h-28" />
       ) : ordenes.length === 0 ? (
+        /* Lo que distingue los dos vacíos es el filtro: antes se preguntaba
+           por la lista, que en esta rama siempre está vacía, y filtrar por
+           «Cancelada» sin resultados decía «No hay órdenes registradas» y
+           ofrecía planificar la primera. */
         <EstadoVacio
           icono={<Factory className="size-6" aria-hidden />}
-          titulo={ordenes.length === 0 ? 'No hay órdenes registradas' : 'Sin coincidencias'}
+          titulo={filtro === 'Todas' ? 'No hay órdenes registradas' : 'Sin coincidencias'}
           descripcion={
-            ordenes.length === 0
+            filtro === 'Todas'
               ? 'Una orden calcula los insumos según el rendimiento de la receta y, al finalizar, genera las notas de egreso e ingreso.'
-              : 'Ninguna orden coincide con el filtro seleccionado.'
+              : `No hay órdenes en estado «${filtro}».`
           }
           accion={
-            ordenes.length === 0 ? (
+            filtro === 'Todas' ? (
               <Boton variante="primario" onClick={() => setCreando(true)}>
                 Planificar la primera
               </Boton>
             ) : (
-              <Boton variante="contorno" onClick={() => setFiltro('Todas')}>
+              <Boton variante="contorno" onClick={() => cambiarFiltro('Todas')}>
                 Ver todas
               </Boton>
             )
@@ -215,12 +273,7 @@ function TableroOrdenes() {
                 orden={orden}
                 indice={indice}
                 ocupada={ocupada === orden.id}
-                onAvanzar={(destino) => {
-                  // Finalizar no es un cambio de estado más: exige elegir el
-                  // almacén de destino del producto terminado.
-                  if (destino === 'Finalizada') return setPorFinalizar(orden);
-                  void operar(orden, 'iniciar', 'Orden iniciada');
-                }}
+                onAvanzar={(destino) => avanzar(orden, destino)}
                 onCancelar={() => setPorCancelar(orden)}
               />
             ))}
@@ -256,9 +309,7 @@ function TableroOrdenes() {
         orden={porFinalizar}
         onCerrar={() => setPorFinalizar(null)}
         onFinalizado={(actualizada) => {
-          setOrdenes((actuales) =>
-            actuales.map((o) => (o.id === actualizada.id ? actualizada : o)),
-          );
+          reemplazar(actualizada);
           setPorFinalizar(null);
         }}
       />
@@ -300,17 +351,20 @@ function TableroOrdenes() {
 function TarjetaOrden({
   orden,
   indice,
+  inicialAbierta = false,
   ocupada,
   onAvanzar,
   onCancelar,
 }: {
   orden: OrdenProduccion;
   indice: number;
+  /** Desplegada desde el principio: la orden que se vino a buscar. */
+  inicialAbierta?: boolean;
   ocupada: boolean;
   onAvanzar: (destino: EstadoOrden) => void;
   onCancelar: () => void;
 }) {
-  const [abierta, setAbierta] = useState(false);
+  const [abierta, setAbierta] = useState(inicialAbierta);
   const siguiente = orden.transicionesPosibles[0] ?? null;
 
   return (

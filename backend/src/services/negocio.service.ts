@@ -1,5 +1,7 @@
 import * as configModel from '../models/configuracion.model.js';
 import * as catalogoService from './catalogo.service.js';
+import { coincide } from '../utils/texto.js';
+import { bolivianos } from '../utils/dinero.js';
 import {
   CAMPOS_NEGOCIO,
   CLAVE_LATITUD,
@@ -132,12 +134,10 @@ export async function buscar(termino: string): Promise<BusquedaSitioDTO> {
     informacion(),
   ]);
 
-  const buscado = normalizar(limpio);
-
   const deProductos: ResultadoBusquedaDTO[] = productos.slice(0, TOPE_PRODUCTOS).map((p) => ({
     tipo: 'producto',
     titulo: p.nombre,
-    detalle: p.disponible ? `Bs ${p.precio.toFixed(2)}` : 'Sin existencias',
+    detalle: p.disponible ? bolivianos(p.precio) : 'Sin existencias',
     idProducto: p.id,
   }));
 
@@ -149,24 +149,10 @@ export async function buscar(termino: string): Promise<BusquedaSitioDTO> {
       idProducto: null,
     }))
     // Coincide por la etiqueta o por el contenido: quien escribe "horario"
-    // busca el campo, y quien escribe "domingo" busca lo que dice.
-    .filter(
-      (r) =>
-        normalizar(r.titulo).includes(buscado) || normalizar(r.detalle).includes(buscado),
-    )
+    // busca el campo, y quien escribe "domingo" busca lo que dice. Sin tildes
+    // ni mayúsculas: "informacion" tiene que encontrar "Información".
+    .filter((r) => coincide(r.titulo, limpio) || coincide(r.detalle, limpio))
     .slice(0, TOPE_INFORMACION);
 
   return { termino: limpio, resultados: [...deProductos, ...deInformacion] };
 }
-
-/**
- * Compara sin tildes ni mayúsculas.
- *
- * Sin esto "informacion" no encontraría "Información" y el buscador parecería
- * roto en el idioma en el que está escrito el sistema.
- */
-const normalizar = (texto: string) =>
-  texto
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');

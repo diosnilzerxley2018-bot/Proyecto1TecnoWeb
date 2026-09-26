@@ -2,7 +2,17 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import { MapPin, Pencil, Plus, Snowflake, Star, Sun, Trash2, Warehouse } from 'lucide-react';
+import {
+  MapPin,
+  PackageSearch,
+  Pencil,
+  Plus,
+  Snowflake,
+  Star,
+  Sun,
+  Trash2,
+  Warehouse,
+} from 'lucide-react';
 import { api, ErrorApi } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { useNotificaciones } from '@/components/ui/Notificaciones';
@@ -15,7 +25,10 @@ import { EstadoVacio } from '@/components/ui/EstadoVacio';
 import { EsqueletoFilas } from '@/components/ui/Esqueleto';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { FormularioAlmacen } from '@/components/inventario/FormularioAlmacen';
-import type { Almacen } from '@/types';
+import { PanelContenidoAlmacen } from '@/components/inventario/PanelContenidoAlmacen';
+import { contenidoDelAlmacen, type LineaAlmacen } from '@/lib/inventario';
+import { useEnlaceDirecto } from '@/components/ui/usarEnlaceDirecto';
+import type { Almacen, ExistenciaStock } from '@/types';
 
 /** CU-INV-02 — Gestionar Almacén. Actor del caso de uso: Administrador. */
 export default function PaginaAlmacenes() {
@@ -23,7 +36,19 @@ export default function PaginaAlmacenes() {
   const { notificar } = useNotificaciones();
 
   const [almacenes, setAlmacenes] = useState<Almacen[]>([]);
+  /** El stock de todo el negocio; `null` mientras no llega o si no se pudo leer. */
+  const [existencias, setExistencias] = useState<ExistenciaStock[] | null>(null);
   const [cargando, setCargando] = useState(true);
+  /*
+   * El almacén cuyo contenido se está mirando. Se guarda el identificador y no
+   * el almacén: `?almacen=` llega del buscador general antes de que la lista
+   * termine de cargar, y el panel se abre en cuanto aparece.
+   */
+  const [idMirando, setIdMirando] = useState<number | null>(null);
+  useEnlaceDirecto(['almacen'], ({ almacen }) => {
+    if (Number(almacen) > 0) setIdMirando(Number(almacen));
+  });
+  const mirando = almacenes.find((a) => a.id === idMirando) ?? null;
   const [editando, setEditando] = useState<Almacen | null>(null);
   const [creando, setCreando] = useState(false);
   const [porEliminar, setPorEliminar] = useState<Almacen | null>(null);
@@ -32,14 +57,24 @@ export default function PaginaAlmacenes() {
   const puedeGestionar = tienePermiso('ALMACEN_GESTIONAR');
 
   const cargar = useCallback(async () => {
+    /*
+     * El contenido sale de una sola consulta de stock para todas las
+     * tarjetas: cada ítem trae sus existencias por almacén. Si esa consulta
+     * falla, las tarjetas se muestran igual, sin el recuento.
+     */
+    const stock = api.get<ExistenciaStock[]>('/stock').catch(() => null);
     try {
       setAlmacenes(await api.get<Almacen[]>('/almacenes'));
+      setExistencias(await stock);
     } catch (e) {
       notificar('error', e instanceof ErrorApi ? e.message : 'No se pudieron cargar los almacenes');
     } finally {
       setCargando(false);
     }
   }, [notificar]);
+
+  const contenidoDe = (almacen: Almacen): LineaAlmacen[] | null =>
+    existencias && contenidoDelAlmacen(existencias, almacen.id);
 
   useEffect(() => {
     void cargar();
@@ -104,8 +139,10 @@ export default function PaginaAlmacenes() {
               <TarjetaAlmacen
                 key={almacen.id}
                 almacen={almacen}
+                contenido={contenidoDe(almacen)}
                 indice={indice}
                 puedeGestionar={puedeGestionar}
+                onVerContenido={() => setIdMirando(almacen.id)}
                 onEditar={() => setEditando(almacen)}
                 onEliminar={() => setPorEliminar(almacen)}
               />
@@ -113,6 +150,12 @@ export default function PaginaAlmacenes() {
           </AnimatePresence>
         </div>
       )}
+
+      <PanelContenidoAlmacen
+        almacen={mirando}
+        lineas={(mirando && contenidoDe(mirando)) ?? []}
+        onCerrar={() => setIdMirando(null)}
+      />
 
       <Dialogo
         abierto={creando}
@@ -175,18 +218,26 @@ export default function PaginaAlmacenes() {
 
 function TarjetaAlmacen({
   almacen,
+  contenido,
   indice,
   puedeGestionar,
+  onVerContenido,
   onEditar,
   onEliminar,
 }: {
   almacen: Almacen;
+  /** Lo que guarda; `null` si no se pudo leer el stock. */
+  contenido: LineaAlmacen[] | null;
   indice: number;
   puedeGestionar: boolean;
+  onVerContenido: () => void;
   onEditar: () => void;
   onEliminar: () => void;
 }) {
   const frio = almacen.tipoConservacion === 'Refrigerado';
+  const insumos = contenido?.filter((l) => l.tipo === 'insumo').length ?? 0;
+  const productos = contenido?.filter((l) => l.tipo === 'producto').length ?? 0;
+  const porReponer = contenido?.filter((l) => l.bajoMinimo).length ?? 0;
 
   return (
     <Tarjeta
@@ -259,6 +310,31 @@ function TarjetaAlmacen({
         <MapPin className="mt-0.5 size-3.5 shrink-0" aria-hidden />
         {almacen.ubicacionFisica ?? 'Sin ubicación física registrada'}
       </p>
+
+      {contenido && (
+        <div className="relative mt-4 flex items-center justify-between gap-3 border-t border-borde pt-3">
+          <div className="min-w-0 text-xs tabular-nums">
+            <p className="text-tinta-suave">
+              {contenido.length === 0
+                ? 'Vacío'
+                : `${insumos} ${insumos === 1 ? 'insumo' : 'insumos'} · ${productos} ${
+                    productos === 1 ? 'producto' : 'productos'
+                  }`}
+            </p>
+            {porReponer > 0 && (
+              <p className="mt-0.5 text-aviso">{porReponer} por reponer</p>
+            )}
+          </div>
+          <Boton
+            tamano="sm"
+            variante="contorno"
+            onClick={onVerContenido}
+            icono={<PackageSearch className="size-3.5" aria-hidden />}
+          >
+            Ver contenido
+          </Boton>
+        </div>
+      )}
     </Tarjeta>
   );
 }

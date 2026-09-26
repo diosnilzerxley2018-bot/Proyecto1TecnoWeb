@@ -3,14 +3,11 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { ChartColumn, ClipboardList } from 'lucide-react';
 import { RequierePermiso } from '@/components/RequierePermiso';
+import { seccionesDe } from '@/lib/modulos';
 import { cn } from '@/lib/cn';
 
-const PESTANAS = [
-  { ruta: '/pedidos/lista', etiqueta: 'Pedidos', icono: ClipboardList },
-  { ruta: '/pedidos/reportes', etiqueta: 'Reportes', icono: ChartColumn },
-];
+const PESTANAS = seccionesDe('/pedidos');
 
 /**
  * Contenedor del subsistema de pedidos.

@@ -19,6 +19,7 @@ import { Dialogo } from '@/components/ui/Dialogo';
 import { Comprobante } from '@/components/ventas/Comprobante';
 import type { Comprobante as ComprobanteDatos, Pagina, TipoVenta, Venta } from '@/types';
 import { formatearBs, formatearFecha } from '@/lib/formato';
+import { useEnlaceDirecto } from '@/components/ui/usarEnlaceDirecto';
 
 type Filtro = 'todas' | TipoVenta;
 
@@ -84,9 +85,14 @@ function Historial() {
     [ventas],
   );
 
-  async function verComprobante(venta: Venta) {
+  // `?venta=` llega del buscador general: abre el comprobante, esté en la página que esté.
+  useEnlaceDirecto(['venta'], ({ venta }) => {
+    if (Number(venta) > 0) void verComprobante(Number(venta));
+  });
+
+  async function verComprobante(idVenta: number) {
     try {
-      setComprobante(await api.get<ComprobanteDatos>(`/ventas/${venta.id}/comprobante`));
+      setComprobante(await api.get<ComprobanteDatos>(`/ventas/${idVenta}/comprobante`));
     } catch (e) {
       notificar('error', e instanceof ErrorApi ? e.message : 'No se pudo generar el comprobante');
     }
@@ -154,7 +160,7 @@ function Historial() {
                 key={venta.id}
                 venta={venta}
                 indice={indice}
-                onComprobante={() => verComprobante(venta)}
+                onComprobante={() => verComprobante(venta.id)}
               />
             ))}
           </AnimatePresence>

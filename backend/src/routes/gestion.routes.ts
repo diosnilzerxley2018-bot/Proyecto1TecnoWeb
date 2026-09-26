@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import * as ctrl from '../controllers/pedido-gestion.controller.js';
+import * as seguimiento from '../controllers/seguimiento.controller.js';
 import { requiereAutenticacion, requierePermiso } from '../middlewares/auth.middleware.js';
 import { validarCuerpo, validarIdParam } from '../middlewares/validate.middleware.js';
 import {
@@ -7,6 +8,7 @@ import {
   esquemaCambiarEstado,
   esquemaDisponibilidad,
 } from '../dtos/pedido.dto.js';
+import { esquemaPosicion } from '../dtos/seguimiento.dto.js';
 
 /**
  * Tablero del personal (CU-PED-02, lado del empleado).
@@ -37,11 +39,30 @@ router.put('/disponibilidad', validarCuerpo(esquemaDisponibilidad), ctrl.cambiar
  */
 router.get('/mis-entregas', requierePermiso('PEDIDO_LEER'), ctrl.misEntregas);
 
+/**
+ * La posición del repartidor mientras reparte. Como las entregas propias,
+ * pide `PEDIDO_LEER` y el alcance lo pone la sesión: cada uno informa —y
+ * borra— solo la suya, y el servidor la rechaza si no lleva un pedido en camino.
+ */
+router.put(
+  '/mi-posicion',
+  requierePermiso('PEDIDO_LEER'),
+  validarCuerpo(esquemaPosicion),
+  seguimiento.informarPosicion,
+);
+router.delete('/mi-posicion', requierePermiso('PEDIDO_LEER'), seguimiento.dejarDeCompartir);
+
 /** El tablero, aparte del listado: cuenta todos, no solo la página visible. */
 router.get('/pedidos/resumen', requierePermiso('PEDIDO_LEER'), ctrl.resumen);
 
 router.get('/pedidos', requierePermiso('PEDIDO_LEER'), ctrl.listar);
 router.get('/pedidos/:id', requierePermiso('PEDIDO_LEER'), validarIdParam, ctrl.detalle);
+router.get(
+  '/pedidos/:id/seguimiento',
+  requierePermiso('PEDIDO_LEER'),
+  validarIdParam,
+  seguimiento.paraPersonal,
+);
 
 router.patch(
   '/pedidos/:id/estado',

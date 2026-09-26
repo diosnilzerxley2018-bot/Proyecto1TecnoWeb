@@ -3,8 +3,9 @@ import { z } from 'zod';
 import { camposPersonales } from '../dtos/perfil.dto.js';
 import { esquemaContrasena } from '../dtos/contrasena.dto.js';
 import * as usuarioService from '../services/usuario.service.js';
-import { esquemaPaginacion } from '../dtos/paginacion.dto.js';
+import { esquemaFiltroUsuarios } from '../dtos/usuario.dto.js';
 import { ErrorApp } from '../errors/error-app.js';
+import { idUsuarioDeSesion } from '../utils/sesion.js';
 
 /** Clase de análisis ctrlUsuario. */
 
@@ -29,18 +30,18 @@ export const esquemaCrear = z.object({
  *
  * Los cuatro campos personales se toman de `perfil.dto` para que un nombre se
  * valide igual venga de donde venga. Lo que agrega esta pantalla —y que el
- * titular no puede tocar de sí mismo— es el rol y el estado de la cuenta.
+ * titular no puede tocar de sí mismo— es el rol. El estado de la cuenta tiene
+ * sus propias rutas (baja y reactivación), con su propio permiso.
  */
 export const esquemaActualizar = z
   .object(camposPersonales)
   .extend({
     idRol: z.number().int().positive(),
-    activo: z.boolean(),
   })
   .partial();
 
 export async function listar(req: Request, res: Response) {
-  const filtro = esquemaPaginacion.safeParse(req.query);
+  const filtro = esquemaFiltroUsuarios.safeParse(req.query);
   if (!filtro.success) {
     throw new ErrorApp(400, filtro.error.issues.map((i) => i.message).join('; '));
   }
@@ -57,14 +58,24 @@ export async function crear(req: Request, res: Response) {
 }
 
 export async function actualizar(req: Request, res: Response) {
-  res.json(await usuarioService.actualizar(Number(req.params.id), req.body));
+  res.json(
+    await usuarioService.actualizar(Number(req.params.id), req.body, idUsuarioDeSesion(req)),
+  );
 }
 
 export async function darDeBaja(req: Request, res: Response) {
-  await usuarioService.darDeBaja(Number(req.params.id));
+  await usuarioService.darDeBaja(Number(req.params.id), idUsuarioDeSesion(req));
   res.status(204).send();
+}
+
+export async function reactivar(req: Request, res: Response) {
+  res.json(await usuarioService.reactivar(Number(req.params.id)));
 }
 
 export async function desbloquear(req: Request, res: Response) {
   res.json(await usuarioService.desbloquear(Number(req.params.id)));
+}
+
+export async function resumen(_req: Request, res: Response) {
+  res.json(await usuarioService.resumen());
 }

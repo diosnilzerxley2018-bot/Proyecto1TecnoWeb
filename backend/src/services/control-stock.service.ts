@@ -1,5 +1,6 @@
 import * as controlStockModel from '../models/control-stock.model.js';
 import * as loteModel from '../models/lote.model.js';
+import { redondearCantidad } from '../utils/cantidad.js';
 import type { InsumoConExistencias } from '../models/control-stock.model.js';
 import type {
   AlertaStockDTO,
@@ -21,15 +22,30 @@ import type {
  * declaran en el esquema, de modo que no generan alertas de reposición.
  */
 
+/** Redondeada a los tres decimales de la base: sumar en coma flotante deja restos. */
+const sumar = (existencias: { stock: number }[]) =>
+  redondearCantidad(existencias.reduce((suma, e) => suma + e.stock, 0));
+
+/**
+ * Separa lo del almacén consultado de lo del negocio entero.
+ *
+ * `detalle` y `total` muestran solo el almacén filtrado, que es lo que pidió
+ * quien filtra; `general` suma todos. La reposición se decide contra
+ * `general`: antes se comparaba lo de un solo almacén con el mínimo, que es
+ * del insumo y no del almacén, y al mirar la cámara un insumo con 20 kg en el
+ * depósito aparecía «por reponer».
+ */
 function consolidar(
   existencias: { stock_actual: unknown; almacen: { id_almacen: number; nombre: string } }[],
+  idAlmacen?: number,
 ) {
-  const detalle = existencias.map((e) => ({
+  const todas = existencias.map((e) => ({
     idAlmacen: e.almacen.id_almacen,
     almacen: e.almacen.nombre,
     stock: Number(e.stock_actual),
   }));
-  return { detalle, total: detalle.reduce((suma, e) => suma + e.stock, 0) };
+  const detalle = idAlmacen ? todas.filter((e) => e.idAlmacen === idAlmacen) : todas;
+  return { detalle, total: sumar(detalle), general: sumar(todas) };
 }
 
 /** Un insumo está en nivel crítico cuando alcanza o desciende bajo su mínimo. */
@@ -57,7 +73,7 @@ export async function consultar(filtro: FiltroStockDTO): Promise<ExistenciaStock
   if (filtro.tipo !== 'producto') {
     const insumos = await controlStockModel.existenciasDeInsumos(filtro);
     for (const insumo of insumos) {
-      const { detalle, total } = consolidar(insumo.ingrediente_almacen);
+      const { detalle, total, general } = consolidar(insumo.ingrediente_almacen, filtro.idAlmacen);
       const stockMinimo = Number(insumo.stock_minimo);
       resultado.push({
         tipo: 'insumo',
@@ -65,8 +81,9 @@ export async function consultar(filtro: FiltroStockDTO): Promise<ExistenciaStock
         nombre: insumo.nombre,
         unidad: insumo.unidad_medida.abreviatura,
         stockTotal: total,
+        stockGeneral: general,
         stockMinimo,
-        bajoMinimo: alcanzoElMinimo(total, stockMinimo),
+        bajoMinimo: alcanzoElMinimo(general, stockMinimo),
         existencias: detalle,
       });
     }
@@ -75,13 +92,14 @@ export async function consultar(filtro: FiltroStockDTO): Promise<ExistenciaStock
   if (filtro.tipo !== 'insumo') {
     const productos = await controlStockModel.existenciasDeProductos(filtro);
     for (const producto of productos) {
-      const { detalle, total } = consolidar(producto.producto_almacen);
+      const { detalle, total, general } = consolidar(producto.producto_almacen, filtro.idAlmacen);
       resultado.push({
         tipo: 'producto',
         id: producto.id_producto,
         nombre: producto.nombre,
         unidad: 'u',
         stockTotal: total,
+        stockGeneral: general,
         stockMinimo: null,
         bajoMinimo: false,
         existencias: detalle,

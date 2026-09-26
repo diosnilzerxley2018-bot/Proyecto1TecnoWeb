@@ -1,9 +1,11 @@
 import * as usuarioModel from '../models/usuario.model.js';
-import { pagina, type DatosPaginacion, type Pagina } from '../dtos/paginacion.dto.js';
+import type { FiltroUsuarios, ResumenUsuariosDTO } from '../dtos/usuario.dto.js';
+import { pagina, type Pagina } from '../dtos/paginacion.dto.js';
 import * as rolModel from '../models/rol.model.js';
 import * as cargoModel from '../models/cargo.model.js';
 import { hashearContrasena } from '../utils/hash.js';
 import { ErrorApp } from '../errors/error-app.js';
+import { exigirCuentaAjena } from './actor.service.js';
 import { esPersonalInterno } from '../config/dominio.js';
 import type { Subtipo } from '../models/usuario.model.js';
 import type { UsuarioListaDTO, UsuarioDetalleDTO } from '../dtos/usuario.dto.js';
@@ -26,7 +28,7 @@ export interface DatosCrear {
   restriccionDietetica?: string | null;
 }
 
-export async function listar(filtro: DatosPaginacion): Promise<Pagina<UsuarioListaDTO>> {
+export async function listar(filtro: FiltroUsuarios): Promise<Pagina<UsuarioListaDTO>> {
   const [filas, total] = await usuarioModel.listar(filtro);
 
   return pagina(
@@ -121,6 +123,13 @@ export async function crear(datos: DatosCrear): Promise<UsuarioDetalleDTO> {
   return obtener(creado.id_usuario);
 }
 
+/**
+ * Edición por un administrador (CU-SEG-02).
+ *
+ * El estado de la cuenta no entra por aquí: se cambia con `darDeBaja` y
+ * `reactivar`, que piden `USUARIO_BAJA`. Mientras `activo` viajó en esta
+ * edición, bastaba `USUARIO_EDITAR` para dar de baja a cualquiera.
+ */
 export async function actualizar(
   id: number,
   datos: Partial<{
@@ -128,9 +137,9 @@ export async function actualizar(
     apellido: string;
     email: string;
     telefono: string | null;
-    activo: boolean;
     idRol: number;
   }>,
+  idActor: number,
 ): Promise<UsuarioDetalleDTO> {
   const actual = await usuarioModel.buscarPorId(id);
   if (!actual) throw new ErrorApp(404, 'Usuario no encontrado');
@@ -144,6 +153,7 @@ export async function actualizar(
   const cambiaDeRol = Boolean(idRol && idRol !== actual.id_rol);
 
   if (idRol && cambiaDeRol) {
+    exigirCuentaAjena(id, idActor, 'cambiar su propio rol');
     await validarCambioDeRol(actual.rol.nombre, idRol);
   }
 
@@ -179,10 +189,27 @@ async function validarCambioDeRol(nombreRolActual: string, idRolNuevo: number): 
   }
 }
 
-export async function darDeBaja(id: number): Promise<void> {
+export async function darDeBaja(id: number, idActor: number): Promise<void> {
+  exigirCuentaAjena(id, idActor, 'dar de baja su propia cuenta');
   const usuario = await usuarioModel.buscarPorId(id);
   if (!usuario) throw new ErrorApp(404, 'Usuario no encontrado');
   await usuarioModel.darDeBaja(id);
+}
+
+/**
+ * Devuelve a la actividad una cuenta dada de baja (RF-SEG-05).
+ *
+ * La baja es lógica justamente para poder revertirla. El usuario y el correo
+ * siguen ocupados por la cuenta, así que sin esto una baja por error obligaba
+ * a inventarle a la persona un usuario y un correo nuevos. Vuelve sin bloqueo:
+ * quien la reactiva responde por ella, igual que al desbloquear.
+ */
+export async function reactivar(id: number): Promise<UsuarioDetalleDTO> {
+  const usuario = await usuarioModel.buscarPorId(id);
+  if (!usuario) throw new ErrorApp(404, 'Usuario no encontrado');
+  if (usuario.activo) throw new ErrorApp(409, 'La cuenta ya está activa');
+  await usuarioModel.reactivar(id);
+  return obtener(id);
 }
 
 /** CU-SEG-02, variación: "El administrador puede desbloquear una cuenta bloqueada". */
@@ -191,4 +218,9 @@ export async function desbloquear(id: number): Promise<UsuarioDetalleDTO> {
   if (!usuario) throw new ErrorApp(404, 'Usuario no encontrado');
   await usuarioModel.desbloquear(id);
   return obtener(id);
+}
+
+/** Cifras de la pantalla de usuarios: todas las cuentas, no solo las de la página. */
+export async function resumen(): Promise<ResumenUsuariosDTO> {
+  return usuarioModel.resumen();
 }

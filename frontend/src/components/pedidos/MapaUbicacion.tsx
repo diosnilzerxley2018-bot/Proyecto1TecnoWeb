@@ -21,10 +21,15 @@ import { cn } from '@/lib/cn';
  * Un único componente sirve a los dos lados del caso de uso: **sin `onCambiar`
  * el mapa es de solo lectura**, que es como lo mira el repartidor. Duplicarlo
  * en «uno para elegir» y «otro para ver» habría sido el mismo mapa dos veces.
+ *
+ * Con `repartidor`, el mismo mapa muestra además por dónde viene quien lleva
+ * el pedido: así el cliente y el repartidor lo siguen en la aplicación, sin
+ * salir a otra.
  */
 export function MapaUbicacion({
   valor,
   onCambiar,
+  repartidor = null,
   altura = 'h-72 sm:h-80',
   className,
 }: {
@@ -32,12 +37,18 @@ export function MapaUbicacion({
   valor: Coordenadas | null;
   /** Ausente, el mapa solo se mira. Presente, el punto se elige y se arrastra. */
   onCambiar?: (coordenadas: Coordenadas) => void;
+  /** Dónde está el repartidor, mientras el pedido va en camino. */
+  repartidor?: PuntoRepartidor | null;
   altura?: string;
   className?: string;
 }) {
   const contenedor = useRef<HTMLDivElement>(null);
   const mapa = useRef<Leaflet.Map | null>(null);
   const marca = useRef<Leaflet.Marker | null>(null);
+  const marcaRepartidor = useRef<Leaflet.Marker | null>(null);
+  const circuloPrecision = useRef<Leaflet.Circle | null>(null);
+  /** El encuadre de los dos puntos se hace una vez: después manda el zoom de quien mira. */
+  const encuadrado = useRef(false);
   const leaflet = useRef<typeof Leaflet | null>(null);
   const [listo, setListo] = useState(false);
 
@@ -100,6 +111,9 @@ export function MapaUbicacion({
       instancia?.remove();
       mapa.current = null;
       marca.current = null;
+      marcaRepartidor.current = null;
+      circuloPrecision.current = null;
+      encuadrado.current = false;
     };
   }, []);
 
@@ -141,8 +155,94 @@ export function MapaUbicacion({
       marca.current = marcador;
     }
 
-    instancia.setView(punto, Math.max(instancia.getZoom(), ZOOM_PUERTA));
-  }, [valor, listo, editable]);
+    /*
+     * Con el repartidor en el mapa, el encuadre lo decide el efecto que sigue.
+     * En solo lectura, sin animación: Leaflet ignora un cambio de vista pedido
+     * mientras otro zoom está animándose, y el encuadre de los dos puntos
+     * —que suele llegar justo detrás— se perdía y el repartidor quedaba fuera
+     * del mapa.
+     */
+    if (!repartidor) {
+      instancia.setView(punto, Math.max(instancia.getZoom(), ZOOM_PUERTA), { animate: editable });
+    }
+  }, [valor, listo, editable, repartidor]);
+
+  /**
+   * Refleja la posición del repartidor: crea, mueve o quita su marca.
+   *
+   * La primera vez encuadra los dos puntos —el destino y quien viene—; las
+   * siguientes solo mueve la marca. Reencuadrar en cada actualización le
+   * quitaría el zoom a quien está mirando cada quince segundos.
+   */
+  useEffect(() => {
+    const L = leaflet.current;
+    const instancia = mapa.current;
+    if (!L || !instancia) return;
+
+    if (!repartidor) {
+      marcaRepartidor.current?.remove();
+      circuloPrecision.current?.remove();
+      marcaRepartidor.current = null;
+      circuloPrecision.current = null;
+      encuadrado.current = false;
+      return;
+    }
+
+    const punto: Leaflet.LatLngExpression = [repartidor.lat, repartidor.lon];
+    // Una posición vieja se ve atenuada: está, pero puede no ser la de ahora.
+    const opacidad = repartidor.vieja ? 0.5 : 1;
+
+    if (marcaRepartidor.current) {
+      marcaRepartidor.current.setLatLng(punto).setOpacity(opacidad);
+    } else {
+      marcaRepartidor.current = L.marker(punto, {
+        icon: L.divIcon({
+          className: '',
+          html: REPARTIDOR,
+          iconSize: [34, 34],
+          iconAnchor: [17, 17],
+        }),
+        keyboard: false,
+        title: 'Repartidor',
+        opacity: opacidad,
+        // Por encima del punto de entrega cuando se acercan.
+        zIndexOffset: 1000,
+      }).addTo(instancia);
+    }
+
+    // El círculo dice cuánto se puede confiar en el punto. Uno de kilómetros
+    // (la ubicación por antena) taparía el mapa entero sin aportar nada.
+    const precision = repartidor.precision ?? 0;
+    if (precision > 0 && precision <= PRECISION_MAXIMA_VISIBLE) {
+      if (circuloPrecision.current) {
+        circuloPrecision.current.setLatLng(punto).setRadius(precision);
+      } else {
+        circuloPrecision.current = L.circle(punto, {
+          radius: precision,
+          color: 'var(--color-info)',
+          weight: 1,
+          fillOpacity: 0.12,
+          interactive: false,
+        }).addTo(instancia);
+      }
+    } else {
+      circuloPrecision.current?.remove();
+      circuloPrecision.current = null;
+    }
+
+    if (!encuadrado.current) {
+      encuadrado.current = true;
+      if (valor) {
+        instancia.fitBounds(L.latLngBounds([punto, [valor.lat, valor.lon]]), {
+          padding: [36, 36],
+          maxZoom: ZOOM_PUERTA,
+          animate: false,
+        });
+      } else {
+        instancia.setView(punto, Math.max(instancia.getZoom(), ZOOM_BARRIO), { animate: false });
+      }
+    }
+  }, [repartidor, valor, listo]);
 
   return (
     <div
@@ -159,7 +259,11 @@ export function MapaUbicacion({
         className="size-full"
         role="application"
         aria-label={
-          editable ? 'Mapa para marcar el punto de entrega' : 'Mapa con el punto de entrega'
+          editable
+            ? 'Mapa para marcar el punto de entrega'
+            : repartidor
+              ? 'Mapa con el punto de entrega y la posición del repartidor'
+              : 'Mapa con el punto de entrega'
         }
       />
 
@@ -201,13 +305,37 @@ const CREDITO =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
 
 const ZOOM_CIUDAD = 13;
+/** Acercamiento al que se ven las calles de alrededor. */
+const ZOOM_BARRIO = 15;
 /** Acercamiento al que se distingue una puerta de la de al lado. */
 const ZOOM_PUERTA = 17;
 const ZOOM_MAXIMO = 19;
+
+/** Más allá de esta incertidumbre, en metros, el círculo no se dibuja. */
+const PRECISION_MAXIMA_VISIBLE = 500;
+
+/** La posición del repartidor, tal como la dibuja el mapa. */
+export interface PuntoRepartidor extends Coordenadas {
+  /** Radio de incertidumbre en metros. */
+  precision?: number | null;
+  /** Hace rato que no se actualiza: se dibuja atenuada. */
+  vieja?: boolean;
+}
 
 const PIN = `<svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"
   style="filter: drop-shadow(0 2px 3px rgb(0 0 0 / 0.45))">
   <path d="M12 22s7-6.2 7-12a7 7 0 1 0-14 0c0 5.8 7 12 7 12z"
     fill="var(--color-marca-500)" stroke="var(--color-sobre-marca)" stroke-width="1.5"/>
   <circle cx="12" cy="10" r="2.6" fill="var(--color-sobre-marca)"/>
+</svg>`;
+
+/** El repartidor: un círculo de otro color que el destino, con una bicicleta. */
+const REPARTIDOR = `<svg viewBox="0 0 34 34" width="34" height="34" aria-hidden="true"
+  style="filter: drop-shadow(0 2px 3px rgb(0 0 0 / 0.45))">
+  <circle cx="17" cy="17" r="15" fill="var(--color-info)" stroke="white" stroke-width="2.5"/>
+  <g transform="translate(8 8) scale(0.75)" fill="none" stroke="white" stroke-width="2.2"
+    stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="18.5" cy="17.5" r="3.5"/><circle cx="5.5" cy="17.5" r="3.5"/>
+    <circle cx="15" cy="5" r="1"/><path d="M12 17.5V14l-3-3 4-3 2 3h2"/>
+  </g>
 </svg>`;

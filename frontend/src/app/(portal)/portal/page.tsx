@@ -16,6 +16,8 @@ import type { Categoria, ProductoCatalogo } from '@/types';
 import { formatearBs, formatearCantidad } from '@/lib/formato';
 import { cn } from '@/lib/cn';
 import { urlImagenProducto } from '@/lib/imagenes';
+import { coincide } from '@/lib/texto';
+import { useEnlaceDirecto } from '@/components/ui/usarEnlaceDirecto';
 
 /** CU-PED-01 — Buscar Productos. Catálogo del portal de pedidos. */
 export default function PaginaCatalogo() {
@@ -25,20 +27,22 @@ export default function PaginaCatalogo() {
   const [productos, setProductos] = useState<ProductoCatalogo[]>([]);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [cargando, setCargando] = useState(true);
-  const [idCategoria, setIdCategoria] = useState<number | null>(null);
-  const [busqueda, setBusqueda] = useState('');
-  const [detalle, setDetalle] = useState<ProductoCatalogo | null>(null);
-
   /*
    * El buscador del encabezado (RF-PED-03) trae aquí el producto elegido como
-   * `?termino=`. Se lee de `window` y no con `useSearchParams` para no obligar
-   * a envolver la página en un límite de suspensión: es una lectura única al
-   * abrir, no una suscripción.
+   * `?termino=`. Se atiende también estando ya en el catálogo: antes se leía
+   * solo al abrir la página, y elegir un producto desde el catálogo mismo —que
+   * es donde el cliente pasa casi todo el tiempo— no lo filtraba. La categoría
+   * se suelta, porque el producto elegido puede ser de otra.
    */
-  useEffect(() => {
-    const termino = new URLSearchParams(window.location.search).get('termino');
-    if (termino) setBusqueda(termino);
-  }, []);
+  const enlace = useEnlaceDirecto(['termino'], ({ termino }) => {
+    if (termino === undefined) return;
+    setBusqueda(termino);
+    setIdCategoria(null);
+  });
+
+  const [idCategoria, setIdCategoria] = useState<number | null>(null);
+  const [busqueda, setBusqueda] = useState(enlace.termino ?? '');
+  const [detalle, setDetalle] = useState<ProductoCatalogo | null>(null);
 
   const cargar = useCallback(async () => {
     try {
@@ -64,17 +68,19 @@ export default function PaginaCatalogo() {
    * Se resuelve en cliente porque el catálogo completo ya está cargado y así
    * la respuesta es inmediata mientras se escribe.
    */
-  const visibles = useMemo(() => {
-    const termino = busqueda.trim().toLowerCase();
-    return productos.filter((producto) => {
-      const coincideCategoria = idCategoria === null || producto.categoria.id === idCategoria;
-      const coincideTexto =
-        !termino ||
-        producto.nombre.toLowerCase().includes(termino) ||
-        producto.categoria.nombre.toLowerCase().includes(termino);
-      return coincideCategoria && coincideTexto;
-    });
-  }, [productos, idCategoria, busqueda]);
+  const visibles = useMemo(
+    () =>
+      productos.filter((producto) => {
+        const coincideCategoria = idCategoria === null || producto.categoria.id === idCategoria;
+        // Sin tildes y por palabras sueltas, igual que el buscador del encabezado:
+        // «jugo limon» encuentra el «Jugo de limón».
+        return (
+          coincideCategoria &&
+          coincide(`${producto.nombre} ${producto.categoria.nombre}`, busqueda)
+        );
+      }),
+    [productos, idCategoria, busqueda],
+  );
 
   const cantidadDe = (id: number) => lineas.find((l) => l.idProducto === id)?.cantidad ?? 0;
   const urlFotoDetalle = detalle && urlImagenProducto(detalle.id, detalle.imagenActualizadaEn);

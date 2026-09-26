@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Info, Search, ShoppingBasket, X } from 'lucide-react';
 import { api } from '@/lib/api';
 import type { BusquedaSitio, ResultadoBusqueda } from '@/types';
+import { TextoResaltado } from '@/components/ui/TextoResaltado';
 
 /**
  * RF-PED-03 — *"buscar productos e información del negocio desde el encabezado
@@ -99,7 +100,9 @@ export function BuscadorSitio() {
           }}
           onFocus={() => setAbierto(true)}
           placeholder="Buscar productos o información"
-          className="min-w-0 flex-1 bg-transparent text-sm text-tinta outline-none placeholder:text-tinta-tenue"
+          // El campo de búsqueda nativo trae su propia «✕» y junto a la de al
+          // lado se veían dos: se oculta la nativa y queda la del diseño.
+          className="min-w-0 flex-1 bg-transparent text-sm text-tinta outline-none placeholder:text-tinta-tenue [&::-webkit-search-cancel-button]:appearance-none"
         />
         {termino !== '' && (
           <button
@@ -149,9 +152,11 @@ export function BuscadorSitio() {
                         )}
                       </span>
                       <span className="min-w-0">
-                        <span className="block truncate text-sm text-tinta">{r.titulo}</span>
+                        <span className="block truncate text-sm text-tinta">
+                          <TextoResaltado texto={r.titulo} busqueda={termino} />
+                        </span>
                         <span className="block truncate text-xs text-tinta-tenue">
-                          {r.detalle}
+                          <TextoResaltado texto={r.detalle} busqueda={termino} />
                         </span>
                       </span>
                     </button>

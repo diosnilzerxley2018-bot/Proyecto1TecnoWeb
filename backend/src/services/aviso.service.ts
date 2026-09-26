@@ -1,5 +1,6 @@
 import { mensajero, type Adjunto } from '../correo/index.js';
 import type { EstadoPedido } from '../config/dominio.js';
+import { bolivianos } from '../utils/dinero.js';
 
 /**
  * Avisos por correo (RF-PED-08 y los RF de reportes).
@@ -46,9 +47,6 @@ export interface DatosPedidoAviso {
 }
 
 const numeroDe = (id: number) => `#${String(id).padStart(5, '0')}`;
-
-const bolivianos = (monto: number) =>
-  `Bs ${monto.toLocaleString('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 /**
  * Cómo se le explica cada estado a quien espera su pedido.

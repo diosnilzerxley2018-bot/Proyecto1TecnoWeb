@@ -120,3 +120,21 @@ export const preciosVigentes = (idsProducto: number[], tx: ClientePrisma) =>
   });
 
 export type VentaConsultada = NonNullable<Awaited<ReturnType<typeof buscarPorId>>>;
+
+/* ------------------------------------------------------------------ */
+/* Buscador general del personal                                        */
+/* ------------------------------------------------------------------ */
+
+/** Una venta por su número. Las ventas no tienen nombre: se buscan por el del comprobante. */
+export const porNumero = (numero: number) =>
+  prisma.venta.findMany({
+    where: { id_venta: numero },
+    select: {
+      id_venta: true,
+      fecha: true,
+      tipo_venta: true,
+      estado_pago: true,
+      total: true,
+      cliente: { select: { usuario: { select: { nombre: true, apellido: true } } } },
+    },
+  });

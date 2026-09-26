@@ -17,11 +17,14 @@ import type { Rol, UsuarioDetalle, Cargo } from '@/types';
 export function FormularioUsuario({
   roles,
   usuario,
+  esPropio = false,
   onListo,
   onCancelar,
 }: {
   roles: Rol[];
   usuario?: UsuarioDetalle | null;
+  /** La cuenta es la de quien edita: su rol se lo cambia otro administrador. */
+  esPropio?: boolean;
   onListo: () => void;
   onCancelar: () => void;
 }) {
@@ -133,7 +136,14 @@ export function FormularioUsuario({
           etiqueta="Rol"
           valor={datos.idRol}
           onCambiar={(valor) => actualizar('idRol', valor)}
-          ayuda={editando ? 'No se puede cambiar entre personal y cliente' : undefined}
+          deshabilitado={esPropio}
+          ayuda={
+            esPropio
+              ? 'Su propio rol se lo cambia otro administrador'
+              : editando
+                ? 'No se puede cambiar entre personal y cliente'
+                : undefined
+          }
           opciones={rolesDisponibles.map((r) => ({ valor: r.id, etiqueta: r.nombre }))}
         />
       </div>

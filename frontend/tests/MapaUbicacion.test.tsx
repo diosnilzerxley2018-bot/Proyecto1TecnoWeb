@@ -18,6 +18,7 @@ const marcadores: { arrastrable: boolean; posicion: unknown }[] = [];
 const mapa = {
   on: vi.fn((suceso: string, fn: (evento: unknown) => void) => manejadores.set(suceso, fn)),
   setView: vi.fn(),
+  fitBounds: vi.fn(),
   getZoom: vi.fn(() => 13),
   remove: vi.fn(),
 };
@@ -28,7 +29,8 @@ vi.mock('leaflet', () => {
       posicion,
       on: vi.fn(),
       addTo: vi.fn(() => instancia),
-      setLatLng: vi.fn(),
+      setLatLng: vi.fn(() => instancia),
+      setOpacity: vi.fn(() => instancia),
       remove: vi.fn(),
       getLatLng: () => ({ lat: 0, lng: 0 }),
     };
@@ -36,10 +38,22 @@ vi.mock('leaflet', () => {
     return instancia;
   };
 
+  const circle = () => {
+    const instancia = {
+      addTo: vi.fn(() => instancia),
+      setLatLng: vi.fn(() => instancia),
+      setRadius: vi.fn(() => instancia),
+      remove: vi.fn(),
+    };
+    return instancia;
+  };
+
   const api = {
     map: () => mapa,
     tileLayer: () => ({ addTo: vi.fn() }),
     marker,
+    circle,
+    latLngBounds: (puntos: unknown) => ({ puntos }),
     divIcon: () => ({}),
   };
 
@@ -96,6 +110,22 @@ describe('MapaUbicacion', () => {
 
     await waitFor(() => expect(marcadores).toHaveLength(1));
     expect(manejadores.has('click')).toBe(false);
+  });
+
+  it('con el repartidor, dibuja su marca y encuadra los dos puntos una sola vez', async () => {
+    const destino = { lat: -17.78, lon: -63.18 };
+    const { rerender } = render(
+      <MapaUbicacion valor={destino} repartidor={{ lat: -17.77, lon: -63.18, precision: 15 }} />,
+    );
+    await waitFor(() => expect(marcadores).toHaveLength(2));
+    expect(mapa.fitBounds).toHaveBeenCalledTimes(1);
+
+    // La siguiente posición mueve la marca, pero no le quita el zoom a quien mira.
+    rerender(
+      <MapaUbicacion valor={destino} repartidor={{ lat: -17.775, lon: -63.18, precision: 15 }} />,
+    );
+    await waitFor(() => expect(marcadores).toHaveLength(2));
+    expect(mapa.fitBounds).toHaveBeenCalledTimes(1);
   });
 
   it('destruye el mapa al desmontarse, para no dejarlo colgado del DOM', async () => {

@@ -20,6 +20,7 @@ import reporteRoutes from './reporte.routes.js';
 import reporteOperacionesRoutes from './reporte-operaciones.routes.js';
 import clienteRoutes from './cliente.routes.js';
 import visitaRoutes from './visita.routes.js';
+import busquedaRoutes from './busqueda.routes.js';
 import { avisos, pagos, configuracion } from './pago.routes.js';
 
 const router = Router();
@@ -80,5 +81,8 @@ router.use('/configuracion', configuracion);
 
 // --- Sitio web (RF-WEB-03) ---
 router.use('/visitas', visitaRoutes);
+
+// --- Buscador general del personal ---
+router.use('/buscar', busquedaRoutes);
 
 export default router;

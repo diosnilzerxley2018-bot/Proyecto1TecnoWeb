@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Leaf, Mail, Pencil, Phone, Search, UserRound, Users } from 'lucide-react';
 import { api, ErrorApi } from '@/lib/api';
@@ -16,6 +16,9 @@ import { Boton } from '@/components/ui/Boton';
 import { Dialogo } from '@/components/ui/Dialogo';
 import { Campo, Interruptor } from '@/components/ui/Campo';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { TextoResaltado } from '@/components/ui/TextoResaltado';
+import { useRetardo } from '@/components/ui/usarRetardo';
+import { useEnlaceDirecto } from '@/components/ui/usarEnlaceDirecto';
 import type { Cliente, Pagina } from '@/types';
 import { formatearDia } from '@/lib/formato';
 
@@ -33,53 +36,86 @@ function ListadoClientes() {
 
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [cargando, setCargando] = useState(true);
-  const [busqueda, setBusqueda] = useState('');
   const [editando, setEditando] = useState<Cliente | null>(null);
 
   /*
    * El listado viene por páginas y **la búsqueda la resuelve el servidor**
    * (H7): buscar dentro de una página dejaría fuera a los clientes de las
    * demás, y una ficha que existe pero no aparece es peor que no buscar.
+   *
+   * Lo escrito viaja con retardo, cuando se deja de teclear: antes cada letra
+   * era una consulta y la lista parpadeaba entre esqueletos. `?buscar=` llega
+   * del buscador general con el correo del cliente elegido.
    */
+  const enlace = useEnlaceDirecto(['buscar'], ({ buscar }) => {
+    if (buscar !== undefined) cambiarBusqueda(buscar);
+  });
+  const [busqueda, setBusqueda] = useState(enlace.buscar ?? '');
+  const termino = useRetardo(busqueda.trim());
+
   const [pagina, setPagina] = useState(1);
   const [paginas, setPaginas] = useState(1);
   const [total, setTotal] = useState(0);
-  const [activos, setActivos] = useState(0);
 
-  const cargar = useCallback(async () => {
-    setCargando(true);
+  /**
+   * Las cifras cuentan todas las fichas, no las de la búsqueda: «Fichas
+   * registradas» decía 1 mientras se buscaba un nombre. Por eso se piden
+   * aparte, y solo al abrir y tras una edición.
+   */
+  const [cifras, setCifras] = useState<{ activos: number; registradas: number } | null>(null);
+
+  /**
+   * Número de la última consulta del listado: si «ana» tarda más que
+   * «ana gómez», su respuesta no debe pisar a la de la búsqueda completa.
+   */
+  const ultimaConsulta = useRef(0);
+
+  const cargarListado = useCallback(async () => {
+    const consulta = ++ultimaConsulta.current;
     try {
       const parametros = new URLSearchParams({
         incluirInactivos: 'true',
         pagina: String(pagina),
       });
-      const termino = busqueda.trim();
       if (termino !== '') parametros.set('termino', termino);
 
-      const [respuesta, soloActivos] = await Promise.all([
-        api.get<Pagina<Cliente>>(`/clientes?${parametros}`),
-        // Solo por su total: se pide una ficha, no la lista entera.
-        api.get<Pagina<Cliente>>('/clientes?porPagina=1'),
-      ]);
-
+      const respuesta = await api.get<Pagina<Cliente>>(`/clientes?${parametros}`);
+      if (consulta !== ultimaConsulta.current) return;
       setClientes(respuesta.datos);
       setPaginas(respuesta.paginas);
       setTotal(respuesta.total);
-      setActivos(soloActivos.total);
     } catch (e) {
+      if (consulta !== ultimaConsulta.current) return;
       notificar('error', e instanceof ErrorApi ? e.message : 'No se pudieron cargar los clientes');
     } finally {
-      setCargando(false);
+      if (consulta === ultimaConsulta.current) setCargando(false);
     }
-  }, [notificar, pagina, busqueda]);
+  }, [notificar, pagina, termino]);
+
+  const cargarCifras = useCallback(async () => {
+    try {
+      // Solo por sus totales: se pide una ficha, no la lista entera.
+      const [soloActivos, todas] = await Promise.all([
+        api.get<Pagina<Cliente>>('/clientes?porPagina=1'),
+        api.get<Pagina<Cliente>>('/clientes?porPagina=1&incluirInactivos=true'),
+      ]);
+      setCifras({ activos: soloActivos.total, registradas: todas.total });
+    } catch {
+      // Sin cifras la pantalla sigue sirviendo: el listado avisa si algo falla.
+    }
+  }, []);
 
   useEffect(() => {
-    void cargar();
-  }, [cargar]);
+    void cargarListado();
+  }, [cargarListado]);
+
+  useEffect(() => {
+    void cargarCifras();
+  }, [cargarCifras]);
 
   /** Buscar de nuevo empieza por la primera página: la tercera puede no existir. */
-  function cambiarBusqueda(termino: string) {
-    setBusqueda(termino);
+  function cambiarBusqueda(texto: string) {
+    setBusqueda(texto);
     setPagina(1);
   }
 
@@ -99,14 +135,14 @@ function ListadoClientes() {
         <Estadistica
           indice={0}
           etiqueta="Clientes activos"
-          valor={activos}
+          valor={cifras?.activos ?? '—'}
           tono="marca"
           icono={<Users className="size-5" aria-hidden />}
         />
         <Estadistica
           indice={1}
           etiqueta="Fichas registradas"
-          valor={total}
+          valor={cifras?.registradas ?? '—'}
           tono="info"
           icono={<UserRound className="size-5" aria-hidden />}
         />
@@ -118,6 +154,7 @@ function ListadoClientes() {
           aria-hidden
         />
         <input
+          type="search"
           value={busqueda}
           onChange={(e) => cambiarBusqueda(e.target.value)}
           placeholder="Buscar por nombre o correo"
@@ -133,16 +170,19 @@ function ListadoClientes() {
           ))}
         </div>
       ) : clientes.length === 0 ? (
+        /* Lo que distingue los dos vacíos es si se está buscando: antes se
+           preguntaba por la lista, que en esta rama siempre está vacía, y una
+           búsqueda sin resultados decía «No hay clientes registrados». */
         <EstadoVacio
           icono={<Users className="size-6" aria-hidden />}
-          titulo={clientes.length === 0 ? 'No hay clientes registrados' : 'Sin coincidencias'}
+          titulo={termino === '' ? 'No hay clientes registrados' : 'Sin coincidencias'}
           descripcion={
-            clientes.length === 0
+            termino === ''
               ? 'Los clientes se registran desde el portal web o los da de alta el personal.'
-              : 'Ningún cliente coincide con la búsqueda.'
+              : `Ningún cliente coincide con «${termino}».`
           }
           accion={
-            clientes.length > 0 && (
+            termino !== '' && (
               <Boton variante="contorno" onClick={() => cambiarBusqueda('')}>
                 Limpiar búsqueda
               </Boton>
@@ -157,6 +197,7 @@ function ListadoClientes() {
                 key={cliente.id}
                 cliente={cliente}
                 indice={indice}
+                busqueda={termino}
                 onEditar={() => setEditando(cliente)}
               />
             ))}
@@ -183,7 +224,8 @@ function ListadoClientes() {
             onCancelar={() => setEditando(null)}
             onListo={() => {
               setEditando(null);
-              void cargar();
+              void cargarListado();
+              void cargarCifras();
             }}
           />
         )}
@@ -195,10 +237,13 @@ function ListadoClientes() {
 function TarjetaCliente({
   cliente,
   indice,
+  busqueda,
   onEditar,
 }: {
   cliente: Cliente;
   indice: number;
+  /** Lo buscado, para resaltarlo en el nombre y el correo. */
+  busqueda: string;
   onEditar: () => void;
 }) {
   return (
@@ -217,7 +262,9 @@ function TarjetaCliente({
             {cliente.apellido[0]}
           </span>
           <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-tinta">{cliente.nombreCompleto}</p>
+            <p className="truncate text-sm font-medium text-tinta">
+              <TextoResaltado texto={cliente.nombreCompleto} busqueda={busqueda} />
+            </p>
             <p className="mt-0.5 truncate text-[11px] text-tinta-tenue">
               @{cliente.nombreUsuario}
             </p>
@@ -240,7 +287,9 @@ function TarjetaCliente({
       <div className="mt-3.5 space-y-1.5 text-xs text-tinta-suave">
         <p className="flex items-center gap-2">
           <Mail className="size-3.5 shrink-0 text-tinta-tenue" aria-hidden />
-          <span className="truncate">{cliente.email}</span>
+          <span className="truncate">
+            <TextoResaltado texto={cliente.email} busqueda={busqueda} />
+          </span>
         </p>
         <p className="flex items-center gap-2">
           <Phone className="size-3.5 shrink-0 text-tinta-tenue" aria-hidden />

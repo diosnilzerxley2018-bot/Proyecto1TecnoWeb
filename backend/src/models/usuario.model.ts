@@ -1,4 +1,6 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '../config/prisma.js';
+import { contieneTodas, limite } from './busqueda-texto.js';
 import { recorte, type DatosPaginacion } from '../dtos/paginacion.dto.js';
 
 /** Capa Model — corresponde a la clase de análisis tblUsuario. */
@@ -33,25 +35,94 @@ export const estadoDeCuenta = (id: number) =>
     select: { activo: true, bloqueado: true, fecha_bloqueo: true, veces_bloqueado: true },
   });
 
+export type EstadoCuenta = 'activos' | 'bloqueados' | 'bajas';
+
+/**
+ * Qué cuentas entran en cada estado.
+ *
+ * Los tres se excluyen entre sí: una cuenta dada de baja no cuenta además
+ * como bloqueada —ya no puede entrar de ninguna forma—. Así las cifras de la
+ * pantalla suman el total y nadie aparece bajo dos filtros a la vez. El
+ * resumen y el listado leen esta misma tabla, de modo que el número de un
+ * filtro es siempre cuántas filas trae.
+ */
+const POR_ESTADO = {
+  activos: { activo: true, bloqueado: false },
+  bloqueados: { activo: true, bloqueado: true },
+  bajas: { activo: false },
+} satisfies Record<EstadoCuenta, Prisma.usuarioWhereInput>;
+
+export interface FiltroListado extends DatosPaginacion {
+  termino?: string;
+  idRol?: number;
+  estado?: EstadoCuenta;
+}
+
+/**
+ * Usuarios cuyo nombre, apellido, usuario o correo contienen todas las
+ * palabras buscadas, sin importar tildes ni mayúsculas.
+ */
+async function idsQueCoinciden(termino: string, tope?: number): Promise<number[]> {
+  const filas = await prisma.$queryRaw<{ id_usuario: number }[]>`
+    SELECT id_usuario FROM usuario
+    WHERE ${contieneTodas(Prisma.sql`concat_ws(' ', nombre, apellido, nombre_usuario, email)`, termino)}
+    ORDER BY id_usuario
+    ${limite(tope)}`;
+  return filas.map((f) => f.id_usuario);
+}
+
+async function condicionDelListado(filtro: FiltroListado): Promise<Prisma.usuarioWhereInput> {
+  return {
+    ...(filtro.termino ? { id_usuario: { in: await idsQueCoinciden(filtro.termino) } } : {}),
+    ...(filtro.idRol ? { id_rol: filtro.idRol } : {}),
+    ...(filtro.estado ? POR_ESTADO[filtro.estado] : {}),
+  };
+}
+
+const CAMPOS_LISTA = {
+  id_usuario: true,
+  nombre: true,
+  apellido: true,
+  nombre_usuario: true,
+  email: true,
+  activo: true,
+  bloqueado: true,
+  rol: { select: { nombre: true } },
+} as const;
+
 /** Una página de usuarios y cuántos hay en total (H7). */
-export const listar = (filtro: DatosPaginacion) =>
-  prisma.$transaction([
+export async function listar(filtro: FiltroListado) {
+  const where = await condicionDelListado(filtro);
+  return prisma.$transaction([
     prisma.usuario.findMany({
+      where,
       orderBy: { id_usuario: 'asc' },
-      select: {
-        id_usuario: true,
-        nombre: true,
-        apellido: true,
-        nombre_usuario: true,
-        email: true,
-        activo: true,
-        bloqueado: true,
-        rol: { select: { nombre: true } },
-      },
+      select: CAMPOS_LISTA,
       ...recorte(filtro),
     }),
-    prisma.usuario.count(),
+    prisma.usuario.count({ where }),
   ]);
+}
+
+/** Los primeros usuarios que coinciden con lo buscado, para el buscador general. */
+export async function coincidencias(termino: string, tope: number) {
+  return prisma.usuario.findMany({
+    where: { id_usuario: { in: await idsQueCoinciden(termino, tope) } },
+    orderBy: { id_usuario: 'asc' },
+    select: CAMPOS_LISTA,
+  });
+}
+
+/** Cuántas cuentas hay en cada estado. */
+export async function resumen() {
+  const [total, activos, bloqueados, bajas] = await prisma.$transaction([
+    prisma.usuario.count(),
+    prisma.usuario.count({ where: POR_ESTADO.activos }),
+    prisma.usuario.count({ where: POR_ESTADO.bloqueados }),
+    prisma.usuario.count({ where: POR_ESTADO.bajas }),
+  ]);
+  return { total, activos, bloqueados, bajas };
+}
 
 /**
  * Datos de la especializacion, segun el modelo de clases:
@@ -148,7 +219,6 @@ export const actualizar = (
     email: string;
     telefono: string | null;
     id_rol: number;
-    activo: boolean;
   }>,
 ) =>
   prisma.usuario.update({
@@ -196,6 +266,24 @@ export const cambiarRol = (id: number, idRol: number) =>
 /** Baja lógica: RF-SEG-05 exige dar de baja, no eliminar. */
 export const darDeBaja = (id: number) =>
   prisma.usuario.update({ where: { id_usuario: id }, data: { activo: false } });
+
+/**
+ * Reactivación de una cuenta dada de baja.
+ *
+ * Vuelve sin bloqueo y con la escalada en cero, como en `desbloquear`: quien
+ * la reactiva respondió por la cuenta.
+ */
+export const reactivar = (id: number) =>
+  prisma.usuario.update({
+    where: { id_usuario: id },
+    data: {
+      activo: true,
+      bloqueado: false,
+      fecha_bloqueo: null,
+      intentos_fallidos: 0,
+      veces_bloqueado: 0,
+    },
+  });
 
 /**
  * Anota el intento fallido y, si toca, bloquea la cuenta.

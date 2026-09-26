@@ -266,3 +266,20 @@ export const almacenesPorConservacion = (tipoConservacion: string, tx: ClientePr
   });
 
 export type OrdenConsultada = NonNullable<Awaited<ReturnType<typeof buscarPorId>>>;
+
+/* ------------------------------------------------------------------ */
+/* Buscador general del personal                                        */
+/* ------------------------------------------------------------------ */
+
+/** Una orden de producción por su número. */
+export const porNumero = (numero: number) =>
+  prisma.orden_produccion.findMany({
+    where: { id_orden_produccion: numero },
+    select: {
+      id_orden_produccion: true,
+      fecha: true,
+      estado: true,
+      cantidad: true,
+      receta: { select: { producto: { select: { nombre: true } } } },
+    },
+  });

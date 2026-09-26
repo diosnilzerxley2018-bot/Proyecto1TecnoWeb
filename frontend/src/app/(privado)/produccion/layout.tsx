@@ -3,15 +3,9 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { ChartColumn, ChefHat, Factory } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { seccionesAccesibles } from '@/lib/modulos';
 import { cn } from '@/lib/cn';
-
-const PESTANAS = [
-  { ruta: '/produccion/productos', etiqueta: 'Productos', icono: ChefHat, permiso: 'PRODUCTO_GESTIONAR' },
-  { ruta: '/produccion/ordenes', etiqueta: 'Órdenes', icono: Factory, permiso: 'ORDEN_PRODUCCION_GESTIONAR' },
-  { ruta: '/produccion/reportes', etiqueta: 'Reportes', icono: ChartColumn, permiso: 'ORDEN_PRODUCCION_GESTIONAR' },
-];
 
 /**
  * Contenedor del subsistema de producción.
@@ -24,7 +18,7 @@ export default function LayoutProduccion({ children }: { children: React.ReactNo
   const rutaActual = usePathname();
   const { tienePermiso } = useAuth();
 
-  const visibles = PESTANAS.filter((p) => tienePermiso(p.permiso));
+  const visibles = seccionesAccesibles('/produccion', tienePermiso);
 
   return (
     <>

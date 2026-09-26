@@ -3,17 +3,11 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { ArrowLeftRight, Boxes, ChartColumn, Gauge, Warehouse } from 'lucide-react';
 import { RequierePermiso } from '@/components/RequierePermiso';
+import { seccionesDe } from '@/lib/modulos';
 import { cn } from '@/lib/cn';
 
-const PESTANAS = [
-  { ruta: '/inventario/stock', etiqueta: 'Stock', icono: Gauge },
-  { ruta: '/inventario/movimientos', etiqueta: 'Movimientos', icono: ArrowLeftRight },
-  { ruta: '/inventario/insumos', etiqueta: 'Insumos', icono: Boxes },
-  { ruta: '/inventario/almacenes', etiqueta: 'Almacenes', icono: Warehouse },
-  { ruta: '/inventario/reportes', etiqueta: 'Reportes', icono: ChartColumn },
-];
+const PESTANAS = seccionesDe('/inventario');
 
 /**
  * Contenedor del subsistema de inventario.

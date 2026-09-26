@@ -1,6 +1,6 @@
 import * as reporteModel from '../models/reporte.model.js';
 import { exigirEmpleado } from './actor.service.js';
-import { bolivianos, fechaLegible, type DocumentoReporte } from './reporte-pdf.service.js';
+import { fechaLegible, type DocumentoReporte } from './reporte-pdf.service.js';
 import type {
   DatosReporteInventario,
   DatosReportePedidos,
@@ -16,7 +16,7 @@ import type {
 import { nombreDeArchivo, type EntregaReporte } from './reporte-entrega.service.js';
 import { rangoDelPeriodo } from '../utils/fechas.js';
 import { ErrorApp } from '../errors/error-app.js';
-import { dosDecimales } from '../utils/dinero.js';
+import { bolivianos, dosDecimales } from '../utils/dinero.js';
 import { redondearCantidad } from '../utils/cantidad.js';
 
 /**
@@ -713,7 +713,7 @@ export const entregaDePedidos = (r: ReportePedidosDTO): EntregaReporte => ({
   descripcion:
     `Reporte de pedidos del ${r.desde} al ${r.hasta}. ` +
     `${r.resumen.cantidadPedidos} pedido(s), ${r.resumen.entregados} entregado(s), ` +
-    `por un total de Bs ${r.resumen.total.toFixed(2)}.`,
+    `por un total de ${bolivianos(r.resumen.total)}.`,
 });
 
 export const entregaDeProduccion = (r: ReporteProduccionDTO): EntregaReporte => ({
@@ -722,7 +722,7 @@ export const entregaDeProduccion = (r: ReporteProduccionDTO): EntregaReporte => 
   descripcion:
     `Reporte de producción del ${r.desde} al ${r.hasta}. ` +
     `${r.resumen.corridas} corrida(s) y ${r.resumen.unidades} unidad(es), ` +
-    `con un costo de Bs ${r.resumen.costoTotal.toFixed(2)}.`,
+    `con un costo de ${bolivianos(r.resumen.costoTotal)}.`,
 });
 
 export const entregaDeInventario = (r: ReporteInventarioDTO): EntregaReporte => ({
@@ -731,5 +731,5 @@ export const entregaDeInventario = (r: ReporteInventarioDTO): EntregaReporte => 
   descripcion:
     `Reporte de movimientos del ${r.desde} al ${r.hasta}. ` +
     `${r.resumen.ingresos} movimiento(s) de entrada y ${r.resumen.egresos} de salida, ` +
-    `con Bs ${r.resumen.costoIngresado.toFixed(2)} ingresados.`,
+    `con ${bolivianos(r.resumen.costoIngresado)} ingresados.`,
 });

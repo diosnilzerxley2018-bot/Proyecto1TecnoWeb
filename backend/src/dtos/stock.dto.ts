@@ -20,10 +20,18 @@ export interface ExistenciaStockDTO {
   id: number;
   nombre: string;
   unidad: string;
+  /** Lo que hay en el almacén consultado; sin filtro, en todos. */
   stockTotal: number;
+  /**
+   * Lo que hay sumando todos los almacenes. Con filtro por almacén difiere de
+   * `stockTotal`, y es contra esta cifra que se decide la reposición.
+   */
+  stockGeneral: number;
   /** Solo los insumos declaran stock mínimo en el esquema. */
   stockMinimo: number | null;
+  /** La existencia de todo el negocio alcanzó el mínimo: el filtro no la cambia. */
   bajoMinimo: boolean;
+  /** Solo las del almacén consultado; sin filtro, todas. */
   existencias: ExistenciaDTO[];
 }
 

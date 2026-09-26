@@ -131,17 +131,18 @@ model detalle_venta {
 }
 
 model empleado {
-  id_empleado      Int                @id
-  fecha_ingreso    DateTime           @default(dbgenerated("CURRENT_DATE")) @db.Date
-  id_cargo         Int
-  disponible       Boolean            @default(false)
-  cargo            cargo              @relation(fields: [id_cargo], references: [id_cargo], onDelete: NoAction, onUpdate: NoAction, map: "fk_empleado_cargo")
-  usuario          usuario            @relation(fields: [id_empleado], references: [id_usuario], onDelete: NoAction, onUpdate: NoAction, map: "fk_empleado_usuario")
-  nota_egreso      nota_egreso[]
-  nota_ingreso     nota_ingreso[]
-  orden_produccion orden_produccion[]
-  pedido           pedido[]
-  venta            venta[]
+  id_empleado         Int                  @id
+  fecha_ingreso       DateTime             @default(dbgenerated("CURRENT_DATE")) @db.Date
+  id_cargo            Int
+  disponible          Boolean              @default(false)
+  cargo               cargo                @relation(fields: [id_cargo], references: [id_cargo], onDelete: NoAction, onUpdate: NoAction, map: "fk_empleado_cargo")
+  usuario             usuario              @relation(fields: [id_empleado], references: [id_usuario], onDelete: NoAction, onUpdate: NoAction, map: "fk_empleado_usuario")
+  nota_egreso         nota_egreso[]
+  nota_ingreso        nota_ingreso[]
+  orden_produccion    orden_produccion[]
+  pedido              pedido[]
+  posicion_repartidor posicion_repartidor?
+  venta               venta[]
 }
 
 model ingrediente {
@@ -484,4 +485,14 @@ model pago {
   @@index([fecha_creacion(sort: Desc)], map: "ix_pago_fecha")
   @@index([id_pedido], map: "ix_pago_pedido")
   @@index([id_venta], map: "ix_pago_venta")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model posicion_repartidor {
+  id_empleado    Int      @id
+  latitud        Decimal  @db.Decimal(8, 6)
+  longitud       Decimal  @db.Decimal(9, 6)
+  precision_m    Decimal? @db.Decimal(8, 1)
+  actualizada_en DateTime @default(now()) @db.Timestamp(6)
+  empleado       empleado @relation(fields: [id_empleado], references: [id_empleado], onDelete: NoAction, onUpdate: NoAction, map: "fk_posicion_empleado")
 }

@@ -8,7 +8,6 @@ import type {
   ResumenReporteDTO,
 } from '../dtos/reporte.dto.js';
 import {
-  bolivianos,
   fechaLegible,
   generarPdf,
   type DocumentoReporte,
@@ -16,7 +15,7 @@ import {
 import * as avisoService from './aviso.service.js';
 import { limitesDelDia } from '../utils/fechas.js';
 import { ErrorApp } from '../errors/error-app.js';
-import { dosDecimales } from '../utils/dinero.js';
+import { bolivianos, dosDecimales } from '../utils/dinero.js';
 
 /**
  * RF-VEN-07 — reporte parametrizado de ventas.
@@ -216,7 +215,7 @@ export async function enviarVentasPorCorreo(
     titulo: 'Reporte de ventas',
     descripcion:
       `Reporte de ventas ${alcance}. ` +
-      `${reporte.resumen.cantidadVentas} venta(s) por un total de Bs ${reporte.resumen.total.toFixed(2)}.`,
+      `${reporte.resumen.cantidadVentas} venta(s) por un total de ${bolivianos(reporte.resumen.total)}.`,
     adjunto: {
       nombre: `ventas-${reporte.desde}-a-${reporte.hasta}.pdf`,
       contenido: pdf,

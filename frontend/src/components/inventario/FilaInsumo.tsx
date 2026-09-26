@@ -6,6 +6,7 @@ import { Insignia } from '@/components/ui/Insignia';
 import { Boton } from '@/components/ui/Boton';
 import { Tooltip } from '@/components/ui/Tooltip';
 import type { Insumo } from '@/types';
+import { formatearCantidad } from '@/lib/formato';
 import { cn } from '@/lib/cn';
 
 /**
@@ -76,7 +77,7 @@ export function FilaInsumo({
       <Celda etiqueta="Existencias">
         <div className="flex items-center gap-2">
           <span className={cn('tabular-nums', bajoMinimo ? 'text-aviso' : 'text-tinta')}>
-            {insumo.stockTotal} {insumo.unidad.abreviatura}
+            {formatearCantidad(insumo.stockTotal)} {insumo.unidad.abreviatura}
           </span>
           {bajoMinimo && (
             <Tooltip texto="Alcanzó o descendió bajo su stock mínimo">

@@ -1,4 +1,6 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '../config/prisma.js';
+import { contieneTodas, limite } from './busqueda-texto.js';
 import type { ClientePrisma } from './stock.model.js';
 
 /** Capa Model — clase de análisis tblAlmacen. */
@@ -98,3 +100,24 @@ export const existentes = (ids: number[], tx: ClientePrisma) =>
     where: { id_almacen: { in: ids } },
     select: { id_almacen: true, nombre: true, tipo_conservacion: true },
   });
+
+/* ------------------------------------------------------------------ */
+/* Buscador general del personal                                        */
+/* ------------------------------------------------------------------ */
+
+/** Almacenes cuyo nombre, conservación o ubicación contienen lo buscado. */
+export async function coincidencias(termino: string, tope: number) {
+  const filas = await prisma.$queryRaw<{ id_almacen: number }[]>`
+    SELECT id_almacen FROM almacen
+    WHERE ${contieneTodas(
+      Prisma.sql`concat_ws(' ', nombre, tipo_conservacion, ubicacion_fisica)`,
+      termino,
+    )}
+    ORDER BY nombre
+    ${limite(tope)}`;
+  return prisma.almacen.findMany({
+    where: { id_almacen: { in: filas.map((f) => f.id_almacen) } },
+    select: CAMPOS,
+    orderBy: { nombre: 'asc' },
+  });
+}

@@ -9,6 +9,7 @@ import { useAuth } from '@/context/AuthContext';
 import { modulosAccesibles, type Modulo } from '@/lib/modulos';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { SelectorTema } from '@/components/ui/SelectorTema';
+import { BotonBuscar } from '@/components/buscador/BuscadorGeneral';
 import { cn } from '@/lib/cn';
 
 /**
@@ -43,6 +44,9 @@ export function BarraLateral() {
         <span className="flex items-center gap-2 text-sm font-medium text-tinta">
           <Sprout className="size-4 text-marca-400" aria-hidden />
           NutriExpress
+        </span>
+        <span className="ml-auto">
+          <BotonBuscar compacto />
         </span>
       </div>
 
@@ -104,6 +108,10 @@ function Contenido({ rutaActual }: { rutaActual: string }) {
           <p className="truncate text-sm font-semibold tracking-tight text-tinta">NutriExpress</p>
           <p className="truncate text-[11px] text-tinta-tenue">Comida saludable</p>
         </div>
+      </div>
+
+      <div className="px-3 pb-3">
+        <BotonBuscar />
       </div>
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 pb-4">
