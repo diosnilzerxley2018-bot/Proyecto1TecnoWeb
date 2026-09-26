@@ -118,6 +118,22 @@ const AJUSTES: Ajuste[] = [
        )`,
     ],
   },
+  {
+    nombre: 'posicion_repartidor — el cliente ve en el mapa por dónde viene su pedido',
+    sentencias: [
+      `CREATE TABLE IF NOT EXISTS posicion_repartidor (
+         id_empleado     INT PRIMARY KEY,
+         latitud         NUMERIC(8,6) NOT NULL,
+         longitud        NUMERIC(9,6) NOT NULL,
+         precision_m     NUMERIC(8,1),
+         actualizada_en  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+         CONSTRAINT fk_posicion_empleado FOREIGN KEY (id_empleado) REFERENCES empleado(id_empleado),
+         CONSTRAINT ck_posicion_lat CHECK (latitud  BETWEEN  -90 AND  90),
+         CONSTRAINT ck_posicion_lon CHECK (longitud BETWEEN -180 AND 180),
+         CONSTRAINT ck_posicion_precision CHECK (precision_m IS NULL OR precision_m >= 0)
+       )`,
+    ],
+  },
 ];
 
 const url = process.env.DATABASE_URL;

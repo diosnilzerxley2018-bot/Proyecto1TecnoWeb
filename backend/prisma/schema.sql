@@ -412,6 +412,26 @@ CREATE TABLE detalle_pedido (
     CONSTRAINT ck_detpedido_cant CHECK (cantidad > 0)
 );
 
+-- Ultima posicion conocida de cada repartidor mientras lleva un pedido: el
+-- cliente la ve en el mapa y sabe si de verdad viene en camino.
+--
+-- Una fila por repartidor, que se pisa en cada envio: el sistema necesita
+-- saber donde esta ahora, no por donde anduvo, y sin historial no queda un
+-- registro de los recorridos de nadie. Solo se acepta mientras el repartidor
+-- tiene un pedido En camino, y la fila se borra al cerrar su ultima entrega.
+CREATE TABLE posicion_repartidor (
+    id_empleado     INT PRIMARY KEY,
+    latitud         NUMERIC(8,6) NOT NULL,
+    longitud        NUMERIC(9,6) NOT NULL,
+    -- Radio de incertidumbre que informa el telefono, en metros.
+    precision_m     NUMERIC(8,1),
+    actualizada_en  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_posicion_empleado FOREIGN KEY (id_empleado) REFERENCES empleado(id_empleado),
+    CONSTRAINT ck_posicion_lat CHECK (latitud  BETWEEN  -90 AND  90),
+    CONSTRAINT ck_posicion_lon CHECK (longitud BETWEEN -180 AND 180),
+    CONSTRAINT ck_posicion_precision CHECK (precision_m IS NULL OR precision_m >= 0)
+);
+
 
 
 
