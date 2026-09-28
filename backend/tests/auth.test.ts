@@ -24,6 +24,23 @@ describe('CU-SEG-01 Iniciar sesión', () => {
     expect(JSON.stringify(r.body)).not.toContain('contrasena_hash');
   });
 
+  /**
+   * RNF-SEG: la contraseña se guarda cifrada. Lo que queda en la base es un
+   * hash bcrypt —con su sal y su costo dentro—, nunca el texto que escribió
+   * el usuario, y ese hash sirve para iniciar sesión.
+   */
+  it('guarda la contraseña cifrada con bcrypt, nunca en claro', async () => {
+    const { nombreUsuario } = await registrarCliente();
+
+    const fila = await prisma.usuario.findFirstOrThrow({
+      where: { nombre_usuario: nombreUsuario },
+      select: { contrasena_hash: true },
+    });
+
+    expect(fila.contrasena_hash).toMatch(/^\$2[aby]\$\d{2}\$[./A-Za-z0-9]{53}$/);
+    expect(fila.contrasena_hash).not.toContain('Cliente1234!');
+  });
+
   it('rechaza credenciales incorrectas sin revelar si el usuario existe', async () => {
     const r = await request(app)
       .post('/api/auth/login')
