@@ -143,6 +143,34 @@ describe('DialogoCobro', () => {
 
     const enlace = screen.getByRole('link', { name: /Abrir la página de pago/ });
     expect(enlace).toHaveAttribute('href', 'https://pasarela.example/pagar/abc');
+    expect(screen.getByText(/NutriExpress nunca los ve/)).toBeInTheDocument();
+  });
+
+  /**
+   * Se eligió QR, pero Libélula no pudo dibujarlo y solo mandó su página
+   * (28-sep-2026, «Error por excepcion»). El botón de siempre hacía parecer
+   * que el sistema ignoró lo elegido.
+   */
+  it('si se pidió QR y llegó la página, lo explica y lleva a escanearlo allí', () => {
+    render(
+      <DialogoCobro
+        pago={pago({
+          modo: 'Real',
+          pasarela: 'Libelula',
+          simulado: false,
+          tipoDatos: 'url',
+          datosCobro: 'https://pagos.libelula.bo/?id=abc',
+          qrImagen: undefined,
+        })}
+        onCerrar={vi.fn()}
+        onPagado={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/Libélula no pudo generar el QR/)).toBeInTheDocument();
+    expect(
+      screen.getByRole('link', { name: 'Abrir la página de pago y escanear su QR' }),
+    ).toHaveAttribute('href', 'https://pagos.libelula.bo/?id=abc');
   });
 
   /**

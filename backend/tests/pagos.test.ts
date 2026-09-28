@@ -4,6 +4,7 @@ import { app } from '../src/app.js';
 import { prisma } from '../src/config/prisma.js';
 import { obtenerToken, registrarCliente, buscarProducto } from './ayudantes.js';
 import { invalidarCache } from '../src/services/configuracion.service.js';
+import { referenciaDeCobro } from '../src/services/pago.service.js';
 
 /**
  * RF-PED-04 — Cobros.
@@ -472,6 +473,51 @@ describe('Aviso que identifica el cobro por la referencia', () => {
       .set(cabecera(cliente.token));
     expect(detalle.body.estadoPago).toBe('Pagado');
     expect(detalle.body.estadoPedido).toBe('Recibido');
+  });
+
+  /**
+   * El VPS y Railway comparten la cuenta de Libélula y cada uno numera sus
+   * pedidos desde 1: con `PEDIDO-12` a secas, Libélula rechazaba el pedido 12
+   * de uno porque el del otro seguía sin pagar. La referencia lleva ahora el
+   * número de cobro y la instalación, y el aviso la devuelve tal cual.
+   */
+  it('con la referencia actual confirma exactamente ese cobro', async () => {
+    const cliente = await registrarCliente();
+    const pedido = await pedidoConPago(cliente.token, 'QR');
+    const idPedido = pedido.body.id as number;
+    const ref = referenciaDeCobro(`PEDIDO-${idPedido}`, pedido.body.cobro.id as number);
+
+    expect(ref).toMatch(new RegExp(`^PEDIDO-${idPedido}-C${pedido.body.cobro.id}-[0-9A-F]{6}$`));
+
+    const aviso = await request(app).get('/api/pagos/notificacion').query({
+      testigo: 'x',
+      ref,
+      transaction_id: ref,
+      estado: 'Pagado',
+      monto: String(pedido.body.total),
+    });
+
+    expect(aviso.body.procesado).toBe(true);
+    const detalle = await request(app).get(`/api/pedidos/${idPedido}`).set(cabecera(cliente.token));
+    expect(detalle.body.estadoPago).toBe('Pagado');
+  });
+
+  it('no confirma un cobro de otra instalación ni uno que no es de ese pedido', async () => {
+    const cliente = await registrarCliente();
+    const [uno, otro] = [
+      await pedidoConPago(cliente.token, 'QR'),
+      await pedidoConPago(cliente.token, 'QR'),
+    ];
+    const propia = referenciaDeCobro(`PEDIDO-${uno.body.id}`, uno.body.cobro.id as number);
+    const deOtraInstalacion = propia.replace(/-[0-9A-F]{6}$/, '-000000');
+    const cobroAjeno = referenciaDeCobro(`PEDIDO-${uno.body.id}`, otro.body.cobro.id as number);
+
+    for (const ref of [deOtraInstalacion, cobroAjeno]) {
+      const r = await request(app)
+        .get('/api/pagos/notificacion')
+        .query({ testigo: 'x', ref, transaction_id: ref, estado: 'Pagado', monto: String(uno.body.total) });
+      expect(r.body.procesado).toBe(false);
+    }
   });
 
   /** Un aviso sobre algo que no existe no se inventa un cobro. */

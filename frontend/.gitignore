@@ -41,3 +41,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# pruebas de punta a punta (Playwright)
+/test-results
+/playwright-report

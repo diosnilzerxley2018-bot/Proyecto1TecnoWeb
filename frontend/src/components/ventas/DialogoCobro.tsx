@@ -173,15 +173,38 @@ export function DialogoCobro({
           ) : (
             <motion.div key="esperando" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
               {enlacePago ? (
-                <a
-                  href={enlacePago}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center justify-center gap-2 rounded-xl border border-marca-500/40 bg-marca-500/10 px-4 py-6 text-sm text-marca-300 transition-colors hover:bg-marca-500/15"
-                >
-                  <ExternalLink className="size-4" aria-hidden />
-                  Abrir la página de pago
-                </a>
+                <div className="space-y-2.5">
+                  {/* Se pidió QR y llegó la página: Libélula no pudo dibujar el
+                      código (registrado en la historia del cobro). Dicho así, no
+                      parece que el sistema ignoró lo que se eligió. */}
+                  {actual.metodo === 'QR' && (
+                    <p className="rounded-xl border border-aviso/25 bg-aviso/10 px-3.5 py-2.5 text-xs leading-relaxed text-aviso">
+                      Libélula no pudo generar el QR para mostrarlo aquí. En su página de pago
+                      está el mismo cobro con su QR para escanear.
+                    </p>
+                  )}
+                  <a
+                    href={enlacePago}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center justify-center gap-2 rounded-xl border border-marca-500/40 bg-marca-500/10 px-4 py-6 text-sm text-marca-300 transition-colors hover:bg-marca-500/15"
+                  >
+                    <ExternalLink className="size-4" aria-hidden />
+                    {actual.metodo === 'QR'
+                      ? 'Abrir la página de pago y escanear su QR'
+                      : 'Abrir la página de pago'}
+                  </a>
+                  {/* La tarjeta no puede pedirse aquí: sus datos solo los puede
+                      recibir la pasarela (PCI DSS), y Libélula no ofrece campos
+                      para incrustar. Su página tampoco funciona dentro de un
+                      marco: su sesión es una cookie SameSite=Lax. */}
+                  {actual.metodo === 'Tarjeta' && (
+                    <p className="text-center text-[11px] leading-relaxed text-tinta-tenue">
+                      Los datos de la tarjeta se escriben en la página segura de Libélula:
+                      NutriExpress nunca los ve.
+                    </p>
+                  )}
+                </div>
               ) : actual.qrImagen ? (
                 <div className="grid place-items-center gap-3">
                   {/* El código lo dibuja el servidor: una pasarela real puede

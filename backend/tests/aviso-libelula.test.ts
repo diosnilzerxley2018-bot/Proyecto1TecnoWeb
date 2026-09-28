@@ -199,4 +199,38 @@ describe('Cobro creado según el método elegido', () => {
     expect(cobro.tipoDatos).toBe('url');
     expect(cobro.datosCobro).toBe(respuesta.url_pasarela_pagos);
   });
+
+  /**
+   * Respuesta real del 28-sep-2026: la deuda se registró, pero Libélula no
+   * pudo dibujar el QR. El cobro sigue siendo pagable en su página, y queda
+   * dicho por qué no hubo código que escanear.
+   */
+  it('si Libélula no dibuja el QR, entrega su página y deja dicho por qué', async () => {
+    const { qr_simple_base64: _sinQR, ...sinCodigo } = respuesta;
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ ...sinCodigo, qr_simple_error: 'Error por excepcion' }),
+    } as Response);
+
+    const cobro = await pasarela.crearCobro({ ...solicitud, metodo: 'QR' });
+
+    expect(cobro.tipoDatos).toBe('url');
+    expect(cobro.datosCobro).toBe(respuesta.url_pasarela_pagos);
+    expect(cobro.observacion).toBe('Libélula no generó el QR directo: Error por excepcion');
+  });
+
+  it('el pago de un pedido vuelve a «Mis pedidos» del portal, y el de una venta al mostrador', async () => {
+    const llamada = conRespuestaDeLibelula();
+    await pasarela.crearCobro({ ...solicitud, metodo: 'Tarjeta' });
+    await pasarela.crearCobro({ ...solicitud, referenciaInterna: 'VENTA-3', metodo: 'Tarjeta' });
+
+    const retornos = llamada.mock.calls.map(
+      ([, opciones]) => JSON.parse(String((opciones as RequestInit).body)).url_retorno,
+    );
+    expect(retornos).toEqual([
+      'https://ejemplo.test/portal/pedidos',
+      'https://ejemplo.test/ventas/registro',
+    ]);
+  });
 });

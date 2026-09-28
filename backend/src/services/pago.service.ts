@@ -1,4 +1,6 @@
+import { createHash } from 'node:crypto';
 import QRCode from 'qrcode';
+import { env } from '../config/env.js';
 import { prisma } from '../config/prisma.js';
 import * as pagoModel from '../models/pago.model.js';
 import * as ventaModel from '../models/venta.model.js';
@@ -275,6 +277,32 @@ export async function cerrarCobroDePedidoEnTransaccion(
 }
 
 /**
+ * La instalación que abre el cobro: el VPS y Railway comparten la cuenta de
+ * Libélula, y cada uno numera sus pedidos desde 1. Se deduce de la dirección
+ * pública, que es distinta en cada una, para no pedir otra variable.
+ */
+const INSTALACION = createHash('sha256')
+  .update(env.pago.urlPublica || 'local')
+  .digest('hex')
+  .slice(0, 6)
+  .toUpperCase();
+
+/**
+ * El identificador con el que el cobro se registra en la pasarela.
+ *
+ * Libélula rechaza una deuda cuyo identificador ya tiene otra activa. Con
+ * `PEDIDO-12` a secas, el pedido 12 del VPS chocaba con el pedido 12 de
+ * Railway que seguía sin pagar: «Ya existe otra deuda activa registrada con
+ * ese mismo identificador», y ningún cobro con QR ni tarjeta se abría hasta
+ * que los números dejaban de coincidir. El número de cobro lo hace único
+ * dentro de una base —también si se reintenta— y la instalación, entre bases.
+ * El aviso lo devuelve tal cual, y `cobroDelAviso` lo lee.
+ */
+export function referenciaDeCobro(base: string, idPago: number): string {
+  return `${base}-C${idPago}-${INSTALACION}`;
+}
+
+/**
  * Abre el cobro en la pasarela y devuelve lo que hay que mostrarle al cliente.
  *
  * Se llama **después** de que la transacción haya confirmado. Si la pasarela
@@ -299,7 +327,7 @@ export async function abrirCobro(
       moneda: pago.moneda,
       metodo: pago.metodo as MetodoPago,
       descripcion: contexto.descripcion,
-      referenciaInterna: contexto.referenciaInterna,
+      referenciaInterna: referenciaDeCobro(contexto.referenciaInterna, idPago),
       cliente: contexto.cliente,
     });
 
@@ -318,7 +346,10 @@ export async function abrirCobro(
         idPago,
         tipo: 'Abierto en pasarela',
         origen: 'Sistema',
-        cuerpo: JSON.stringify({ idTransaccion: cobro.idTransaccionExterna }),
+        cuerpo: JSON.stringify({
+          idTransaccion: cobro.idTransaccionExterna,
+          ...(cobro.observacion ? { observacion: cobro.observacion } : {}),
+        }),
       });
       return fila;
     });
@@ -572,10 +603,23 @@ async function cobroDelAviso(
   // La referencia puede venir en la dirección o, como hace Libélula, repetida
   // dentro del propio aviso.
   for (const candidata of [referencia, aviso.idTransaccionExterna]) {
-    const partes = /^(PEDIDO|VENTA)-(\d+)$/.exec(candidata ?? '');
+    const partes = /^(PEDIDO|VENTA)-(\d+)(?:-C(\d+)-([0-9A-F]+))?$/.exec(candidata ?? '');
     if (!partes) continue;
 
     const id = Number(partes[2]);
+
+    // Formato actual: dice exactamente qué cobro es. Otra instalación no
+    // debería avisar aquí, pero si lo hace no toca un cobro nuestro.
+    if (partes[3]) {
+      if (partes[4] !== INSTALACION) continue;
+      const pago = await pagoModel.buscarPorId(Number(partes[3]));
+      const delMismoOrigen =
+        pago && (partes[1] === 'PEDIDO' ? pago.id_pedido === id : pago.id_venta === id);
+      if (delMismoOrigen) return pago;
+      continue;
+    }
+
+    // Formato anterior (`PEDIDO-12`): cobros abiertos antes del cambio.
     const encontrado =
       partes[1] === 'PEDIDO'
         ? await pagoModel.buscarDePedido(id)

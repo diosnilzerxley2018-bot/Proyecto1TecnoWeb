@@ -18,7 +18,10 @@ export interface SolicitudCobro {
   moneda: string;
   metodo: MetodoPago;
   descripcion: string;
-  /** Referencia del lado de NutriExpress: `VENTA-128`, `PEDIDO-45`. */
+  /**
+   * Referencia del lado de NutriExpress, única por cobro y por instalación:
+   * `PEDIDO-45-C112-3FA9C1` (ver `referenciaDeCobro` en `pago.service`).
+   */
   referenciaInterna: string;
   cliente?: { nombre: string; email?: string };
 }
@@ -33,6 +36,12 @@ export interface CobroCreado {
   datosCobro: string;
   tipoDatos: 'qr' | 'url';
   expiraEn: Date;
+  /**
+   * Lo que la pasarela avisó al abrir el cobro sin que fuera un rechazo, como
+   * que no pudo dibujar el QR. Queda en la historia del cobro para que un
+   * «¿por qué no salió el QR?» tenga respuesta.
+   */
+  observacion?: string;
 }
 
 /** Lo que una pasarela nos comunica sobre un cobro, ya interpretado. */

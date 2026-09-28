@@ -204,7 +204,11 @@ export class PasarelaLibelula implements PasarelaPago {
       callback_url:
         `${base}/api/pagos/notificacion` +
         `?testigo=${testigo}&ref=${encodeURIComponent(solicitud.referenciaInterna)}`,
-      url_retorno: `${base}/ventas/registro`,
+      // Quien paga un pedido es el cliente, en el portal: volver al mostrador
+      // lo dejaba en una pantalla del personal que no podía abrir.
+      url_retorno: solicitud.referenciaInterna.startsWith('PEDIDO-')
+        ? `${base}/portal/pedidos`
+        : `${base}/ventas/registro`,
       nombre_cliente: nombre || 'Consumidor',
       apellido_cliente: apellido.join(' ') || 'Final',
       emite_factura: false,
@@ -229,6 +233,11 @@ export class PasarelaLibelula implements PasarelaPago {
       url_pasarela_pagos?: string;
       /** El QR ya dibujado, en PNG base64. Libélula lo genera por su cuenta. */
       qr_simple_base64?: string;
+      /**
+       * Por qué no vino el QR. Visto en la API real (28-sep-2026): «Error por
+       * excepcion», con la deuda registrada igual y su página funcionando.
+       */
+      qr_simple_error?: string;
       codigo_recaudacion?: string;
       error?: number;
       mensaje?: string;
@@ -263,11 +272,22 @@ export class PasarelaLibelula implements PasarelaPago {
      */
     const codigoQR = solicitud.metodo === 'QR' ? datos.qr_simple_base64 : undefined;
 
+    /*
+     * Si Libélula no pudo dibujar el QR, el cobro sigue siendo pagable: su
+     * página también ofrece el QR. Se entrega la dirección en lugar de
+     * fallar, y se deja dicho por qué, que es lo único que no se veía.
+     */
+    const sinQR =
+      solicitud.metodo === 'QR' && !codigoQR
+        ? `Libélula no generó el QR directo: ${datos.qr_simple_error ?? 'sin motivo informado'}`
+        : undefined;
+
     return {
       idTransaccionExterna: idTransaccion,
       datosCobro: codigoQR ? `data:image/png;base64,${codigoQR}` : urlPago,
       tipoDatos: codigoQR ? 'qr' : 'url',
       expiraEn: new Date(Date.now() + env.pago.minutosExpiracion * 60_000),
+      ...(sinQR ? { observacion: sinQR } : {}),
     };
   }
 

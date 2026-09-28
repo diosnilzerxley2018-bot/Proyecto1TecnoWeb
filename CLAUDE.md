@@ -54,6 +54,8 @@ npm test -- tests/ventas.test.ts -t "anular"  # un caso por nombre
 
 El frontend prueba componentes con Testing Library sobre jsdom (`frontend/tests/*.test.tsx`), con alias `@` → `src`.
 
+**Pruebas de punta a punta** (`frontend/e2e/*.spec.ts`, Playwright): un navegador de verdad recorre la aplicación ya levantada —no la levanta—: `npm run dev` en `backend/` y `frontend/`, y después `npm run test:e2e` en `frontend/` (`test:e2e:informe` abre el reporte HTML). Usa el Google Chrome instalado (`channel: 'chrome'`), sin descargar navegadores. `E2E_URL`, `E2E_API`, `E2E_ADMIN_USUARIO`/`E2E_ADMIN_CLAVE` y `E2E_CORREOS` la apuntan a otra instalación. Corre en serie y crea clientes nuevos en cada corrida. La prueba del bloqueo gasta 3 intentos fallidos y la API tolera 10 por IP cada 15 minutos: más de tres corridas seguidas chocan con el límite.
+
 ## Arquitectura del backend
 
 Capas estrictas, una carpeta por estereotipo del modelo de análisis:
@@ -118,6 +120,7 @@ Tres cosas frágiles a respetar:
 1. El **modo de cobro** (`Simulado` / `Real`) no está en el entorno: vive en la tabla `configuracion` (`MODO_COBRO`) y lo cambia el administrador en caliente. Cada pago guarda el modo con el que nació.
 2. `/api/pagos/notificacion` se monta con `express.raw()` **antes** del `express.json()` general (`src/app.ts`): la firma se valida sobre los bytes exactos que envió la pasarela. Reordenar eso rompe todo aviso legítimo.
 3. `middlewares/mantenimiento.middleware.ts` vence cobros abandonados colgándose del tránsito normal de la API (limitado a una vez por minuto, sin bloquear la petición). No sustituirlo por `setInterval`.
+4. **El identificador de la deuda es único por cobro y por instalación** (`referenciaDeCobro` en `pago.service.ts`: `PEDIDO-12-C24-3FA9C1`). El VPS y Railway comparten la cuenta de Libélula y cada base numera sus pedidos desde 1; con `PEDIDO-12` a secas Libélula rechazaba el pedido del uno mientras el del otro siguiera sin pagar («Ya existe otra deuda activa…»). La instalación se deduce de `PAGO_URL_PUBLICA`. `cobroDelAviso` lee ese formato y sigue aceptando el anterior. Si Libélula no dibuja el QR (`qr_simple_error`), el cobro se entrega como su página y el motivo queda en `evento_pago`; la tarjeta **siempre** se paga en su página (PCI, y su sesión no funciona dentro de un marco).
 
 ## Arquitectura del frontend
 
