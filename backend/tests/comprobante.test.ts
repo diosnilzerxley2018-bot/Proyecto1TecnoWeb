@@ -14,7 +14,12 @@ import { referenciaDeCobro } from '../src/services/pago.service.js';
  */
 
 const cabecera = (token: string) => ({ Authorization: `Bearer ${token}` });
-const SOPORTE = 'nutriexpress2026@gmail.com';
+/**
+ * El soporte configurado del negocio. Se consulta y no se supone: otras pruebas
+ * editan el correo del negocio y, según el orden de los archivos, esta lo
+ * encontraba cambiado.
+ */
+const soporte = async () => (await request(app).get('/api/negocio')).body.correo as string;
 
 async function pedir(token: string, metodoPago: 'QR' | 'Efectivo') {
   const producto = await buscarProducto('Barra de avena');
@@ -62,7 +67,7 @@ describe('Comprobante · al pagar', () => {
     expect(correo.asunto).toContain(String(pedido.id).padStart(5, '0'));
     expect(correo.para).toEqual([correoDe(cliente)]);
     // Si responde, le contesta el soporte, no la cuenta que envía.
-    expect(correo.responderA).toBe(SOPORTE);
+    expect(correo.responderA).toBe(await soporte());
     expect(correo.adjuntos?.[0].tipo).toBe('application/pdf');
     expect(correo.adjuntos?.[0].contenido.subarray(0, 4).toString()).toBe('%PDF');
   });
@@ -125,7 +130,7 @@ describe('Comprobante · en pantalla y en PDF', () => {
     expect(r.body.cantidadItems).toBe(2);
     expect(r.body.total).toBe(pedido.total);
     expect(r.body.pagadoEn).not.toBeNull();
-    expect(r.body.soporte).toBe(SOPORTE);
+    expect(r.body.soporte).toBe(await soporte());
   });
 
   it('un pedido sin pagar todavía no tiene comprobante', async () => {
