@@ -68,10 +68,13 @@ export function redondearCoordenadas({ lat, lon }: Coordenadas): Coordenadas {
 }
 
 /**
- * Centro de reparto, usado cuando todavía no hay punto elegido.
- * El negocio opera en Santa Cruz de la Sierra.
+ * Centro de reparto, usado cuando todavía no hay punto elegido: el cliente
+ * tiene que ver su ciudad para marcar su puerta. El negocio opera en
+ * Montero (Santa Cruz); es el centro del municipio según OpenStreetMap, y a
+ * escala de ciudad muestra todo el casco urbano. Debe coincidir con
+ * `UBICACION_POR_OMISION` del backend (`config/negocio.ts`).
  */
-export const CENTRO_REPARTO: Coordenadas = { lat: -17.783327, lon: -63.18214 };
+export const CENTRO_REPARTO: Coordenadas = { lat: -17.34202, lon: -63.255769 };
 
 /* --- Foto del producto --- */
 

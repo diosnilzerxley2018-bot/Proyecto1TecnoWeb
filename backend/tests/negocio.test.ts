@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import request from 'supertest';
 import { app } from '../src/app.js';
+import { UBICACION_POR_OMISION } from '../src/config/negocio.js';
 import { crearEmpleado, obtenerToken, registrarCliente } from './ayudantes.js';
 import { invalidarCache } from '../src/services/negocio.service.js';
 
@@ -39,8 +40,9 @@ describe('Información del negocio', () => {
 
     expect(r.body.nombre).toBe('NutriExpress');
     expect(r.body.actualizadoEn).toBeNull();
-    expect(r.body.ubicacion.latitud).toBeCloseTo(-17.78, 1);
-    expect(r.body.ubicacion.longitud).toBeCloseTo(-63.18, 1);
+    // Montero, donde opera el negocio: el mismo centro del mapa del portal.
+    expect(r.body.ubicacion).toEqual(UBICACION_POR_OMISION);
+    expect(r.body.lema).toContain('Montero');
   });
 
   it('el administrador la edita y el cambio queda publicado', async () => {

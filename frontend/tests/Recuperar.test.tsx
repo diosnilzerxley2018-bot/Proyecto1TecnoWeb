@@ -62,9 +62,12 @@ describe('Recuperar la contraseña', () => {
     // Mientras no cumpla la política, no se puede enviar.
     await usuario.type(nueva, 'corta');
     expect(screen.getByRole('button', { name: 'Cambiar contraseña' })).toBeDisabled();
+    // Pegadas y no tecleadas: tecla por tecla, con la suite en paralelo, el
+    // recorrido pasaba el límite de tiempo sin que nada fallara.
     await usuario.clear(nueva);
-    await usuario.type(nueva, 'Recuperada2026!');
-    await usuario.type(screen.getByLabelText('Repetir la nueva'), 'Recuperada2026!');
+    await usuario.paste('Recuperada2026!');
+    await usuario.click(screen.getByLabelText('Repetir la nueva'));
+    await usuario.paste('Recuperada2026!');
     await usuario.click(screen.getByRole('button', { name: 'Cambiar contraseña' }));
 
     expect(enviar).toHaveBeenCalledWith('/auth/recuperar/restablecer', {
@@ -74,7 +77,7 @@ describe('Recuperar la contraseña', () => {
     });
     expect(await screen.findByText(/Su contraseña fue cambiada/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Iniciar sesión' })).toHaveAttribute('href', '/login');
-  });
+  }, 30_000);
 
   it('un código equivocado se dice con los intentos que quedan', async () => {
     enviar.mockImplementation((ruta: string) =>

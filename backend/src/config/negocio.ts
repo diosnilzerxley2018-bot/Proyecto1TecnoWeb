@@ -45,7 +45,7 @@ export const CAMPOS_NEGOCIO: CampoNegocio[] = [
     nombre: 'lema',
     clave: 'NEGOCIO_LEMA',
     etiqueta: 'Lema',
-    porOmision: 'Comida saludable a domicilio en Santa Cruz de la Sierra',
+    porOmision: 'Comida saludable a domicilio en Montero',
     maximo: 150,
     buscable: true,
   },
@@ -97,7 +97,8 @@ export const CAMPOS_NEGOCIO: CampoNegocio[] = [
     nombre: 'direccion',
     clave: 'NEGOCIO_DIRECCION',
     etiqueta: 'Dirección',
-    porOmision: 'Av. Banzer, 3er anillo · Santa Cruz de la Sierra, Bolivia',
+    // Sin calle a propósito: la exacta la escribe el administrador.
+    porOmision: 'Montero, Santa Cruz, Bolivia',
     maximo: 150,
     buscable: true,
   },
@@ -112,7 +113,7 @@ export const CAMPOS_NEGOCIO: CampoNegocio[] = [
     nombre: 'cobertura',
     clave: 'NEGOCIO_COBERTURA',
     etiqueta: 'Zona de cobertura',
-    porOmision: 'Entregamos dentro del cuarto anillo de Santa Cruz de la Sierra.',
+    porOmision: 'Entregamos dentro de la ciudad de Montero.',
     maximo: 200,
     buscable: true,
   },
@@ -122,5 +123,8 @@ export const CAMPOS_NEGOCIO: CampoNegocio[] = [
 export const CLAVE_LATITUD = 'NEGOCIO_LATITUD';
 export const CLAVE_LONGITUD = 'NEGOCIO_LONGITUD';
 
-/** El mismo centro de reparto que usa el portal al elegir una dirección. */
-export const UBICACION_POR_OMISION = { latitud: -17.783327, longitud: -63.18214 };
+/**
+ * El mismo centro de reparto que usa el portal al elegir una dirección
+ * (`CENTRO_REPARTO` en la interfaz): Montero, donde opera el negocio.
+ */
+export const UBICACION_POR_OMISION = { latitud: -17.34202, longitud: -63.255769 };
