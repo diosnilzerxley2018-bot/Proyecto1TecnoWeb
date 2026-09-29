@@ -432,6 +432,25 @@ CREATE TABLE posicion_repartidor (
     CONSTRAINT ck_posicion_precision CHECK (precision_m IS NULL OR precision_m >= 0)
 );
 
+-- Codigos para recuperar la contrasena ("Olvide mi contrasena"). Se le manda
+-- al correo de la cuenta un codigo de seis digitos; aqui queda solo su huella
+-- (HMAC), nunca el codigo, con su vencimiento, los intentos fallidos y cuando
+-- se uso. Es la salida para quien olvido su contrasena o quedo bloqueado,
+-- incluido el administrador, que no tiene a nadie por encima que lo desbloquee.
+CREATE TABLE recuperacion_contrasena (
+    id_recuperacion INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    id_usuario      INT NOT NULL,
+    codigo_hash     VARCHAR(64) NOT NULL,
+    creado_en       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expira_en       TIMESTAMP NOT NULL,
+    intentos        INT NOT NULL DEFAULT 0,
+    usado_en        TIMESTAMP,
+    CONSTRAINT fk_recuperacion_usuario FOREIGN KEY (id_usuario) REFERENCES usuario(id_usuario),
+    CONSTRAINT ck_recuperacion_intentos CHECK (intentos >= 0),
+    CONSTRAINT ck_recuperacion_plazo CHECK (expira_en > creado_en)
+);
+CREATE INDEX ix_recuperacion_usuario ON recuperacion_contrasena(id_usuario);
+
 
 
 

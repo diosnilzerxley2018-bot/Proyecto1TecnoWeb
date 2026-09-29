@@ -134,6 +134,24 @@ const AJUSTES: Ajuste[] = [
        )`,
     ],
   },
+  {
+    nombre: 'recuperacion_contrasena — «Olvidé mi contraseña» con un código al correo',
+    sentencias: [
+      `CREATE TABLE IF NOT EXISTS recuperacion_contrasena (
+         id_recuperacion INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+         id_usuario      INT NOT NULL,
+         codigo_hash     VARCHAR(64) NOT NULL,
+         creado_en       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+         expira_en       TIMESTAMP NOT NULL,
+         intentos        INT NOT NULL DEFAULT 0,
+         usado_en        TIMESTAMP,
+         CONSTRAINT fk_recuperacion_usuario FOREIGN KEY (id_usuario) REFERENCES usuario(id_usuario),
+         CONSTRAINT ck_recuperacion_intentos CHECK (intentos >= 0),
+         CONSTRAINT ck_recuperacion_plazo CHECK (expira_en > creado_en)
+       )`,
+      `CREATE INDEX IF NOT EXISTS ix_recuperacion_usuario ON recuperacion_contrasena(id_usuario)`,
+    ],
+  },
 ];
 
 const url = process.env.DATABASE_URL;

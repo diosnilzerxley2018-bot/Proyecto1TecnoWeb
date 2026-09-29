@@ -346,26 +346,27 @@ model unidad_medida {
 }
 
 model usuario {
-  id_usuario          Int                   @id @default(autoincrement())
-  nombre              String                @db.VarChar(100)
-  apellido            String                @db.VarChar(100)
-  email               String                @unique @db.VarChar(150)
-  telefono            String?               @db.VarChar(20)
-  nombre_usuario      String                @unique @db.VarChar(50)
-  contrasena_hash     String                @db.VarChar(255)
-  intentos_fallidos   Int                   @default(0)
-  bloqueado           Boolean               @default(false)
-  fecha_bloqueo       DateTime?             @db.Timestamp(6)
-  activo              Boolean               @default(true)
-  fecha_registro      DateTime              @default(now()) @db.Timestamp(6)
-  id_rol              Int
-  ultimo_acceso       DateTime?             @db.Timestamp(6)
-  veces_bloqueado     Int                   @default(0)
-  cliente             cliente?
-  configuracion       configuracion[]
-  empleado            empleado?
-  rol                 rol                   @relation(fields: [id_rol], references: [id_rol], onDelete: NoAction, onUpdate: NoAction, map: "fk_usuario_rol")
-  usuario_rol_permiso usuario_rol_permiso[]
+  id_usuario              Int                       @id @default(autoincrement())
+  nombre                  String                    @db.VarChar(100)
+  apellido                String                    @db.VarChar(100)
+  email                   String                    @unique @db.VarChar(150)
+  telefono                String?                   @db.VarChar(20)
+  nombre_usuario          String                    @unique @db.VarChar(50)
+  contrasena_hash         String                    @db.VarChar(255)
+  intentos_fallidos       Int                       @default(0)
+  bloqueado               Boolean                   @default(false)
+  fecha_bloqueo           DateTime?                 @db.Timestamp(6)
+  activo                  Boolean                   @default(true)
+  fecha_registro          DateTime                  @default(now()) @db.Timestamp(6)
+  id_rol                  Int
+  ultimo_acceso           DateTime?                 @db.Timestamp(6)
+  veces_bloqueado         Int                       @default(0)
+  cliente                 cliente?
+  configuracion           configuracion[]
+  empleado                empleado?
+  recuperacion_contrasena recuperacion_contrasena[]
+  rol                     rol                       @relation(fields: [id_rol], references: [id_rol], onDelete: NoAction, onUpdate: NoAction, map: "fk_usuario_rol")
+  usuario_rol_permiso     usuario_rol_permiso[]
 }
 
 model usuario_rol_permiso {
@@ -495,4 +496,18 @@ model posicion_repartidor {
   precision_m    Decimal? @db.Decimal(8, 1)
   actualizada_en DateTime @default(now()) @db.Timestamp(6)
   empleado       empleado @relation(fields: [id_empleado], references: [id_empleado], onDelete: NoAction, onUpdate: NoAction, map: "fk_posicion_empleado")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model recuperacion_contrasena {
+  id_recuperacion Int       @id @default(autoincrement())
+  id_usuario      Int
+  codigo_hash     String    @db.VarChar(64)
+  creado_en       DateTime  @default(now()) @db.Timestamp(6)
+  expira_en       DateTime  @db.Timestamp(6)
+  intentos        Int       @default(0)
+  usado_en        DateTime? @db.Timestamp(6)
+  usuario         usuario   @relation(fields: [id_usuario], references: [id_usuario], onDelete: NoAction, onUpdate: NoAction, map: "fk_recuperacion_usuario")
+
+  @@index([id_usuario], map: "ix_recuperacion_usuario")
 }
