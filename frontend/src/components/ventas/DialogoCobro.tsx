@@ -198,11 +198,21 @@ export function DialogoCobro({
                       recibir la pasarela (PCI DSS), y Libélula no ofrece campos
                       para incrustar. Su página tampoco funciona dentro de un
                       marco: su sesión es una cookie SameSite=Lax. */}
+                  {/* Libélula abre su página en el QR: el método inicial lo fija
+                      la configuración del comercio, y ni su API ni la dirección
+                      permiten elegirlo por cobro (probado el 29-sep-2026). Se le
+                      dice al cliente qué tocar para no dejarlo buscando. */}
                   {actual.metodo === 'Tarjeta' && (
-                    <p className="text-center text-[11px] leading-relaxed text-tinta-tenue">
-                      Los datos de la tarjeta se escriben en la página segura de Libélula:
-                      NutriExpress nunca los ve.
-                    </p>
+                    <div className="space-y-1.5 text-center text-[11px] leading-relaxed text-tinta-tenue">
+                      <p>
+                        Al abrirse, elija <strong className="text-tinta">VISA / Mastercard</strong>: la
+                        página muestra primero el QR.
+                      </p>
+                      <p>
+                        Los datos de la tarjeta se escriben en la página segura de Libélula:
+                        NutriExpress nunca los ve.
+                      </p>
+                    </div>
                   )}
                 </div>
               ) : actual.qrImagen ? (

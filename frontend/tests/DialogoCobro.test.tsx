@@ -144,6 +144,8 @@ describe('DialogoCobro', () => {
     const enlace = screen.getByRole('link', { name: /Abrir la página de pago/ });
     expect(enlace).toHaveAttribute('href', 'https://pasarela.example/pagar/abc');
     expect(screen.getByText(/NutriExpress nunca los ve/)).toBeInTheDocument();
+    // La página de Libélula abre en el QR: se dice qué tocar.
+    expect(screen.getByText(/la\s+página muestra primero el QR/)).toBeInTheDocument();
   });
 
   /**
