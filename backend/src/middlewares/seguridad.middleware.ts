@@ -52,3 +52,21 @@ export const limiteDeEnvios = rateLimit({
     error: 'Ya pidió varios envíos seguidos. Espere unos minutos antes de volver a pedirlo.',
   },
 });
+
+/**
+ * Límite de pedidos de código para recuperar la contraseña, por dirección IP.
+ *
+ * La respuesta es siempre la misma exista o no la cuenta, así que el límite de
+ * intentos fallidos no la cuenta: esto frena a quien pida códigos para una
+ * lista de correos ajenos. A cada cuenta, además, no se le manda más de un
+ * código por minuto (`recuperacion.service`).
+ */
+export const limiteDeSolicitudes = rateLimit({
+  windowMs: 15 * 60_000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Pidió demasiados códigos desde esta conexión. Espere unos minutos antes de reintentar.',
+  },
+});

@@ -11,6 +11,7 @@ import { Campo } from '@/components/ui/Campo';
 import { Boton } from '@/components/ui/Boton';
 import { PieVisitas } from '@/components/ui/PieVisitas';
 import { SelectorTema } from '@/components/ui/SelectorTema';
+import { FondoAcceso } from '@/components/ui/FondoAcceso';
 
 /** CU-SEG-01 — Iniciar Sesión. */
 export default function PaginaLogin() {
@@ -41,7 +42,7 @@ export default function PaginaLogin() {
 
   return (
     <main className="relative grid min-h-screen place-items-center overflow-hidden p-4">
-      <Fondo />
+      <FondoAcceso />
 
       <motion.div
         initial={{ opacity: 0, y: 16 }}
@@ -84,6 +85,15 @@ export default function PaginaLogin() {
             onChange={(e) => setContrasena(e.target.value)}
           />
 
+          <p className="-mt-2 text-right text-xs">
+            <Link
+              href="/recuperar"
+              className="text-marca-300 underline-offset-4 transition-colors hover:text-marca-400 hover:underline"
+            >
+              ¿Olvidó su contraseña?
+            </Link>
+          </p>
+
           {error && (
             <motion.p
               role="alert"
@@ -92,7 +102,19 @@ export default function PaginaLogin() {
               className="flex items-start gap-2 rounded-xl border border-peligro/25 bg-peligro/10 px-3.5 py-2.5 text-sm text-peligro"
             >
               <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
-              {error}
+              <span>
+                {error}
+                {/* Bloqueado, lo que sirve es el código al correo: también
+                    desbloquea la cuenta, sin esperar al administrador. */}
+                {/bloquead/i.test(error) && (
+                  <>
+                    {' '}
+                    <Link href="/recuperar" className="font-medium underline underline-offset-2">
+                      Recupere su acceso con un código a su correo
+                    </Link>
+                  </>
+                )}
+              </span>
             </motion.p>
           )}
 
@@ -124,24 +146,5 @@ export default function PaginaLogin() {
         </p>
       </motion.div>
     </main>
-  );
-}
-
-/** Halos y retícula tenues: dan profundidad sin competir con el formulario. */
-function Fondo() {
-  return (
-    <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
-      <div className="absolute left-1/2 top-0 size-[36rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-marca-500/12 blur-[100px]" />
-      <div className="absolute bottom-0 right-0 size-[28rem] translate-x-1/3 translate-y-1/3 rounded-full bg-info/8 blur-[100px]" />
-      <div
-        className="absolute inset-0 opacity-[0.15]"
-        style={{
-          backgroundImage:
-            'linear-gradient(rgba(255,255,255,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px)',
-          backgroundSize: '56px 56px',
-          maskImage: 'radial-gradient(ellipse at center, black 20%, transparent 70%)',
-        }}
-      />
-    </div>
   );
 }

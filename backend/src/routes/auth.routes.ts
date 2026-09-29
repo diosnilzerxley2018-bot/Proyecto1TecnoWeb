@@ -2,7 +2,12 @@ import { Router } from 'express';
 import * as ctrl from '../controllers/auth.controller.js';
 import { validarCuerpo } from '../middlewares/validate.middleware.js';
 import { requiereAutenticacion } from '../middlewares/auth.middleware.js';
-import { limiteDeIntentos } from '../middlewares/seguridad.middleware.js';
+import { limiteDeIntentos, limiteDeSolicitudes } from '../middlewares/seguridad.middleware.js';
+import {
+  esquemaRestablecerContrasena,
+  esquemaSolicitarCodigo,
+  esquemaVerificarCodigo,
+} from '../dtos/auth.dto.js';
 
 const router = Router();
 
@@ -34,6 +39,22 @@ router.post('/login', validarCuerpo(ctrl.esquemaLogin), ctrl.login);
  * usar para crear cuentas en masa.
  */
 router.post('/registro', limiteDeIntentos, validarCuerpo(ctrl.esquemaRegistro), ctrl.registro);
+
+// «Olvidé mi contraseña». Públicas, como el inicio de sesión: quien las usa no
+// puede entrar. Un código equivocado cuenta como intento fallido de la IP.
+router.post('/recuperar', limiteDeSolicitudes, validarCuerpo(esquemaSolicitarCodigo), ctrl.solicitarCodigo);
+router.post(
+  '/recuperar/verificar',
+  limiteDeIntentos,
+  validarCuerpo(esquemaVerificarCodigo),
+  ctrl.verificarCodigo,
+);
+router.post(
+  '/recuperar/restablecer',
+  limiteDeIntentos,
+  validarCuerpo(esquemaRestablecerContrasena),
+  ctrl.restablecerContrasena,
+);
 router.post('/logout', requiereAutenticacion, ctrl.logout);
 router.get('/perfil', requiereAutenticacion, ctrl.perfil);
 

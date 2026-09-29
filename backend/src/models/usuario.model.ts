@@ -13,6 +13,16 @@ export const buscarPorNombreUsuario = (nombreUsuario: string) =>
     include: { rol: true, empleado: { include: { cargo: true } } },
   });
 
+/**
+ * Por correo, sin distinguir mayúsculas: quien recupera su contraseña lo
+ * escribe como lo recuerda, no como quedó guardado.
+ */
+export const buscarPorEmail = (email: string) =>
+  prisma.usuario.findFirst({
+    where: { email: { equals: email, mode: 'insensitive' } },
+    include: { rol: true, empleado: { include: { cargo: true } } },
+  });
+
 export const buscarPorId = (id: number) =>
   prisma.usuario.findUnique({
     where: { id_usuario: id },

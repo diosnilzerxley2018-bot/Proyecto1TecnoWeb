@@ -254,6 +254,77 @@ export async function comprobanteDePedido(datos: {
   });
 }
 
+/**
+ * El código para recuperar la contraseña.
+ *
+ * El código va en el asunto para que se lea en la notificación del teléfono
+ * sin abrir el correo. Dice para qué cuenta es y qué hacer si no lo pidió
+ * nadie: que alguien escriba su correo no cambia su contraseña.
+ */
+export async function codigoDeRecuperacion(datos: {
+  correo: string;
+  nombre: string;
+  nombreUsuario: string;
+  codigo: string;
+  minutos: number;
+}): Promise<void> {
+  const legible = `${datos.codigo.slice(0, 3)} ${datos.codigo.slice(3)}`;
+  const contacto = await soporte();
+
+  await mensajero().enviar({
+    para: [datos.correo],
+    responderA: contacto,
+    asunto: `${datos.codigo} es su código para recuperar la contraseña`,
+    texto:
+      `Hola ${datos.nombre}:\n\n` +
+      `Pidieron recuperar la contraseña de su cuenta (usuario ${datos.nombreUsuario}).\n` +
+      `Su código es: ${legible}\nVence en ${datos.minutos} minutos y sirve una sola vez.\n\n` +
+      'Si no lo pidió usted, ignore este correo: su contraseña no cambia.\n\n' +
+      NOMBRE,
+    html: plantilla(
+      'Recupere su contraseña',
+      `<p>Hola ${datos.nombre}, pidieron recuperar la contraseña de su cuenta
+         (usuario <strong>${datos.nombreUsuario}</strong>). Su código es:</p>
+       <p style="margin:1.25rem 0;font-size:2rem;font-weight:700;letter-spacing:.35rem;color:#1c1917">${legible}</p>
+       <p>Vence en ${datos.minutos} minutos y sirve una sola vez.</p>`,
+      'Si no lo pidió usted, ignore este correo: su contraseña no cambia.' +
+        (contacto ? ` ¿Dudas? Escríbanos a ${contacto}.` : ''),
+    ),
+  });
+}
+
+/**
+ * Avisa que la contraseña se cambió con un código.
+ *
+ * Es la alarma para el dueño si no fue él: sin este aviso, quien le robara el
+ * acceso al correo cambiaría la contraseña sin que nadie se entere.
+ */
+export async function contrasenaRestablecida(datos: {
+  correo: string;
+  nombre: string;
+  nombreUsuario: string;
+}): Promise<void> {
+  const contacto = await soporte();
+
+  await mensajero().enviar({
+    para: [datos.correo],
+    responderA: contacto,
+    asunto: 'Su contraseña fue cambiada',
+    texto:
+      `Hola ${datos.nombre}:\n\n` +
+      `La contraseña de su cuenta (usuario ${datos.nombreUsuario}) se cambió con un código enviado a este correo.\n` +
+      `Si no fue usted, avísenos de inmediato respondiendo este correo${contacto ? ` o escribiendo a ${contacto}` : ''}.\n\n` +
+      NOMBRE,
+    html: plantilla(
+      'Su contraseña fue cambiada',
+      `<p>Hola ${datos.nombre}, la contraseña de su cuenta (usuario <strong>${datos.nombreUsuario}</strong>)
+         se cambió con un código enviado a este correo. Ya puede iniciar sesión con la nueva.</p>
+       <p><strong>Si no fue usted</strong>, avísenos de inmediato respondiendo este correo.</p>`,
+      contacto ? `Soporte: ${contacto}` : undefined,
+    ),
+  });
+}
+
 /** Envía un reporte ya generado, como adjunto. */
 export async function reporte(datos: {
   /** Uno o varios: un reporte se manda a quien lo necesita. */

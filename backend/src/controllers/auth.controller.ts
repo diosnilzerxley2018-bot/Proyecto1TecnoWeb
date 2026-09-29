@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { esquemaContrasena } from '../dtos/contrasena.dto.js';
 import * as authService from '../services/auth.service.js';
+import * as recuperacionService from '../services/recuperacion.service.js';
 import { ErrorApp } from '../errors/error-app.js';
 
 /** Clase de análisis ctrlLogin. */
@@ -44,4 +45,18 @@ export async function perfil(req: Request, res: Response) {
 /** El cierre de sesión se resuelve en el cliente descartando el token. */
 export function logout(_req: Request, res: Response) {
   res.json({ mensaje: 'Sesión finalizada' });
+}
+
+/* «Olvidé mi contraseña»: pedir el código, confirmarlo y cambiarla. */
+
+export async function solicitarCodigo(req: Request, res: Response) {
+  res.json(await recuperacionService.solicitar((req.body as { identificador: string }).identificador));
+}
+
+export async function verificarCodigo(req: Request, res: Response) {
+  res.json(await recuperacionService.verificar(req.body));
+}
+
+export async function restablecerContrasena(req: Request, res: Response) {
+  res.json(await recuperacionService.restablecer(req.body));
 }
