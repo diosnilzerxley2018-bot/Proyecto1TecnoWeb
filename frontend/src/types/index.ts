@@ -461,6 +461,30 @@ export interface Comprobante {
   total: number;
 }
 
+/** El comprobante de un pedido pagado: el mismo tique que el del mostrador. */
+export interface ComprobantePedido {
+  numero: string;
+  fecha: string;
+  pagadoEn: string | null;
+  cliente: string;
+  entrega: string;
+  metodoPago: MetodoPago;
+  /** Identificador del pago en la pasarela; nulo en efectivo. */
+  referenciaPago: string | null;
+  detalle: LineaPedido[];
+  cantidadItems: number;
+  total: number;
+  /** Correo de soporte del negocio. */
+  soporte: string;
+}
+
+export interface EnvioComprobante {
+  enviado: boolean;
+  /** El correo de la cuenta: el destino no se elige. */
+  para: string;
+  motivo?: string;
+}
+
 /* --- Cobros (RF-PED-04) --- */
 
 export type ModoCobro = 'Simulado' | 'Real';

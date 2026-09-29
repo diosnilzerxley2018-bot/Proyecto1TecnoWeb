@@ -79,6 +79,7 @@ export class MensajeroSmtp implements Mensajero {
         subject: mensaje.asunto,
         text: mensaje.texto,
         ...(mensaje.html ? { html: mensaje.html } : {}),
+        ...(mensaje.responderA ? { replyTo: mensaje.responderA } : {}),
         ...(mensaje.adjuntos?.length
           ? {
               attachments: mensaje.adjuntos.map((a) => ({

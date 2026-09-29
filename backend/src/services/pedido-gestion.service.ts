@@ -4,6 +4,7 @@ import { pagina, type Pagina } from '../dtos/paginacion.dto.js';
 import * as empleadoModel from '../models/empleado.model.js';
 import * as permisoModel from '../models/permiso.model.js';
 import * as avisoService from './aviso.service.js';
+import * as comprobanteService from './comprobante.service.js';
 import * as pagoService from './pago.service.js';
 import * as repartoService from './reparto.service.js';
 import * as seguimientoService from './seguimiento.service.js';
@@ -386,6 +387,14 @@ export async function avanzarEstado(
   // en segundo plano: quien mueve el pedido en el mostrador no tiene por qué
   // esperar a que el servidor de correo responda, y si el correo falla el
   // pedido igual avanzó.
+  //
+  // Entregar en efectivo es cobrar: el aviso de entregado se reemplaza por el
+  // comprobante de ese pago, para no mandar dos correos por lo mismo.
+  if (destino === 'Entregado' && pedido.metodo_pago === 'Efectivo') {
+    avisoService.enSegundoPlano(comprobanteService.enviarAlPagar(idPedido, 'entrega'));
+    return aGestionDTO(await obtenerPedido(idPedido));
+  }
+
   avisoService.enSegundoPlano(
     avisoService.estadoDePedidoCambio(
       {

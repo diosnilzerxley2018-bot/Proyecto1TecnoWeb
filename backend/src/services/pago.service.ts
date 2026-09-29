@@ -6,6 +6,8 @@ import * as pagoModel from '../models/pago.model.js';
 import * as ventaModel from '../models/venta.model.js';
 import * as pedidoModel from '../models/pedido.model.js';
 import * as repartoService from './reparto.service.js';
+import * as comprobanteService from './comprobante.service.js';
+import { enSegundoPlano } from './aviso.service.js';
 import type { PagoConsultado } from '../models/pago.model.js';
 import type { ClientePrisma } from '../models/stock.model.js';
 import { reponerAsignaciones } from './stock.service.js';
@@ -497,6 +499,9 @@ export async function aplicarResultado(
    */
   if (estado === 'Pagado' && idPedidoResuelto !== null) {
     await repartoService.asignarSinRomper(idPedidoResuelto);
+    // Y el cliente recibe su comprobante, como quien paga en el mostrador. En
+    // segundo plano: un correo que tarda o falla no toca el pago confirmado.
+    enSegundoPlano(comprobanteService.enviarAlPagar(idPedidoResuelto, 'pago'));
   }
 
   return conQR(aDTO(await exigirPago(idPago)));

@@ -234,3 +234,70 @@ describe('Cobro creado según el método elegido', () => {
     ]);
   });
 });
+
+/**
+ * La consulta del estado de un cobro, con las respuestas reales de la API
+ * (28-sep-2026). La ruta anterior, `/rest/deuda/consultar`, respondía sin
+ * `estado` y cada consulta terminaba en «Estado de pago no reconocido».
+ */
+describe('Consulta del estado de un cobro en Libélula', () => {
+  const tx = '1b3b29a2-d0ae-4204-8627-b577a142d5b8';
+  const apiKeyPrevia = env.pago.libelula.apiKey;
+  beforeEach(() => {
+    env.pago.libelula.apiKey = 'appkey-de-prueba';
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    env.pago.libelula.apiKey = apiKeyPrevia;
+  });
+
+  const responde = (cuerpo: unknown) =>
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => cuerpo,
+    } as Response);
+
+  const pagoReal = {
+    id_transaccion: tx,
+    identificador: 'PEDIDO-30-C34-9C70B1',
+    fecha_pago: '2026-09-28 20:58:49',
+    moneda: 'BOB',
+    monto_pagado: 0.02,
+    forma_pago: 'ATC QR',
+    pago_anulado: false,
+  };
+
+  it('con un pago registrado, el cobro está pagado', async () => {
+    const llamada = responde({ error: 0, existente: 0, mensaje: '1 pago encontrado.', datos: [pagoReal] });
+
+    expect(await pasarela.consultarEstado(tx)).toBe('Pagado');
+    const [url, opciones] = llamada.mock.calls[0];
+    expect(String(url)).toContain('/rest/deuda/consultar_pagos');
+    expect(JSON.parse(String((opciones as RequestInit).body)).id_transaccion).toBe(tx);
+  });
+
+  it('sin pagos, sigue pendiente: no es un error', async () => {
+    responde({
+      error: 0,
+      existente: 0,
+      mensaje: 'No se han encontrado pagos en el rango de fechas especificado.',
+      datos: [],
+    });
+    expect(await pasarela.consultarEstado(tx)).toBe('Pendiente');
+  });
+
+  it('el pago de otra deuda no cuenta, ni uno anulado', async () => {
+    responde({ error: 0, datos: [{ ...pagoReal, id_transaccion: 'otra-deuda' }] });
+    expect(await pasarela.consultarEstado(tx)).toBe('Pendiente');
+
+    vi.restoreAllMocks();
+    responde({ error: 0, datos: [{ ...pagoReal, pago_anulado: true }] });
+    expect(await pasarela.consultarEstado(tx)).toBe('Pendiente');
+  });
+
+  it('si Libélula rechaza la consulta, se informa en vez de adivinar', async () => {
+    responde({ error: 1, mensaje: 'Debe especificar el parámetro Identificador de deuda.', datos: [] });
+    await expect(pasarela.consultarEstado(tx)).rejects.toThrow('Debe especificar');
+  });
+});

@@ -1,6 +1,8 @@
-import { mensajero, type Adjunto } from '../correo/index.js';
+import { mensajero, type Adjunto, type ResultadoEnvio } from '../correo/index.js';
 import type { EstadoPedido } from '../config/dominio.js';
+import type { ComprobantePedidoDTO } from '../dtos/pedido.dto.js';
 import { bolivianos } from '../utils/dinero.js';
+import * as negocioService from './negocio.service.js';
 
 /**
  * Avisos por correo (RF-PED-08 y los RF de reportes).
@@ -47,6 +49,21 @@ export interface DatosPedidoAviso {
 }
 
 const numeroDe = (id: number) => `#${String(id).padStart(5, '0')}`;
+
+/**
+ * El correo de soporte del negocio (RF-PED-03, editable por el administrador).
+ *
+ * Va como dirección de respuesta de todo correo al cliente: el remitente es la
+ * cuenta que envía, que nadie lee. Si no se puede leer la configuración, el
+ * aviso sale igual, sin dirección de respuesta: un aviso nunca se detiene.
+ */
+async function soporte(): Promise<string | undefined> {
+  try {
+    return (await negocioService.informacion()).correo;
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * Cómo se le explica cada estado a quien espera su pedido.
@@ -118,6 +135,7 @@ export async function pedidoConfirmado(datos: DatosPedidoAviso): Promise<void> {
   await mensajero().enviar({
     // Un aviso de pedido es personal: un solo destinatario.
     para: [datos.correoCliente],
+    responderA: await soporte(),
     asunto: `Recibimos su pedido ${numero}`,
     texto:
       `Hola ${datos.nombreCliente}:\n\n` +
@@ -153,6 +171,7 @@ export async function estadoDePedidoCambio(
   await mensajero().enviar({
     // Un aviso de pedido es personal: un solo destinatario.
     para: [datos.correoCliente],
+    responderA: await soporte(),
     asunto: `${aviso.asunto} · ${numero}`,
     texto: `Hola ${datos.nombreCliente}:\n\n${aviso.cuerpo}\n\nPedido ${numero}\n\n${NOMBRE}`,
     html: plantilla(
@@ -161,6 +180,77 @@ export async function estadoDePedidoCambio(
        <p style="color:#78716c">Pedido ${numero}</p>`,
       'Este es un aviso automático; no hace falta responderlo.',
     ),
+  });
+}
+
+/**
+ * Por qué se manda el comprobante, que cambia el asunto y la primera frase.
+ *
+ * - `pago`: el cliente pagó en línea (QR o tarjeta) y el cobro se confirmó.
+ * - `entrega`: pagó en efectivo al recibir; reemplaza al aviso de entregado,
+ *   para no mandarle dos correos por lo mismo.
+ * - `pedido`: lo pidió él desde «Mis pedidos».
+ */
+export type OcasionComprobante = 'pago' | 'entrega' | 'pedido';
+
+/**
+ * Manda el comprobante de un pedido pagado, con el PDF adjunto.
+ *
+ * Devuelve el resultado en vez de descartarlo: cuando lo pide el cliente, la
+ * pantalla le dice si salió. Cuando se dispara solo, va en segundo plano.
+ */
+export async function comprobanteDePedido(datos: {
+  correo: string;
+  nombre: string;
+  comprobante: ComprobantePedidoDTO;
+  adjunto: Adjunto;
+  ocasion: OcasionComprobante;
+}): Promise<ResultadoEnvio> {
+  const c = datos.comprobante;
+  const total = bolivianos(c.total);
+  const { asunto, primera } = {
+    pago: {
+      asunto: `Comprobante de pago · Pedido ${c.numero.replace('Pedido ', '')}`,
+      primera: `Recibimos su pago de <strong>${total}</strong> con ${c.metodoPago}. Su pedido ya pasa a preparación.`,
+    },
+    entrega: {
+      asunto: `Su pedido fue entregado · ${c.numero.replace('Pedido ', '')}`,
+      primera: `¡Buen provecho! Gracias por elegirnos. Pagó <strong>${total}</strong> en efectivo al recibirlo.`,
+    },
+    pedido: {
+      asunto: `Comprobante del ${c.numero.toLowerCase()}`,
+      primera: `Aquí tiene el comprobante de su pedido por <strong>${total}</strong>.`,
+    },
+  }[datos.ocasion];
+
+  const lineas = c.detalle
+    .map(
+      (l) =>
+        `<tr><td style="padding:.25rem 0">${l.cantidad} × ${l.nombre}</td>` +
+        `<td style="padding:.25rem 0;text-align:right;white-space:nowrap">${bolivianos(l.subtotal)}</td></tr>`,
+    )
+    .join('');
+
+  return mensajero().enviar({
+    para: [datos.correo],
+    responderA: c.soporte,
+    asunto,
+    texto:
+      `Hola ${datos.nombre}:\n\n${primera.replace(/<[^>]+>/g, '')}\n\n` +
+      c.detalle.map((l) => `${l.cantidad} x ${l.nombre}: ${bolivianos(l.subtotal)}`).join('\n') +
+      `\nTotal: ${total}\n\nEl comprobante va adjunto en PDF.\n` +
+      `¿Dudas? Responda este correo o escríbanos a ${c.soporte}.\n\n${NOMBRE}`,
+    html: plantilla(
+      asunto,
+      `<p>Hola ${datos.nombre}:</p><p>${primera}</p>
+       <table style="width:100%;border-collapse:collapse;font-size:.9rem;margin:1rem 0">${lineas}
+         <tr><td style="padding:.5rem 0;border-top:1px solid #e7e5e4;font-weight:600">Total</td>
+             <td style="padding:.5rem 0;border-top:1px solid #e7e5e4;text-align:right;font-weight:600">${total}</td></tr>
+       </table>
+       <p>El comprobante va adjunto en PDF.</p>`,
+      `¿Dudas? Responda este correo o escríbanos a ${c.soporte}.`,
+    ),
+    adjuntos: [datos.adjunto],
   });
 }
 

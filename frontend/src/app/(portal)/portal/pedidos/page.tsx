@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronDown, MapPin, ReceiptText, ShoppingBasket, Wallet, XCircle } from 'lucide-react';
+import { ChevronDown, Mail, MapPin, ReceiptText, ShoppingBasket, Wallet, XCircle } from 'lucide-react';
 import { api, ErrorApi } from '@/lib/api';
 import { useNotificaciones } from '@/components/ui/Notificaciones';
 import { EstadoVacio } from '@/components/ui/EstadoVacio';
@@ -12,6 +12,10 @@ import { Insignia } from '@/components/ui/Insignia';
 import { Boton } from '@/components/ui/Boton';
 import { Dialogo } from '@/components/ui/Dialogo';
 import { DialogoCobro } from '@/components/ventas/DialogoCobro';
+import {
+  DialogoComprobante,
+  enviarComprobantePorCorreo,
+} from '@/components/pedidos/DialogoComprobante';
 import { LineaDeTiempo } from '@/components/pedidos/LineaDeTiempo';
 import { MapaUbicacion } from '@/components/pedidos/MapaUbicacion';
 import { SeguimientoEnVivo } from '@/components/pedidos/SeguimientoEnVivo';
@@ -31,6 +35,9 @@ export default function PaginaMisPedidos() {
   const [cancelando, setCancelando] = useState(false);
   const [cobro, setCobro] = useState<Pago | null>(null);
   const [abriendoCobro, setAbriendoCobro] = useState<number | null>(null);
+  /** El comprobante abierto; `recienPagado` cuando se abre solo tras pagar. */
+  const [comprobante, setComprobante] = useState<{ id: number; recienPagado: boolean } | null>(null);
+  const [enviandoComprobante, setEnviandoComprobante] = useState<number | null>(null);
 
   const cargar = useCallback(async () => {
     try {
@@ -76,6 +83,17 @@ export default function PaginaMisPedidos() {
       notificar('error', e instanceof ErrorApi ? e.message : 'No se pudo abrir el cobro');
     } finally {
       setAbriendoCobro(null);
+    }
+  }
+
+  async function enviarComprobante(pedido: PedidoCliente) {
+    setEnviandoComprobante(pedido.id);
+    try {
+      notificar('exito', await enviarComprobantePorCorreo(pedido.id));
+    } catch (e) {
+      notificar('error', e instanceof ErrorApi ? e.message : 'No se pudo enviar el comprobante');
+    } finally {
+      setEnviandoComprobante(null);
     }
   }
 
@@ -131,8 +149,11 @@ export default function PaginaMisPedidos() {
                 pedido={pedido}
                 indice={indice}
                 abriendoCobro={abriendoCobro === pedido.id}
+                enviandoComprobante={enviandoComprobante === pedido.id}
                 onPagar={() => void retomarPago(pedido)}
                 onCancelar={() => setPorCancelar(pedido)}
+                onVerComprobante={() => setComprobante({ id: pedido.id, recienPagado: false })}
+                onEnviarComprobante={() => void enviarComprobante(pedido)}
               />
             ))}
           </AnimatePresence>
@@ -172,29 +193,59 @@ export default function PaginaMisPedidos() {
           // El estado pudo cambiar mientras el diálogo consultaba la pasarela.
           void cargar();
         }}
-        onPagado={() => notificar('exito', 'Pago acreditado. Su pedido entró a preparación')}
+        onPagado={(pagado) => {
+          // Pagó: como en el mostrador, se le muestra su comprobante (y el
+          // servidor ya se lo manda al correo).
+          setCobro(null);
+          if (pagado.idPedido !== null) setComprobante({ id: pagado.idPedido, recienPagado: true });
+          void cargar();
+        }}
+      />
+
+      <DialogoComprobante
+        idPedido={comprobante?.id ?? null}
+        recienPagado={comprobante?.recienPagado}
+        onCerrar={() => setComprobante(null)}
       />
     </>
   );
+}
+
+/**
+ * Por qué un pedido todavía no tiene comprobante: se emite al pagar, y quien
+ * ve el botón apagado tiene que saber cuándo lo tendrá.
+ */
+function sinComprobante(pedido: PedidoCliente): string {
+  if (pedido.estadoPedido === 'Cancelado') return 'Sin pago, no hay comprobante';
+  if (pedido.metodoPago === 'Efectivo') return 'El comprobante se emite cuando paga al recibirlo';
+  return 'El comprobante se emite cuando se confirma el pago';
 }
 
 function TarjetaPedidoCliente({
   pedido,
   indice,
   abriendoCobro,
+  enviandoComprobante,
   onPagar,
   onCancelar,
+  onVerComprobante,
+  onEnviarComprobante,
 }: {
   pedido: PedidoCliente;
   indice: number;
   abriendoCobro: boolean;
+  enviandoComprobante: boolean;
   onPagar: () => void;
   onCancelar: () => void;
+  onVerComprobante: () => void;
+  onEnviarComprobante: () => void;
 }) {
   const [abierto, setAbierto] = useState(indice === 0);
 
   /** Único estado en el que queda dinero por cobrar en línea. */
   const esperaPago = pedido.estadoPedido === 'Pendiente de pago';
+  /** El comprobante es la constancia de un pago: existe si el pedido está pagado. */
+  const pagado = pedido.estadoPago === 'Pagado';
   const pago = textoDePago(pedido, 'cliente');
 
   const puntoEntrega: Coordenadas | null =
@@ -321,6 +372,28 @@ function TarjetaPedidoCliente({
                     </Boton>
                   )}
 
+                  <Boton
+                    variante="secundario"
+                    tamano="sm"
+                    disabled={!pagado}
+                    title={pagado ? undefined : sinComprobante(pedido)}
+                    onClick={onVerComprobante}
+                    icono={<ReceiptText className="size-3.5" aria-hidden />}
+                  >
+                    Ver comprobante
+                  </Boton>
+                  <Boton
+                    variante="secundario"
+                    tamano="sm"
+                    disabled={!pagado}
+                    title={pagado ? undefined : sinComprobante(pedido)}
+                    cargando={enviandoComprobante}
+                    onClick={onEnviarComprobante}
+                    icono={<Mail className="size-3.5" aria-hidden />}
+                  >
+                    Enviar al correo
+                  </Boton>
+
                   {pedido.cancelable && (
                     <Boton
                       variante="peligro"
@@ -333,6 +406,9 @@ function TarjetaPedidoCliente({
                   )}
                 </div>
               </div>
+              {!pagado && (
+                <p className="text-right text-[11px] text-tinta-tenue">{sinComprobante(pedido)}</p>
+              )}
             </div>
           </motion.div>
         )}

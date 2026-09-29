@@ -18,10 +18,9 @@ import type {
  * Los extremos y los nombres de los campos de **envío** están tomados de la
  * guía de integración pública de Libélula. Lo que sigue marcado como
  * **Verificado contra la API real** (septiembre de 2026): el registro de deuda
- * y los nombres de su respuesta. Queda marcado `CONFIRMAR` lo que no se pudo
- * comprobar sin la guía de integración: el contenido exacto del aviso de pago
- * y la consulta de estado, cuyo parámetro el servidor rechaza con todos los
- * nombres probados.
+ * y los nombres de su respuesta, y la consulta de pagos de una deuda
+ * (`consultarEstado`). Queda marcado `CONFIRMAR` lo que no se pudo comprobar
+ * sin la guía de integración: el contenido exacto del aviso de pago.
  *
  * `CONFIRMAR` son el detalle del aviso de pago,
  * que la guía describe en tablas que no pudieron leerse del PDF público.
@@ -84,6 +83,10 @@ function estadoDelAviso(datos: {
   if (datos.error !== undefined) return String(datos.error) === '0' ? 'Pagado' : 'Fallido';
   return ESTADO_EQUIVALENTE[String(datos.estado ?? '').toUpperCase()];
 }
+
+/** Un «sí» de la pasarela, venga como booleano, número o texto. */
+const esVerdadero = (valor: unknown) =>
+  valor === true || ['1', 'true', 's', 'si', 'sí'].includes(String(valor ?? '').trim().toLowerCase());
 
 const ESTADO_EQUIVALENTE: Record<string, EstadoPago> = {
   PENDIENTE: 'Pendiente',
@@ -367,19 +370,36 @@ export class PasarelaLibelula implements PasarelaPago {
    * Pregunta directamente por el estado del cobro.
    *
    * Es lo que decide si el dinero entró: el aviso solo dispara esta consulta.
-   * CONFIRMAR la ruta y el nombre del campo de estado con la guía.
    */
   async consultarEstado(idTransaccionExterna: string): Promise<EstadoPago> {
-    const datos = (await this.pedir('/rest/deuda/consultar', {
+    /*
+     * Verificado contra la API real (28-sep-2026). `/rest/deuda/consultar`
+     * pide otro parámetro y respondía sin `estado`: cada consulta terminaba en
+     * «Estado de pago no reconocido: undefined», una cada pocos segundos
+     * mientras alguien miraba un cobro. La que responde es
+     * `/rest/deuda/consultar_pagos`, con el mismo `id_transaccion`: devuelve
+     * los **pagos** de la deuda —vacío mientras nadie pagó— con `fecha_pago`,
+     * `monto_pagado`, `forma_pago` y `pago_anulado`.
+     */
+    const respuesta = (await this.pedir('/rest/deuda/consultar_pagos', {
       id_transaccion: idTransaccionExterna,
-    })) as { estado?: string };
+    })) as {
+      error?: number | string;
+      mensaje?: string;
+      datos?: { id_transaccion?: string; pago_anulado?: unknown }[];
+    };
 
-    const estado = ESTADO_EQUIVALENTE[String(datos.estado ?? '').toUpperCase()];
-    if (!estado) {
-      throw new ErrorApp(502, `Estado de pago no reconocido: ${String(datos.estado)}`);
+    if (respuesta.error && String(respuesta.error) !== '0') {
+      throw new ErrorApp(502, `Libélula no pudo consultar el cobro: ${respuesta.mensaje ?? respuesta.error}`);
     }
 
-    // Ya no hay nada que limpiar: el testigo se deriva, no se guarda.
-    return estado;
+    // Solo el pago de esta deuda: si la pasarela devolviera otros, no cuentan.
+    const pago = (respuesta.datos ?? []).find((p) => p.id_transaccion === idTransaccionExterna);
+
+    // Sin pago registrado la deuda sigue abierta («No se han encontrado
+    // pagos»). Un pago anulado tampoco es dinero recibido: queda pendiente y,
+    // si nadie paga, lo cierra el vencimiento.
+    if (!pago || esVerdadero(pago.pago_anulado)) return 'Pendiente';
+    return 'Pagado';
   }
 }

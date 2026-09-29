@@ -77,6 +77,40 @@ export interface PedidoResumenDTO {
   motivoCancelacion: MotivoCancelacion | null;
 }
 
+/**
+ * RF-VEN-06 llevado al pedido: el comprobante del pago.
+ *
+ * Como el de la venta del mostrador, no tiene tabla: presenta lo que ya está
+ * en el pedido y en su cobro. Existe solo para un pedido **pagado** —es la
+ * constancia de un pago—, y lo ve y lo recibe el cliente dueño del pedido.
+ */
+export interface ComprobantePedidoDTO {
+  /** «Pedido #00030», el mismo número que el cliente ve en «Mis pedidos». */
+  numero: string;
+  fecha: string;
+  /** Cuándo se confirmó el pago: al pagar en línea, o al entregar en efectivo. */
+  pagadoEn: string | null;
+  cliente: string;
+  /** La dirección de entrega, en una línea. */
+  entrega: string;
+  metodoPago: MetodoPago;
+  /** Identificador del pago en la pasarela; nulo en efectivo. */
+  referenciaPago: string | null;
+  detalle: LineaPedidoDTO[];
+  cantidadItems: number;
+  total: number;
+  /** El correo de soporte del negocio, que se imprime al pie. */
+  soporte: string;
+}
+
+/** Resultado de mandar el comprobante al correo del cliente. */
+export interface EnvioComprobanteDTO {
+  enviado: boolean;
+  /** Siempre el correo de la cuenta: el destino no se elige, para no servir de spam. */
+  para: string;
+  motivo?: string;
+}
+
 export interface PedidoDetalleDTO extends PedidoResumenDTO {
   referenciaPago: string | null;
   /** Cobro asociado: trae el QR o el enlace que el cliente debe usar. */

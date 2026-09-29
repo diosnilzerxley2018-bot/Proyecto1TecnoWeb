@@ -154,7 +154,12 @@ export async function confirmar(
   const pedido = await detalle(idUsuario, resultado.idPedido);
 
   if (requiereCobroEnLinea(datos.metodoPago)) {
-    pedido.cobro = await abrirCobroDelPedido(resultado.idPago, resultado.idPedido);
+    const quien = await usuarioModel.buscarPorId(idUsuario);
+    pedido.cobro = await abrirCobroDelPedido(
+      resultado.idPago,
+      resultado.idPedido,
+      quien ? { nombre: `${quien.nombre} ${quien.apellido}`.trim(), email: quien.email } : undefined,
+    );
   } else {
     pedido.cobro = await pagoService.dePedido(resultado.idPedido);
     /*
@@ -193,11 +198,18 @@ export async function confirmar(
  * lo cancela y devuelve el stock. Es preferible a perder el pedido entero por
  * una caída ajena.
  */
-async function abrirCobroDelPedido(idPago: number, idPedido: number) {
+async function abrirCobroDelPedido(
+  idPago: number,
+  idPedido: number,
+  cliente?: { nombre: string; email?: string },
+) {
   try {
     const cobro = await pagoService.abrirCobro(idPago, {
       descripcion: `NutriExpress - Pedido ${idPedido}`,
       referenciaInterna: `PEDIDO-${idPedido}`,
+      // Con su nombre y su correo el cobro se reconoce en el panel de la
+      // pasarela; sin ellos figuraba como «Consumidor Final».
+      ...(cliente ? { cliente } : {}),
     });
     await pedidoModel.registrarReferenciaPago(idPedido, cobro.referenciaExterna);
     return cobro;

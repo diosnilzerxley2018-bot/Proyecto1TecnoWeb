@@ -80,6 +80,7 @@ export class MensajeroBrevo implements Mensajero {
           subject: mensaje.asunto,
           textContent: mensaje.texto,
           ...(mensaje.html ? { htmlContent: mensaje.html } : {}),
+          ...(mensaje.responderA ? { replyTo: { email: mensaje.responderA } } : {}),
           // La API recibe el contenido en base64: no hay forma de subir un
           // archivo, y los PDF de los reportes se generan en memoria.
           ...(mensaje.adjuntos?.length

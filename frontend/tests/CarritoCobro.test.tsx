@@ -14,8 +14,8 @@ import { describe, it, expect } from 'vitest';
  */
 
 /** La regla tal como quedó en la pantalla del carrito. */
-const muestraCarritoVacio = (lineas: number, cobro: object | null) =>
-  lineas === 0 && !cobro;
+const muestraCarritoVacio = (lineas: number, cobro: object | null, comprobante: number | null = null) =>
+  lineas === 0 && !cobro && comprobante === null;
 
 describe('Qué se muestra tras confirmar el pedido', () => {
   it('con el carrito vacío y sin cobro, se muestra el estado vacío', () => {
@@ -25,6 +25,11 @@ describe('Qué se muestra tras confirmar el pedido', () => {
   /** El caso que fallaba: se vació el carrito pero hay un código que mostrar. */
   it('con el carrito vacío y un cobro abierto, NO se muestra el estado vacío', () => {
     expect(muestraCarritoVacio(0, { estado: 'Pendiente' })).toBe(false);
+  });
+
+  /** Pagado: el cobro se cerró y se abre el comprobante, con el carrito aún vacío. */
+  it('con el comprobante del pago abierto, tampoco se muestra el estado vacío', () => {
+    expect(muestraCarritoVacio(0, null, 30)).toBe(false);
   });
 
   it('con productos en el carrito nunca se muestra el estado vacío', () => {

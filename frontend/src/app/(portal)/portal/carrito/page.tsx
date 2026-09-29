@@ -7,6 +7,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowLeft, ArrowRight, Banknote, CreditCard, MapPin, Minus, Plus, QrCode, ShoppingBasket, Trash2 } from 'lucide-react';
 import { api, ErrorApi } from '@/lib/api';
 import { DialogoCobro } from '@/components/ventas/DialogoCobro';
+import { DialogoComprobante } from '@/components/pedidos/DialogoComprobante';
 import { SelectorDireccion } from '@/components/pedidos/SelectorDireccion';
 import { useCarrito } from '@/context/CarritoContext';
 import { useNotificaciones } from '@/components/ui/Notificaciones';
@@ -42,6 +43,8 @@ export default function PaginaCarrito() {
   const [destino, setDestino] = useState<DestinoPedido | null>(null);
 
   const [cobro, setCobro] = useState<Pago | null>(null);
+  /** El pedido cuyo comprobante se muestra, apenas se acredita su pago. */
+  const [comprobante, setComprobante] = useState<number | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -103,9 +106,10 @@ export default function PaginaCarrito() {
    * Confirmar el pedido vacía el carrito —el pedido ya existe y reservó su
    * stock—, y sin esta condición la pantalla de «carrito vacío» cortaba el
    * render antes de llegar al diálogo del código de pago: el cliente pagaba a
-   * ciegas o no pagaba.
+   * ciegas o no pagaba. Lo mismo vale para el comprobante que se abre al
+   * acreditarse el pago: el cobro ya se cerró, y el carrito sigue vacío.
    */
-  if (lineas.length === 0 && !cobro) {
+  if (lineas.length === 0 && !cobro && comprobante === null) {
     return (
       <EstadoVacio
         icono={<ShoppingBasket className="size-6" aria-hidden />}
@@ -371,7 +375,22 @@ export default function PaginaCarrito() {
           setCobro(null);
           router.push('/portal/pedidos');
         }}
-        onPagado={() => notificar('exito', 'Pago acreditado. Su pedido entró a preparación')}
+        onPagado={(pagado) => {
+          // Pagó: como en el mostrador, se le muestra su comprobante (y el
+          // servidor ya se lo manda al correo).
+          setCobro(null);
+          setComprobante(pagado.idPedido);
+        }}
+      />
+
+      <DialogoComprobante
+        idPedido={comprobante}
+        recienPagado
+        textoCerrar="Ver mis pedidos"
+        onCerrar={() => {
+          setComprobante(null);
+          router.push('/portal/pedidos');
+        }}
       />
     </>
   );

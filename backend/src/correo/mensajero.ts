@@ -27,6 +27,12 @@ export interface Mensaje {
   /** Cuerpo en HTML. Opcional: sin él se envía solo el texto. */
   html?: string;
   adjuntos?: Adjunto[];
+  /**
+   * A dónde va la respuesta si el destinatario contesta. El remitente es la
+   * cuenta que envía —la del relay—, que nadie lee; el soporte del negocio
+   * sí. Sin esto, «responder» a un comprobante no le llegaba a nadie.
+   */
+  responderA?: string;
 }
 
 export interface Adjunto {

@@ -87,7 +87,9 @@ export const CAMPOS_NEGOCIO: CampoNegocio[] = [
     nombre: 'correo',
     clave: 'NEGOCIO_CORREO',
     etiqueta: 'Correo de contacto',
-    porOmision: 'contacto@nutriexpress.bo',
+    // La casilla de soporte que el negocio lee. Es también la dirección de
+    // respuesta de los correos al cliente (`aviso.service`).
+    porOmision: 'nutriexpress2026@gmail.com',
     maximo: 100,
     buscable: true,
   },

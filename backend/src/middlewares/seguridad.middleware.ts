@@ -32,3 +32,23 @@ export const limiteDeIntentos = rateLimit({
       'Demasiados intentos fallidos desde esta conexión. Espere unos minutos antes de reintentar.',
   },
 });
+
+/**
+ * Límite de envíos de comprobantes por correo, por cuenta.
+ *
+ * El botón «Enviar al correo» de «Mis pedidos» manda un correo de verdad, y la
+ * cuenta que envía (el relay de Gmail) tiene un tope diario. Sin límite, un
+ * cliente que insistiera con el botón gastaría ese tope y dejaría a todos sin
+ * avisos. Cinco cada quince minutos alcanzan para cualquier uso razonable.
+ */
+export const limiteDeEnvios = rateLimit({
+  windowMs: 15 * 60_000,
+  limit: 5,
+  // Por cuenta y no por IP: varios clientes pueden compartir una conexión.
+  keyGenerator: (req) => `cuenta-${req.sesion?.idUsuario ?? 'anonima'}`,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Ya pidió varios envíos seguidos. Espere unos minutos antes de volver a pedirlo.',
+  },
+});
