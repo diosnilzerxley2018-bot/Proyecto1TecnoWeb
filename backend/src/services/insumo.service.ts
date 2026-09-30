@@ -9,7 +9,7 @@ import type {
 } from '../dtos/insumo.dto.js';
 import { ErrorApp } from '../errors/error-app.js';
 import { redondearCantidad } from '../utils/cantidad.js';
-import type { TipoConservacion } from '../config/dominio.js';
+import { UNIDADES_DE_INSUMO, type TipoConservacion } from '../config/dominio.js';
 
 /**
  * CU-INV-01 — Gestionar Insumo.
@@ -53,10 +53,19 @@ async function exigirInsumo(id: number): Promise<InsumoConsultado> {
   return insumo;
 }
 
-/** CU-INV-01, precondición: deben existir unidades de medida registradas. */
+/**
+ * CU-INV-01, precondición: deben existir unidades de medida registradas, y ser
+ * de las que se ofrecen (`UNIDADES_DE_INSUMO`): sin gramo ni mililitro.
+ */
 async function exigirUnidad(idUnidad: number): Promise<void> {
   const unidad = await insumoModel.buscarUnidad(idUnidad);
   if (!unidad) throw new ErrorApp(404, 'La unidad de medida indicada no existe');
+  if (!(UNIDADES_DE_INSUMO as readonly string[]).includes(unidad.nombre)) {
+    throw new ErrorApp(
+      400,
+      'Los insumos se miden en kilogramos, litros o unidades: 125 g se anotan como 0,125 kg',
+    );
+  }
 }
 
 export async function listar(filtro: FiltroInsumosDTO): Promise<InsumoDTO[]> {
@@ -72,7 +81,13 @@ export async function obtener(id: number): Promise<InsumoDTO> {
 }
 
 export async function listarUnidades(): Promise<UnidadMedidaDTO[]> {
-  const unidades = await insumoModel.listarUnidades();
+  const unidades = (await insumoModel.listarUnidades())
+    .filter((u) => (UNIDADES_DE_INSUMO as readonly string[]).includes(u.nombre))
+    .sort(
+      (a, b) =>
+        UNIDADES_DE_INSUMO.indexOf(a.nombre as (typeof UNIDADES_DE_INSUMO)[number]) -
+        UNIDADES_DE_INSUMO.indexOf(b.nombre as (typeof UNIDADES_DE_INSUMO)[number]),
+    );
   return unidades.map((u) => ({
     id: u.id_unidad,
     nombre: u.nombre,

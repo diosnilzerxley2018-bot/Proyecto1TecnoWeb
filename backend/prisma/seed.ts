@@ -323,12 +323,13 @@ async function cargarRepartidor(): Promise<void> {
 }
 
 
-/** Unidades en las que se expresan los insumos (precondición de CU-INV-01). */
+/**
+ * Unidades en las que se expresan los insumos (precondición de CU-INV-01).
+ * Sin gramo ni mililitro: ver `UNIDADES_DE_INSUMO` en `config/dominio.ts`.
+ */
 const UNIDADES = [
   { nombre: 'Kilogramo', abreviatura: 'kg' },
-  { nombre: 'Gramo', abreviatura: 'g' },
   { nombre: 'Litro', abreviatura: 'L' },
-  { nombre: 'Mililitro', abreviatura: 'ml' },
   { nombre: 'Unidad', abreviatura: 'u' },
 ];
 

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import { app } from '../src/app.js';
+import { prisma } from '../src/config/prisma.js';
 import { obtenerToken, registrarCliente, sufijo } from './ayudantes.js';
 
 /**
@@ -31,7 +32,6 @@ async function crearInsumoDePrueba(token: string, extra: Record<string, unknown>
     .send({
       nombre: `Insumo ${sufijo()}`,
       idUnidad: kilogramo.id,
-      costoUnitario: 10,
       stockMinimo: 1,
       ...extra,
     });
@@ -207,32 +207,37 @@ describe('CU-INV-01 Gestionar insumo', () => {
     expect(r.body[0].nombre).toBe('Aceite de oliva');
   });
 
-  it('registra un insumo nuevo', async () => {
+  it('registra un insumo nuevo, sin costo: lo fija su primera compra', async () => {
     const empleado = await tokenEmpleado();
+    // Un costo escrito al darlo de alta no se toma: ninguna compra lo respalda.
     const insumo = await crearInsumoDePrueba(empleado, { costoUnitario: 7.5, stockMinimo: 3 });
 
-    expect(insumo.costoUnitario).toBe(7.5);
+    expect(insumo.costoUnitario).toBe(0);
     expect(insumo.stockMinimo).toBe(3);
     expect(insumo.activo).toBe(true);
     expect(insumo.stockTotal).toBe(0);
   });
 
-  it('rechaza un costo unitario negativo', async () => {
+  it('la primera compra fija el costo, aunque antes haya entrado algo por ajuste', async () => {
     const empleado = await tokenEmpleado();
-    const unidades = await request(app).get('/api/insumos/unidades').set(cabecera(empleado));
+    const admin = await obtenerToken();
+    const insumo = await crearInsumoDePrueba(empleado);
+    const almacenes = await request(app).get('/api/almacenes').set(cabecera(admin));
+    const seco = almacenes.body.find((a: { nombre: string }) => a.nombre === 'Almacen Seco').id;
+    const ingresar = (motivo: string, cantidad: number, costoUnitario: number) =>
+      request(app)
+        .post('/api/ingresos')
+        .set(cabecera(admin))
+        .send({ motivo, insumos: [{ idIngrediente: insumo.id, idAlmacen: seco, cantidad, costoUnitario }] })
+        .expect(201);
 
-    const r = await request(app)
-      .post('/api/insumos')
-      .set(cabecera(empleado))
-      .send({
-        nombre: `Insumo ${sufijo()}`,
-        idUnidad: unidades.body[0].id,
-        costoUnitario: -1,
-        stockMinimo: 0,
-      });
+    // Un recuento encuentra 2 kg: no fija costo.
+    await ingresar('Ajuste', 2, 0);
+    expect((await request(app).get(`/api/insumos/${insumo.id}`).set(cabecera(admin))).body.costoUnitario).toBe(0);
 
-    expect(r.status).toBe(400);
-    expect(r.body.error).toContain('no puede ser negativo');
+    // La compra a Bs 10 es el costo: esos 2 kg sin precio no la abaratan.
+    await ingresar('Compra', 10, 10);
+    expect((await request(app).get(`/api/insumos/${insumo.id}`).set(cabecera(admin))).body.costoUnitario).toBe(10);
   });
 
   it('rechaza un stock mínimo negativo', async () => {
@@ -272,15 +277,40 @@ describe('CU-INV-01 Gestionar insumo', () => {
     const empleado = await tokenEmpleado();
     const quinua = await buscarInsumo(empleado, 'Quinua');
     const unidades = await request(app).get('/api/insumos/unidades').set(cabecera(empleado));
-    const gramo = unidades.body.find((u: { nombre: string }) => u.nombre === 'Gramo');
+    const unidad = unidades.body.find((u: { nombre: string }) => u.nombre === 'Unidad');
 
     const r = await request(app)
       .put(`/api/insumos/${quinua.id}`)
       .set(cabecera(empleado))
-      .send({ idUnidad: gramo.id });
+      .send({ idUnidad: unidad.id });
 
     expect(r.status).toBe(409);
     expect(r.body.error).toContain('unidad de medida');
+  });
+
+  it('ofrece kilogramo, litro y unidad: sin gramo ni mililitro', async () => {
+    const empleado = await tokenEmpleado();
+    const r = await request(app).get('/api/insumos/unidades').set(cabecera(empleado));
+
+    expect(r.body.map((u: { nombre: string }) => u.nombre)).toEqual(['Kilogramo', 'Litro', 'Unidad']);
+  });
+
+  it('rechaza dar de alta un insumo en gramos, donde quedan esas filas', async () => {
+    const empleado = await tokenEmpleado();
+    // Las bases anteriores al cambio todavía tienen la unidad.
+    const gramo = await prisma.unidad_medida.upsert({
+      where: { nombre: 'Gramo' },
+      create: { nombre: 'Gramo', abreviatura: 'g' },
+      update: {},
+    });
+
+    const r = await request(app)
+      .post('/api/insumos')
+      .set(cabecera(empleado))
+      .send({ nombre: `Sal ${sufijo()}`, idUnidad: gramo.id_unidad, stockMinimo: 0 });
+
+    expect(r.status).toBe(400);
+    expect(r.body.error).toContain('0,125 kg');
   });
 
   it('sí permite cambiarla cuando todavía no hay existencias', async () => {

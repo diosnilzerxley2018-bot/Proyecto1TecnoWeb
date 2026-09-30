@@ -76,10 +76,10 @@ export const listar = async (filtro: FiltroInsumos) =>
 export const buscarPorId = (id: number) =>
   prisma.ingrediente.findUnique({ where: { id_ingrediente: id }, select: CAMPOS });
 
+/** Nace sin costo (`costo_unitario` en 0): lo fija su primera compra. */
 export const crear = (datos: {
   nombre: string;
   idUnidad: number;
-  costoUnitario: number;
   stockMinimo: number;
   tipoConservacion: string;
   controlaVencimiento: boolean;
@@ -88,7 +88,6 @@ export const crear = (datos: {
     data: {
       nombre: datos.nombre,
       id_unidad: datos.idUnidad,
-      costo_unitario: datos.costoUnitario,
       stock_minimo: datos.stockMinimo,
       tipo_conservacion: datos.tipoConservacion,
       controla_vencimiento: datos.controlaVencimiento,
@@ -101,7 +100,6 @@ export const actualizar = (
   datos: {
     nombre?: string;
     idUnidad?: number;
-    costoUnitario?: number;
     stockMinimo?: number;
     activo?: boolean;
     tipoConservacion?: string;
@@ -113,7 +111,6 @@ export const actualizar = (
     data: {
       ...(datos.nombre !== undefined ? { nombre: datos.nombre } : {}),
       ...(datos.idUnidad !== undefined ? { id_unidad: datos.idUnidad } : {}),
-      ...(datos.costoUnitario !== undefined ? { costo_unitario: datos.costoUnitario } : {}),
       ...(datos.stockMinimo !== undefined ? { stock_minimo: datos.stockMinimo } : {}),
       ...(datos.activo !== undefined ? { activo: datos.activo } : {}),
       ...(datos.tipoConservacion !== undefined
@@ -154,7 +151,10 @@ export const listarUnidades = () =>
   });
 
 export const buscarUnidad = (id: number) =>
-  prisma.unidad_medida.findUnique({ where: { id_unidad: id }, select: { id_unidad: true } });
+  prisma.unidad_medida.findUnique({
+    where: { id_unidad: id },
+    select: { id_unidad: true, nombre: true },
+  });
 
 export type InsumoConsultado = NonNullable<Awaited<ReturnType<typeof buscarPorId>>>;
 

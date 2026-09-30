@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Lock } from 'lucide-react';
+import { Lock, ReceiptText } from 'lucide-react';
 import { Campo, Interruptor } from '@/components/ui/Campo';
 import { Selector } from '@/components/ui/Selector';
 import { Boton } from '@/components/ui/Boton';
@@ -9,6 +9,7 @@ import { api, ErrorApi } from '@/lib/api';
 import { useNotificaciones } from '@/components/ui/Notificaciones';
 import type { Insumo, TipoConservacion, UnidadMedida } from '@/types';
 import { PASO_CANTIDAD } from '@/lib/dominio';
+import { formatearBs } from '@/lib/formato';
 
 /**
  * Alta y edición de insumos (CU-INV-01).
@@ -17,6 +18,16 @@ import { PASO_CANTIDAD } from '@/lib/dominio';
  * existencias: el stock guardado está expresado en la unidad anterior y
  * cambiarla convertiría 5 kilogramos en 5 gramos sin que nadie lo note. El
  * servidor lo rechaza igualmente; aquí se explica antes de intentarlo.
+ *
+ * No se pide el costo: un insumo nace sin él y lo fija su primera compra, que
+ * es lo que se pagó (`costeo.service`). Pedirlo al darlo de alta era inventar
+ * un precio que la primera compra después pisaba. Al editar se muestra el
+ * costo actual, como dato: lo mueven las compras, no este formulario.
+ *
+ * Las unidades son kilogramo, litro y unidad, las que ofrece el servidor. Sin
+ * gramo ni mililitro: el costo se guarda con dos decimales y la sal a Bs 3 el
+ * kilo costaba Bs 0,00 el gramo. Las cantidades admiten tres decimales, así
+ * que 125 g se anotan como 0,125 kg.
  */
 export function FormularioInsumo({
   insumo,
@@ -34,7 +45,6 @@ export function FormularioInsumo({
   const [unidades, setUnidades] = useState<UnidadMedida[]>([]);
   const [nombre, setNombre] = useState(insumo?.nombre ?? '');
   const [idUnidad, setIdUnidad] = useState<number | null>(insumo?.unidad.id ?? null);
-  const [costo, setCosto] = useState(String(insumo?.costoUnitario ?? ''));
   const [minimo, setMinimo] = useState(String(insumo?.stockMinimo ?? ''));
   const [tipo, setTipo] = useState<TipoConservacion>(insumo?.tipoConservacion ?? 'Seco');
   const [activo, setActivo] = useState(insumo?.activo ?? true);
@@ -47,11 +57,14 @@ export function FormularioInsumo({
     api
       .get<UnidadMedida[]>('/insumos/unidades')
       .then((lista) => {
-        setUnidades(lista);
+        // Un insumo anterior al cambio puede estar en gramos: su unidad se
+        // sigue mostrando, aunque ya no se ofrezca para los nuevos.
+        const propia = insumo?.unidad;
+        setUnidades(propia && !lista.some((u) => u.id === propia.id) ? [...lista, propia] : lista);
         setIdUnidad((actual) => actual ?? lista[0]?.id ?? null);
       })
       .catch(() => notificar('error', 'No se pudieron cargar las unidades de medida'));
-  }, [notificar]);
+  }, [notificar, insumo?.unidad]);
 
   async function enviar(evento: React.FormEvent) {
     evento.preventDefault();
@@ -65,7 +78,6 @@ export function FormularioInsumo({
     const cuerpo = {
       nombre: nombre.trim(),
       idUnidad,
-      costoUnitario: Number(costo || 0),
       stockMinimo: Number(minimo || 0),
       tipoConservacion: tipo,
       controlaVencimiento: perecedero,
@@ -113,7 +125,7 @@ export function FormularioInsumo({
             etiqueta: u.nombre,
             descripcion: u.abreviatura,
           }))}
-          ayuda={bloqueaUnidad ? undefined : 'En qué se mide este insumo'}
+          ayuda={bloqueaUnidad ? undefined : 'En qué se compra: 125 g se anotan como 0,125 kg'}
         />
 
         <Selector<TipoConservacion>
@@ -139,21 +151,6 @@ export function FormularioInsumo({
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Campo
-          etiqueta="Costo unitario"
-          type="number"
-          step="0.01"
-          min="0"
-          required
-          value={costo}
-          onChange={(e) => setCosto(e.target.value)}
-          sufijo="Bs"
-          ayuda={
-            editando
-              ? 'Cada compra lo recalcula con el promedio ponderado'
-              : 'Costo de partida. Cada compra lo irá recalculando'
-          }
-        />
-        <Campo
           etiqueta="Stock mínimo"
           type="number"
           step={PASO_CANTIDAD}
@@ -164,6 +161,22 @@ export function FormularioInsumo({
           sufijo={abreviatura}
           ayuda="Genera la alerta de reposición"
         />
+        <div className="flex items-start gap-2.5 rounded-xl border border-borde bg-white/[0.02] px-3.5 py-3 text-xs leading-relaxed text-tinta-suave">
+          <ReceiptText className="mt-0.5 size-4 shrink-0 text-marca-400" aria-hidden />
+          <p>
+            {insumo && insumo.costoUnitario > 0 ? (
+              <>
+                Cuesta{' '}
+                <strong className="text-tinta">
+                  {formatearBs(insumo.costoUnitario)} por {insumo.unidad.abreviatura}
+                </strong>
+                , el promedio de lo pagado. Lo mueven las compras.
+              </>
+            ) : (
+              'El costo lo fija la primera nota de ingreso por Compra: lo que se pagó por cada unidad.'
+            )}
+          </p>
+        </div>
       </div>
 
       <Interruptor

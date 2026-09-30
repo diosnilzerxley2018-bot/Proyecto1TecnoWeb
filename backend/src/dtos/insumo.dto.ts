@@ -5,17 +5,15 @@ import { TIPOS_CONSERVACION, type TipoConservacion } from '../config/dominio.js'
 
 /** CU-INV-01 — Gestionar Insumo. */
 
-/** NUMERIC(10,2) en el esquema: dos decimales y ocho enteros como máximo. */
-const importe = (etiqueta: string) =>
-  z
-    .number()
-    .min(0, `${etiqueta} no puede ser negativo`)
-    .max(99999999.99, `${etiqueta} excede el máximo admitido`);
-
+/*
+ * El costo no se escribe al dar de alta ni al editar: un insumo nace sin
+ * costo y lo fija su primera compra, que es lo que se pagó
+ * (`costeo.service`). Pedirlo antes era inventar un precio que ninguna
+ * compra respaldaba y que después la primera compra pisaba.
+ */
 export const esquemaCrearInsumo = z.object({
   nombre: z.string().trim().min(2).max(100),
   idUnidad: z.number().int().positive(),
-  costoUnitario: importe('el costo unitario'),
   stockMinimo: cantidadDeInsumoOCero('el stock mínimo'),
   /**
    * CU-INV-02: el tipo de conservación decide en qué almacén puede guardarse.

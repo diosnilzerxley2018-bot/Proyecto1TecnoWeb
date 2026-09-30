@@ -226,6 +226,11 @@ export function revisarLineas(
 function ayudaDeCosto(item: ItemMovible | null, esCompra: boolean): string {
   if (!item) return esCompra ? 'Lo que costó en esta compra' : 'Costo con el que entra al inventario';
   if (item.tipo === 'insumo') {
+    if (item.costoSugerido === null) {
+      return esCompra
+        ? 'Lo que costó en esta compra: será el costo del insumo'
+        : 'Todavía no tiene costo: lo fija su primera compra';
+    }
     return esCompra
       ? 'Lo que costó en esta compra: se promedia con el costo actual del insumo'
       : 'Solo valoriza la nota: el costo del insumo cambia únicamente con una compra';

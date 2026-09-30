@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 import { app } from '../src/app.js';
-import { obtenerToken } from './ayudantes.js';
+import { obtenerToken, sufijo } from './ayudantes.js';
 
 /**
  * Hallazgos H5, H6 y H10 — lo que la corrida dejó registrado.
@@ -271,43 +271,69 @@ describe('H5 · El costo de la corrida queda registrado', () => {
    */
   it('cambiar el costo de un insumo no altera el costo de lo ya producido', async () => {
     const staff = await obtenerToken();
-    const { idReceta } = await recetaDe(staff, 'Barra de avena');
+    const s = sufijo();
+    const cab = cabecera(staff);
+
+    // Insumo, producto y receta propios: el costo de un insumo solo lo mueve
+    // una compra, y comprar avena del seed le cambiaba el costo a las demás
+    // pruebas que la usan.
+    const kg = (await request(app).get('/api/insumos/unidades').set(cab)).body.find(
+      (u: { nombre: string }) => u.nombre === 'Kilogramo',
+    ).id;
+    const seco = (await request(app).get('/api/almacenes').set(cab)).body.find(
+      (a: { nombre: string }) => a.nombre === 'Almacen Seco',
+    ).id;
+    const categoria = (await request(app).get('/api/catalogo/categorias')).body[0].id;
+    const cacao = (
+      await request(app)
+        .post('/api/insumos')
+        .set(cab)
+        .send({ nombre: `Cacao ${s}`, idUnidad: kg, stockMinimo: 0 })
+        .expect(201)
+    ).body.id;
+    const comprar = (cantidad: number, costoUnitario: number) =>
+      request(app)
+        .post('/api/ingresos')
+        .set(cab)
+        .send({
+          motivo: 'Compra',
+          insumos: [{ idIngrediente: cacao, idAlmacen: seco, cantidad, costoUnitario }],
+        })
+        .expect(201);
+    await comprar(10, 20);
+    const bombon = (
+      await request(app)
+        .post('/api/productos')
+        .set(cab)
+        .send({ nombre: `Bombon ${s}`, precioVenta: 30, idCategoria: categoria })
+        .expect(201)
+    ).body.id;
+    const idReceta = (
+      await request(app)
+        .post(`/api/productos/${bombon}/recetas`)
+        .set(cab)
+        .send({
+          nombre: 'Bombón',
+          rendimiento: 1,
+          tiempoPreparacionMinutos: 5,
+          activa: true,
+          insumos: [{ idIngrediente: cacao, cantidadRequerida: 0.5 }],
+        })
+        .expect(201)
+    ).body.id;
 
     const id = await ordenEnProceso(staff, idReceta, 4);
-    const finalizada = await finalizar(staff, id);
-    const costoOriginal = finalizada.body.costoEstimado as number;
-    expect(costoOriginal).toBeGreaterThan(0);
+    const finalizada = await finalizar(staff, id, { idAlmacenDestino: seco });
+    // 4 × 0,5 kg × Bs 20.
+    expect(finalizada.body.costoEstimado).toBe(40);
 
-    // Se duplica el costo de la avena.
-    const insumos = await request(app)
-      .get('/api/insumos')
-      .query({ termino: 'Avena' })
-      .set(cabecera(staff));
-    const avena = insumos.body[0];
+    // Una compra cara sube el costo del cacao: (8 kg × 20 + 1 kg × 200) / 9 = Bs 40.
+    await comprar(1, 200);
+    const cacaoHoy = await request(app).get(`/api/insumos/${cacao}`).set(cab);
+    expect(cacaoHoy.body.costoUnitario).toBe(40);
 
-    const conCosto = (costoUnitario: number) =>
-      request(app)
-        .put(`/api/insumos/${avena.id}`)
-        .set(cabecera(staff))
-        .send({
-          nombre: avena.nombre,
-          idUnidad: avena.unidad.id,
-          costoUnitario,
-          stockMinimo: avena.stockMinimo,
-          tipoConservacion: avena.tipoConservacion,
-          controlaVencimiento: avena.controlaVencimiento,
-        })
-        .expect(200);
-
-    await conCosto(Number(avena.costoUnitario) * 2);
-    try {
-      const despues = await request(app).get(`/api/ordenes/${id}`).set(cabecera(staff));
-      expect(despues.body.costoEstimado).toBeCloseTo(costoOriginal, 2);
-    } finally {
-      // La avena es del seed: ordenes.test calcula con su costo original, y
-      // si este archivo corría antes esperaba Bs 9,88 y obtenía 13,24.
-      await conCosto(Number(avena.costoUnitario));
-    }
+    const despues = await request(app).get(`/api/ordenes/${id}`).set(cab);
+    expect(despues.body.costoEstimado).toBe(40);
   });
 
   it('el reporte de producción usa el costo registrado y cuenta la merma', async () => {

@@ -48,7 +48,11 @@ export function promedioPonderado(
   // compra. Es además el caso del primer reabastecimiento tras agotar el
   // insumo, donde conservar el costo viejo sería quedarse con el precio de
   // una mercadería que ya no está.
-  if (stockPrevio <= 0) return dosDecimales(costoEntrante);
+  //
+  // Tampoco si el insumo todavía no tiene costo: nace sin él y lo fija su
+  // primera compra. Si antes entró algo por ajuste, esas existencias no
+  // tienen precio, y promediarlas en cero abarataría la compra.
+  if (stockPrevio <= 0 || costoPrevio <= 0) return dosDecimales(costoEntrante);
 
   const valorPrevio = stockPrevio * costoPrevio;
   const valorEntrante = cantidadEntrante * costoEntrante;

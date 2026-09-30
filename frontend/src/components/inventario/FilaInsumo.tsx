@@ -65,7 +65,15 @@ export function FilaInsumo({
       </div>
 
       <Celda etiqueta="Costo">
-        <span className="tabular-nums">{formatearBs(insumo.costoUnitario)}</span>
+        {/* Lo fija su primera compra: antes no tiene costo que mostrar. */}
+        {insumo.costoUnitario > 0 ? (
+          <span className="tabular-nums">
+            {formatearBs(insumo.costoUnitario)}
+            <span className="text-tinta-tenue"> /{insumo.unidad.abreviatura}</span>
+          </span>
+        ) : (
+          <span className="text-xs text-tinta-tenue">Sin compras aún</span>
+        )}
       </Celda>
 
       <Celda etiqueta="Mínimo">

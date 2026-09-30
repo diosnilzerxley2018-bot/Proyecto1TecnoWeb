@@ -57,6 +57,19 @@ export type MetodoPago = (typeof METODOS_PAGO)[number];
 export const METODOS_PAGO_VENTA = ['Efectivo', 'QR'] as const satisfies readonly MetodoPago[];
 
 /**
+ * Las unidades en que se da de alta un insumo (CU-INV-01): kilogramo, litro y
+ * unidad. Son las unidades en que se compra.
+ *
+ * Sin gramo ni mililitro, y no es estética. El costo se guarda con dos
+ * decimales (`costo_unitario NUMERIC(10,2)`): la sal a Bs 3 el kilo cuesta
+ * Bs 0,003 el gramo, que se guardaba como Bs 0,00, y la receta salía gratis.
+ * Tampoco hacen falta: las cantidades admiten tres decimales, así que 125 g se
+ * anotan como 0,125 kg y 30 ml como 0,03 L. Las filas siguen en la tabla por
+ * si algún insumo ya las usa; solo no se ofrecen.
+ */
+export const UNIDADES_DE_INSUMO = ['Kilogramo', 'Litro', 'Unidad'] as const;
+
+/**
  * Flujo de estados que puede hacer avanzar el empleado (RF-PED-08):
  * recibido → en preparación → en camino → entregado.
  *

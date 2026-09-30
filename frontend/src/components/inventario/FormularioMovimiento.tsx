@@ -120,7 +120,8 @@ export function FormularioMovimiento({
             nombre: i.activo ? i.nombre : `${i.nombre} (dado de baja)`,
             unidad: i.unidad.abreviatura,
             nombreUnidad: i.unidad.nombre.toLowerCase(),
-            costoSugerido: i.costoUnitario,
+            // Sin compras todavía no tiene costo: no se propone un cero.
+            costoSugerido: i.costoUnitario > 0 ? i.costoUnitario : null,
             costoPendiente: false,
             controlaVencimiento: i.controlaVencimiento,
             tipoConservacion: i.tipoConservacion,

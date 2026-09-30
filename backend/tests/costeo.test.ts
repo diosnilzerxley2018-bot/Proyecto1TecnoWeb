@@ -16,6 +16,11 @@ describe('Promedio ponderado móvil', () => {
     expect(promedioPonderado(0, 5, 4, 12)).toBe(12);
   });
 
+  it('un insumo todavía sin costo toma el de su primera compra', () => {
+    // 2 kg que entraron por ajuste no tienen precio: no abaratan la compra.
+    expect(promedioPonderado(2, 0, 10, 10)).toBe(10);
+  });
+
   it('pesa cada costo por su cantidad, no por su antigüedad', () => {
     // 4 L a Bs 5 y después 5 L a Bs 10 → (20 + 50) / 9
     expect(promedioPonderado(4, 5, 5, 10)).toBe(7.78);
