@@ -89,10 +89,12 @@ export function TarjetaCatalogo({
             {producto.categoria.nombre}
           </span>
           {producto.valorNutricional && (
-            <Insignia tono="aviso">
-              <Flame className="size-3" aria-hidden />
+            // Sobre la foto, como la categoría: una insignia translúcida no se
+            // leía en los temas claros, con la imagen asomando por detrás.
+            <span className="inline-flex items-center gap-1 rounded-lg vidrio px-2 py-1 text-[10px] font-medium text-tinta">
+              <Flame className="size-3 text-aviso" aria-hidden />
               {producto.valorNutricional.calorias} kcal
-            </Insignia>
+            </span>
           )}
         </div>
       </button>

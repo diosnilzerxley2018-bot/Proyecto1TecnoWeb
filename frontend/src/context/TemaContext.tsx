@@ -1,10 +1,17 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import {
+  CLAVE_MODO,
+  CLAVE_TEMA,
+  modoSegunLaHora,
+  TEMA_POR_OMISION,
+  type Modo,
+  type PreferenciaModo,
+  type Tema,
+} from '@/lib/tema';
 
-export type Tema = 'ninos' | 'jovenes' | 'adultos';
-export type Modo = 'dia' | 'noche';
-export type PreferenciaModo = Modo | 'auto';
+export type { Modo, PreferenciaModo, Tema };
 
 interface ContextoTema {
   tema: Tema;
@@ -16,18 +23,6 @@ interface ContextoTema {
 }
 
 const Contexto = createContext<ContextoTema | null>(null);
-
-const CLAVE_TEMA = 'nutriexpress.tema';
-const CLAVE_MODO = 'nutriexpress.modo';
-
-/** Franja diurna: de las 07:00 a las 18:59 del reloj del propio cliente. */
-const HORA_AMANECER = 7;
-const HORA_ANOCHECER = 19;
-
-function modoSegunLaHora(): Modo {
-  const hora = new Date().getHours();
-  return hora >= HORA_AMANECER && hora < HORA_ANOCHECER ? 'dia' : 'noche';
-}
 
 /**
  * RF-WEB-02 — "El sitio debe ofrecer al menos tres temas visuales
@@ -41,10 +36,12 @@ function modoSegunLaHora(): Modo {
  * inferencia.
  *
  * Ambos valores se aplican como atributos en `<html>`, donde el CSS redefine
- * los tokens del sistema de diseño. Ningún componente conoce el tema activo.
+ * los tokens del sistema de diseño —paleta, letra, esquinas, sombras—. Ningún
+ * componente conoce el tema activo. `SCRIPT_TEMA_INICIAL` (`lib/tema.ts`) los
+ * aplica ya antes de pintar; este contexto los mantiene al día después.
  */
 export function TemaProvider({ children }: { children: React.ReactNode }) {
-  const [tema, setTema] = useState<Tema>('jovenes');
+  const [tema, setTema] = useState<Tema>(TEMA_POR_OMISION);
   const [preferencia, setPreferencia] = useState<PreferenciaModo>('auto');
   const [modo, setModo] = useState<Modo>('noche');
 

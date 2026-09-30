@@ -8,10 +8,39 @@ import { useTema, type PreferenciaModo, type Tema } from '@/context/TemaContext'
 import { useCierreAlPulsarFuera, useMenuFlotante } from './usarMenuFlotante';
 import { cn } from '@/lib/cn';
 
-const TEMAS: { valor: Tema; etiqueta: string; icono: typeof Baby; muestra: string }[] = [
-  { valor: 'ninos', etiqueta: 'Niños', icono: Baby, muestra: 'bg-orange-400' },
-  { valor: 'jovenes', etiqueta: 'Jóvenes', icono: GraduationCap, muestra: 'bg-emerald-400' },
-  { valor: 'adultos', etiqueta: 'Adultos', icono: UserRound, muestra: 'bg-blue-400' },
+/*
+ * La muestra de cada tema lleva sus colores literales, no tokens: es la vista
+ * previa de un tema que todavía no está activo, así que no puede leerlos del
+ * tema actual. Son el acento y el fondo nocturno de cada uno (`globals.css`).
+ */
+const TEMAS: {
+  valor: Tema;
+  etiqueta: string;
+  descripcion: string;
+  icono: typeof Baby;
+  muestra: [acento: string, fondo: string];
+}[] = [
+  {
+    valor: 'ninos',
+    etiqueta: 'Niños',
+    descripcion: 'Colores vivos y letra redondeada',
+    icono: Baby,
+    muestra: ['#f97316', '#221a4f'],
+  },
+  {
+    valor: 'jovenes',
+    etiqueta: 'Jóvenes',
+    descripcion: 'Moderno, con toques de neón',
+    icono: GraduationCap,
+    muestra: ['#10b981', '#e879f9'],
+  },
+  {
+    valor: 'adultos',
+    etiqueta: 'Adultos',
+    descripcion: 'Sobrio, cálido y con serifa',
+    icono: UserRound,
+    muestra: ['#c29a4c', '#1a1917'],
+  },
 ];
 
 const MODOS: { valor: PreferenciaModo; etiqueta: string; icono: typeof Sun }[] = [
@@ -20,7 +49,7 @@ const MODOS: { valor: PreferenciaModo; etiqueta: string; icono: typeof Sun }[] =
   { valor: 'noche', etiqueta: 'Noche', icono: Moon },
 ];
 
-const ANCHO = 240;
+const ANCHO = 264;
 
 /**
  * RF-WEB-02 — selección de tema visual y de modo día / noche.
@@ -68,12 +97,23 @@ export function SelectorTema({ compacto = false }: { compacto?: boolean }) {
               onClick={() => cambiarTema(opcion.valor)}
               className={cn(
                 'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors',
-                elegido ? 'bg-white/[0.06] text-tinta' : 'text-tinta-suave hover:bg-white/[0.04]',
+                elegido ? 'bg-superficie-suave text-tinta' : 'text-tinta-suave hover:bg-superficie-alta',
               )}
             >
               <Icono className="size-4 shrink-0" aria-hidden />
-              <span className="flex-1 text-left">{opcion.etiqueta}</span>
-              <span className={cn('size-3 rounded-full', opcion.muestra)} aria-hidden />
+              <span className="flex-1 text-left">
+                {opcion.etiqueta}
+                <span className="block text-[11px] leading-snug text-tinta-tenue">
+                  {opcion.descripcion}
+                </span>
+              </span>
+              <span
+                className="size-4 shrink-0 rounded-full ring-1 ring-borde-fuerte"
+                style={{
+                  background: `linear-gradient(135deg, ${opcion.muestra[0]} 50%, ${opcion.muestra[1]} 50%)`,
+                }}
+                aria-hidden
+              />
               {elegido && <Check className="size-3.5 text-marca-400" aria-hidden />}
             </button>
           );
@@ -94,7 +134,7 @@ export function SelectorTema({ compacto = false }: { compacto?: boolean }) {
               onClick={() => cambiarPreferencia(opcion.valor)}
               className={cn(
                 'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors',
-                elegido ? 'bg-white/[0.06] text-tinta' : 'text-tinta-suave hover:bg-white/[0.04]',
+                elegido ? 'bg-superficie-suave text-tinta' : 'text-tinta-suave hover:bg-superficie-alta',
               )}
             >
               <Icono className="size-4 shrink-0" aria-hidden />

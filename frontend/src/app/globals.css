@@ -5,20 +5,25 @@
 /* ------------------------------------------------------------------ */
 
 @theme {
+  /*
+   * Los valores de aquí son los de Jóvenes de noche, el tema por omisión. Los
+   * demás temas y el modo día los redefinen más abajo (RF-WEB-02).
+   */
+
   /* Superficies: del fondo más profundo al panel más elevado */
-  --color-fondo: #07090c;
-  --color-superficie: #0d1117;
-  --color-superficie-alta: #141a22;
-  --color-superficie-suave: #1a222c;
+  --color-fondo: #06070d;
+  --color-superficie: #0d0f17;
+  --color-superficie-alta: #141724;
+  --color-superficie-suave: #1b1f2f;
 
   /* Bordes y separadores */
   --color-borde: rgba(255, 255, 255, 0.08);
   --color-borde-fuerte: rgba(255, 255, 255, 0.14);
 
   /* Texto */
-  --color-tinta: #e8edf4;
-  --color-tinta-suave: #9aa7b8;
-  --color-tinta-tenue: #64748b;
+  --color-tinta: #eef1fb;
+  --color-tinta-suave: #a0a9c2;
+  --color-tinta-tenue: #646d87;
 
   /* Acento de marca */
   --color-marca-300: #6ee7b7;
@@ -31,8 +36,8 @@
   /* Semánticos */
   --color-aviso: #fbbf24;
   --color-peligro: #f87171;
-  --color-info: #60a5fa;
-  --color-violeta: #a78bfa;
+  --color-info: #22d3ee;
+  --color-violeta: #e879f9;
 
   --radius-xl2: 1rem;
 
@@ -62,11 +67,14 @@ html[data-modo='dia'] {
 body {
   background-color: var(--color-fondo);
   color: var(--color-tinta);
-  font-family: var(--font-sans), system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: var(--fuente-texto);
   -webkit-font-smoothing: antialiased;
 }
 
-/* Textura de fondo: dos halos muy tenues, para que el negro no sea plano */
+/*
+ * Textura de fondo: el patrón del tema (los puntos de Niños) y dos halos de
+ * su paleta. Cada tema define los tres; Adultos casi no los usa.
+ */
 body::before {
   content: "";
   position: fixed;
@@ -74,8 +82,9 @@ body::before {
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(60rem 40rem at 15% -10%, rgba(16, 185, 129, 0.07), transparent 60%),
-    radial-gradient(50rem 35rem at 95% 5%, rgba(96, 165, 250, 0.05), transparent 55%);
+    var(--patron) 0 0 / 22px 22px,
+    radial-gradient(60rem 40rem at 15% -10%, var(--halo-1), transparent 60%),
+    radial-gradient(50rem 35rem at 95% 5%, var(--halo-2), transparent 55%);
 }
 
 /* ------------------------------------------------------------------ */
@@ -138,11 +147,18 @@ input[type="number"] {
   textarea::placeholder {
     color: var(--color-tinta-tenue);
   }
+
+  /* Los títulos llevan la letra de título del tema: la serifa de Adultos. */
+  h1,
+  h2,
+  h3 {
+    font-family: var(--fuente-titulo);
+  }
 }
 
 ::selection {
-  background: rgba(16, 185, 129, 0.28);
-  color: #fff;
+  background: color-mix(in srgb, var(--color-marca-500) 30%, transparent);
+  color: var(--color-tinta);
 }
 
 :focus-visible {
@@ -155,7 +171,8 @@ input[type="number"] {
 /* ------------------------------------------------------------------ */
 
 @utility vidrio {
-  background-color: rgba(20, 26, 34, 0.72);
+  /* Del color del tema, no de un gris fijo: en Niños el cristal es índigo. */
+  background-color: color-mix(in srgb, var(--color-superficie-alta) 78%, transparent);
   backdrop-filter: blur(16px) saturate(140%);
   border: 1px solid var(--color-borde);
 }
@@ -167,7 +184,8 @@ input[type="number"] {
     rgba(255, 255, 255, 0)
   );
   background-color: var(--color-superficie);
-  border: 1px solid var(--color-borde);
+  border: var(--borde-tarjeta) solid var(--color-borde);
+  box-shadow: var(--sombra-tarjeta);
 }
 
 /* Respeto por quien pide menos movimiento */
@@ -185,69 +203,216 @@ input[type="number"] {
 /* RF-WEB-02 · Temas visuales y modo día / noche                       */
 /* ------------------------------------------------------------------ */
 /*
- * Dos ejes independientes, no seis combinaciones escritas a mano:
+ * Dos ejes: `data-tema` (niños, jóvenes, adultos) y `data-modo` (día, noche),
+ * los dos en `<html>`.
  *
- *   `data-tema` cambia únicamente el acento de marca (niños, jóvenes,
- *   adultos), y `data-modo` cambia únicamente las superficies y la tinta.
+ * Un tema no es solo un acento. Antes cambiaba únicamente el color de marca y
+ * los tres se veían casi iguales; ahora cada uno tiene su identidad entera:
+ * la paleta —fondo, superficies y tinta teñidos con su propio matiz, y sus
+ * acentos—, la letra, la redondez de las esquinas, la sombra de tarjetas y
+ * botones, y la textura del fondo. Cada tema declara su versión de noche y la
+ * de día.
  *
- * Al ser ortogonales, tres bloques más dos cubren las seis apariencias, y
- * todo el sistema de diseño se repinta solo porque cada componente consume
- * los tokens en lugar de colores literales.
+ * Los componentes no saben qué tema está activo: consumen tokens
+ * (`bg-superficie`, `text-marca-300`, `rounded-xl`, `shadow-(--sombra-boton)`)
+ * y Tailwind 4 los resuelve con variables, así que redefinirlas aquí repinta
+ * todo el sistema. Los radios son los de Tailwind (`--radius-lg`, `-xl`,
+ * `-2xl`): cambiarlos cambia cada `rounded-*`.
+ *
+ * En modo día los tonos 300 y 400 del acento se oscurecen: son los que se
+ * usan como texto, y un verde claro sobre blanco no se lee.
  */
 
-/* --- Acento por tema --- */
+/* --- Jóvenes · moderno, con neón (el tema por omisión) --- */
 
-:root[data-tema='ninos'] {
-  --color-marca-300: #fdba74;
-  --color-marca-400: #fb923c;
-  --color-marca-500: #f97316;
-  --color-marca-600: #ea580c;
-  --color-violeta: #f472b6;
-  --color-info: #22d3ee;
-  --radius-xl2: 1.5rem;
+:root {
+  --fuente-texto: var(--fuente-outfit), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --fuente-titulo: var(--fuente-outfit), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --radius-lg: 0.625rem;
+  --radius-xl: 0.875rem;
+  --radius-2xl: 1.125rem;
+  --borde-tarjeta: 1px;
+  --patron: none;
+  --halo-1: rgba(16, 185, 129, 0.11);
+  --halo-2: rgba(232, 121, 249, 0.09);
+  --sombra-tarjeta: 0 18px 40px -30px rgba(16, 185, 129, 0.45);
+  --sombra-boton: 0 8px 24px -8px color-mix(in srgb, var(--color-marca-500) 60%, transparent);
+  --sombra-boton-hover: 0 10px 30px -8px color-mix(in srgb, var(--color-marca-500) 75%, transparent);
 }
-
-:root[data-tema='adultos'] {
-  --color-marca-300: #93c5fd;
-  --color-marca-400: #60a5fa;
-  --color-marca-500: #3b82f6;
-  --color-marca-600: #2563eb;
-  --color-violeta: #818cf8;
-}
-
-/* --- Superficies por modo --- */
 
 :root[data-modo='dia'] {
-  --color-fondo: #f6f8fa;
+  --color-fondo: #f3f6fb;
   --color-superficie: #ffffff;
-  --color-superficie-alta: #f2f5f8;
-  --color-superficie-suave: #e9eef3;
+  --color-superficie-alta: #eef2f8;
+  --color-superficie-suave: #e5ebf3;
 
   --color-borde: rgba(15, 23, 42, 0.1);
   --color-borde-fuerte: rgba(15, 23, 42, 0.18);
 
-  --color-tinta: #0f172a;
-  --color-tinta-suave: #475569;
-  --color-tinta-tenue: #94a3b8;
+  --color-tinta: #0b1020;
+  --color-tinta-suave: #455069;
+  --color-tinta-tenue: #8a93a8;
+
+  --color-marca-300: #047857;
+  --color-marca-400: #059669;
+  --color-aviso: #b45309;
+  --color-peligro: #dc2626;
+  --color-info: #0891b2;
+  --color-violeta: #c026d3;
+
+  --halo-1: rgba(16, 185, 129, 0.12);
+  --halo-2: rgba(232, 121, 249, 0.1);
+  --sombra-tarjeta: 0 1px 2px rgba(15, 23, 42, 0.06), 0 12px 28px -24px rgba(15, 23, 42, 0.35);
 }
 
-/* En modo día las superficies son claras: el degradado de luz cenital y el
-   cristal deben oscurecer en lugar de aclarar, o las tarjetas desaparecen. */
+/* --- Niños · juguetón y luminoso --- */
+
+:root[data-tema='ninos'] {
+  /* De noche, un cielo estrellado: índigo profundo con naranja, rosa y celeste. */
+  --color-fondo: #110c2a;
+  --color-superficie: #1a1440;
+  --color-superficie-alta: #221a4f;
+  --color-superficie-suave: #2b2260;
+  --color-borde: rgba(199, 186, 255, 0.14);
+  --color-borde-fuerte: rgba(199, 186, 255, 0.26);
+  --color-tinta: #fbf7ff;
+  --color-tinta-suave: #cbc1ec;
+  --color-tinta-tenue: #9186bd;
+
+  --color-marca-300: #fdba74;
+  --color-marca-400: #fb923c;
+  --color-marca-500: #f97316;
+  --color-marca-600: #ea580c;
+  /* Texto oscuro sobre el naranja: el blanco no llegaba al contraste mínimo. */
+  --color-sobre-marca: #2a1003;
+  --color-aviso: #facc15;
+  --color-peligro: #fb7185;
+  --color-info: #38bdf8;
+  --color-violeta: #f472b6;
+
+  --fuente-texto: var(--fuente-nunito), system-ui, sans-serif;
+  --fuente-titulo: var(--fuente-nunito), system-ui, sans-serif;
+  --radius-lg: 0.875rem;
+  --radius-xl: 1.25rem;
+  --radius-2xl: 1.75rem;
+  --radius-xl2: 1.75rem;
+  --borde-tarjeta: 2px;
+  --patron: radial-gradient(circle, rgba(255, 255, 255, 0.08) 1.2px, transparent 1.7px);
+  --halo-1: rgba(249, 115, 22, 0.2);
+  --halo-2: rgba(56, 189, 248, 0.17);
+  --sombra-tarjeta: 0 12px 26px -18px rgba(249, 115, 22, 0.6);
+  /* Botón de «caramelo»: una base sólida debajo, como si se pudiera apretar. */
+  --sombra-boton: 0 4px 0 0 var(--color-marca-600);
+  --sombra-boton-hover: 0 5px 0 0 var(--color-marca-600);
+}
+
+:root[data-tema='ninos'][data-modo='dia'] {
+  /* De día, un patio soleado: crema, tinta lila y naranja. */
+  --color-fondo: #fff6ea;
+  --color-superficie: #ffffff;
+  --color-superficie-alta: #fff0dc;
+  --color-superficie-suave: #ffe6c7;
+  --color-borde: rgba(124, 45, 18, 0.14);
+  --color-borde-fuerte: rgba(124, 45, 18, 0.26);
+  --color-tinta: #2d1b45;
+  --color-tinta-suave: #634d7d;
+  --color-tinta-tenue: #9a88ad;
+
+  --color-marca-300: #c2410c;
+  --color-marca-400: #ea580c;
+  --color-marca-500: #f97316;
+  --color-marca-600: #c2410c;
+  --color-aviso: #b45309;
+  --color-peligro: #e11d48;
+  --color-info: #0284c7;
+  --color-violeta: #db2777;
+
+  --patron: radial-gradient(circle, rgba(234, 88, 12, 0.12) 1.2px, transparent 1.7px);
+  --halo-1: rgba(249, 115, 22, 0.16);
+  --halo-2: rgba(56, 189, 248, 0.18);
+  --sombra-tarjeta: 0 12px 26px -18px rgba(234, 88, 12, 0.45);
+}
+
+/* --- Adultos · sobrio y cálido --- */
+
+:root[data-tema='adultos'] {
+  /* De noche, carbón cálido con dorado; salvia y azul acero de apoyo. */
+  --color-fondo: #121110;
+  --color-superficie: #1a1917;
+  --color-superficie-alta: #22201d;
+  --color-superficie-suave: #2a2824;
+  --color-borde: rgba(255, 240, 214, 0.09);
+  --color-borde-fuerte: rgba(255, 240, 214, 0.16);
+  --color-tinta: #f1ece3;
+  --color-tinta-suave: #b3a998;
+  --color-tinta-tenue: #7c7364;
+
+  --color-marca-300: #e6cb92;
+  --color-marca-400: #d6b06b;
+  --color-marca-500: #c29a4c;
+  --color-marca-600: #a17d35;
+  --color-sobre-marca: #1d1506;
+  --color-aviso: #e3b35b;
+  --color-peligro: #e07b6a;
+  --color-info: #8fb2c8;
+  --color-violeta: #a9b78e;
+
+  --fuente-texto: var(--fuente-source), system-ui, sans-serif;
+  --fuente-titulo: var(--fuente-lora), Georgia, "Times New Roman", serif;
+  --radius-lg: 0.375rem;
+  --radius-xl: 0.5rem;
+  --radius-2xl: 0.625rem;
+  --radius-xl2: 0.5rem;
+  --borde-tarjeta: 1px;
+  --patron: none;
+  --halo-1: rgba(194, 154, 76, 0.06);
+  --halo-2: transparent;
+  --sombra-tarjeta: none;
+  --sombra-boton: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --sombra-boton-hover: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+:root[data-tema='adultos'][data-modo='dia'] {
+  /* De día, marfil: como papel, con tinta sepia y dorado viejo. */
+  --color-fondo: #f5f1e8;
+  --color-superficie: #fffdf8;
+  --color-superficie-alta: #f0eadf;
+  --color-superficie-suave: #e7dfd1;
+  --color-borde: rgba(64, 48, 20, 0.12);
+  --color-borde-fuerte: rgba(64, 48, 20, 0.22);
+  --color-tinta: #231d15;
+  --color-tinta-suave: #5d5345;
+  --color-tinta-tenue: #978b79;
+
+  --color-marca-300: #7d5f22;
+  --color-marca-400: #93722c;
+  --color-marca-500: #b08a3e;
+  --color-marca-600: #8a6a28;
+  --color-aviso: #a16207;
+  --color-peligro: #b42318;
+  --color-info: #3f6f8f;
+  --color-violeta: #5f7a4a;
+
+  --halo-1: rgba(176, 138, 62, 0.07);
+  --sombra-tarjeta: 0 1px 2px rgba(64, 48, 20, 0.08);
+  --sombra-boton: 0 1px 2px rgba(64, 48, 20, 0.25);
+  --sombra-boton-hover: 0 2px 8px rgba(64, 48, 20, 0.25);
+}
+
+/* --- Lo que el modo día cambia en todos los temas --- */
+
+/* En modo día las superficies son claras: el degradado de luz cenital debe
+   oscurecer en lugar de aclarar, o las tarjetas desaparecen. */
 :root[data-modo='dia'] .superficie-tarjeta {
   background-image: linear-gradient(
     to bottom,
     rgba(15, 23, 42, 0.02),
     rgba(15, 23, 42, 0)
   );
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
-}
-
-:root[data-modo='dia'] .vidrio {
-  background-color: rgba(255, 255, 255, 0.82);
 }
 
 :root[data-modo='dia'] body::before {
-  opacity: 0.5;
+  opacity: 0.7;
 }
 
 :root[data-modo='dia'] ::-webkit-scrollbar-thumb {
@@ -259,13 +424,6 @@ input[type="number"] {
 :root[data-modo='dia'] input:-webkit-autofill:hover,
 :root[data-modo='dia'] input:-webkit-autofill:focus {
   -webkit-box-shadow: 0 0 0 1000px var(--color-superficie-alta) inset;
-}
-
-/* El texto sobre el acento se define por token para que cada tema elija el
-   contraste correcto sin tocar los componentes. */
-:root[data-tema='ninos'],
-:root[data-tema='adultos'] {
-  --color-sobre-marca: #ffffff;
 }
 
 /* ------------------------------------------------------------------ */

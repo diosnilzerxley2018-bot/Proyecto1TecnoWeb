@@ -9,8 +9,9 @@ type Tamano = 'sm' | 'md' | 'lg' | 'icono';
 
 const VARIANTES: Record<Variante, string> = {
   primario:
-    'bg-marca-500 text-sobre-marca font-semibold shadow-[0_8px_24px_-8px_rgba(16,185,129,0.6)] ' +
-    'hover:bg-marca-400 hover:shadow-[0_10px_30px_-8px_rgba(16,185,129,0.75)]',
+    // La sombra es del tema: brillo en Jóvenes, «caramelo» en Niños, discreta en Adultos.
+    'bg-marca-500 text-sobre-marca font-semibold shadow-(--sombra-boton) ' +
+    'hover:bg-marca-400 hover:shadow-(--sombra-boton-hover)',
   secundario:
     'bg-superficie-suave text-tinta border border-borde hover:bg-superficie-alta hover:border-borde-fuerte',
   contorno:
