@@ -30,6 +30,8 @@ Puesta en marcha desde cero: `createdb nutriexpress` → `psql -d nutriexpress -
 
 Usuarios del seed: `admin / Admin1234!` (todos los permisos) y `repartidor / Reparto1234!`.
 
+`npm run db:catalogo` (`prisma/catalogo.ts`) carga el catálogo de demostración de un solo local —bebidas, ensaladas y platos con receta y foto (CC0, `prisma/catalogo/CREDITOS.md`)— y lleva las existencias a cantidades creíbles. No escribe en las tablas: usa los servicios, así que compra lo que falta, elabora con órdenes de producción y descuenta lo que sobra con un egreso por Ajuste, y cada cifra queda con su nota. Es idempotente y no pisa fotos ni recetas que ya existan.
+
 `node crear-usuarios-prueba.mjs` (en `backend/`, fuera del sistema y borrable) agrega un usuario por tipo de cuenta —`vendedor`, `cocinero`, `almacenero`, `cliente`— para probar la gestión sin tocar al administrador. Es idempotente.
 
 ### Frontend (`cd frontend`)
