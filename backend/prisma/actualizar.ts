@@ -152,6 +152,87 @@ const AJUSTES: Ajuste[] = [
       `CREATE INDEX IF NOT EXISTS ix_recuperacion_usuario ON recuperacion_contrasena(id_usuario)`,
     ],
   },
+  {
+    nombre: 'motivos Devolución al proveedor (egreso) y Reposición (ingreso)',
+    sentencias: [
+      `ALTER TABLE nota_ingreso DROP CONSTRAINT IF EXISTS ck_notaing_motivo`,
+      `ALTER TABLE nota_ingreso ADD CONSTRAINT ck_notaing_motivo
+         CHECK (motivo IN ('Compra','Produccion','Ajuste','Devolucion','Reposicion'))`,
+      `ALTER TABLE nota_egreso DROP CONSTRAINT IF EXISTS ck_notaegr_motivo`,
+      `ALTER TABLE nota_egreso ADD CONSTRAINT ck_notaegr_motivo
+         CHECK (motivo IN ('Produccion','Merma','Ajuste','Devolucion'))`,
+    ],
+  },
+  {
+    nombre: 'costo_unitario de lo vendido — la ganancia de ventas y pedidos',
+    /*
+     * Lo vendido antes de este ajuste no guardó su costo. Se completa **una
+     * sola vez**, al crear la columna, con el costo promedio de hoy: es la
+     * mejor estimación disponible. Por eso el relleno vive dentro del mismo
+     * `IF NOT EXISTS`: repetir el script no vuelve a tocar nada, y una venta
+     * posterior sin costo —la de un producto que aún no lo tenía— no se
+     * rellena después con un costo que no era el suyo.
+     */
+    sentencias: ['detalle_venta', 'detalle_pedido'].flatMap((tabla) => [
+      `DO $$
+       BEGIN
+         IF NOT EXISTS (
+           SELECT 1 FROM information_schema.columns
+            WHERE table_schema = current_schema()
+              AND table_name = '${tabla}' AND column_name = 'costo_unitario'
+         ) THEN
+           ALTER TABLE ${tabla} ADD COLUMN costo_unitario NUMERIC(10,2);
+           UPDATE ${tabla} d
+              SET costo_unitario = c.costo
+             FROM (SELECT id_producto,
+                          ROUND(SUM(cantidad * costo_unitario) / SUM(cantidad), 2) AS costo
+                     FROM detalle_ingreso_producto
+                    GROUP BY id_producto) c
+            WHERE c.id_producto = d.id_producto;
+         END IF;
+       END $$`,
+    ]).concat([
+      `ALTER TABLE detalle_venta DROP CONSTRAINT IF EXISTS ck_detventa_costo`,
+      `ALTER TABLE detalle_venta ADD CONSTRAINT ck_detventa_costo
+         CHECK (costo_unitario IS NULL OR costo_unitario >= 0)`,
+      `ALTER TABLE detalle_pedido DROP CONSTRAINT IF EXISTS ck_detpedido_costo`,
+      `ALTER TABLE detalle_pedido ADD CONSTRAINT ck_detpedido_costo
+         CHECK (costo_unitario IS NULL OR costo_unitario >= 0)`,
+    ]),
+  },
+  {
+    nombre: 'detalle_ingreso_insumo.id_lote — cada ingreso de un perecedero dice a qué lote entró',
+    /*
+     * El relleno, también una sola vez, enlaza lo que se puede deducir sin
+     * adivinar: el lote se crea en la misma transacción que la nota, así que
+     * comparte su marca de tiempo. Si hay más de un candidato no se enlaza.
+     */
+    sentencias: [
+      `DO $$
+       BEGIN
+         IF NOT EXISTS (
+           SELECT 1 FROM information_schema.columns
+            WHERE table_schema = current_schema()
+              AND table_name = 'detalle_ingreso_insumo' AND column_name = 'id_lote'
+         ) THEN
+           ALTER TABLE detalle_ingreso_insumo ADD COLUMN id_lote INT;
+           UPDATE detalle_ingreso_insumo d
+              SET id_lote = l.id_lote
+             FROM nota_ingreso n, lote l
+            WHERE n.id_nota_ingreso = d.id_nota_ingreso
+              AND l.id_ingrediente = d.id_ingrediente
+              AND l.fecha_registro = n.fecha
+              AND (SELECT count(*) FROM lote l2
+                    WHERE l2.id_ingrediente = d.id_ingrediente
+                      AND l2.fecha_registro = n.fecha) = 1;
+         END IF;
+       END $$`,
+      `ALTER TABLE detalle_ingreso_insumo DROP CONSTRAINT IF EXISTS fk_detingins_lote`,
+      `ALTER TABLE detalle_ingreso_insumo ADD CONSTRAINT fk_detingins_lote
+         FOREIGN KEY (id_lote) REFERENCES lote(id_lote)`,
+      `CREATE INDEX IF NOT EXISTS ix_detingins_lote ON detalle_ingreso_insumo(id_lote)`,
+    ],
+  },
 ];
 
 const url = process.env.DATABASE_URL;

@@ -245,7 +245,10 @@ CREATE TABLE nota_ingreso (
     total               NUMERIC(12,2) NOT NULL DEFAULT 0,
     id_empleado         INT NOT NULL,
     CONSTRAINT fk_notaing_empleado FOREIGN KEY (id_empleado) REFERENCES empleado(id_empleado),
-    CONSTRAINT ck_notaing_motivo CHECK (motivo IN ('Compra','Produccion','Ajuste','Devolucion'))
+    -- Produccion solo lo escribe la orden al finalizarse. Devolucion es lo que
+    -- vuelve del cliente; Reposicion, lo que el proveedor repone de lo que se
+    -- le devolvio, sin nuevo pago.
+    CONSTRAINT ck_notaing_motivo CHECK (motivo IN ('Compra','Produccion','Ajuste','Devolucion','Reposicion'))
 );
 
 CREATE TABLE detalle_ingreso_insumo (
@@ -254,6 +257,9 @@ CREATE TABLE detalle_ingreso_insumo (
     id_almacen      INT NOT NULL,
     cantidad        NUMERIC(12,3) NOT NULL,
     costo_unitario  NUMERIC(10,2) NOT NULL,
+    -- El lote de vencimiento al que entro, si el insumo es perecedero. Su
+    -- clave foranea se declara junto a la tabla lote, que se crea despues.
+    id_lote         INT,
     PRIMARY KEY (id_nota_ingreso, id_ingrediente, id_almacen),
     CONSTRAINT fk_detingins_nota FOREIGN KEY (id_nota_ingreso) REFERENCES nota_ingreso(id_nota_ingreso),
     CONSTRAINT fk_detingins_stock FOREIGN KEY (id_ingrediente, id_almacen)
@@ -281,7 +287,9 @@ CREATE TABLE nota_egreso (
     observacion     VARCHAR(200),
     id_empleado     INT NOT NULL,
     CONSTRAINT fk_notaegr_empleado FOREIGN KEY (id_empleado) REFERENCES empleado(id_empleado),
-    CONSTRAINT ck_notaegr_motivo CHECK (motivo IN ('Produccion','Merma','Ajuste'))
+    -- Devolucion es lo que se le devuelve al proveedor: vencido, danado o
+    -- equivocado. Lo repone despues con una nota de ingreso por Reposicion.
+    CONSTRAINT ck_notaegr_motivo CHECK (motivo IN ('Produccion','Merma','Ajuste','Devolucion'))
 );
 
 CREATE TABLE detalle_egreso_insumo (
@@ -363,11 +371,17 @@ CREATE TABLE detalle_venta (
     id_almacen      INT NOT NULL,
     cantidad        INT NOT NULL,
     precio_unitario NUMERIC(10,2) NOT NULL,
+    -- Lo que le costaba al negocio al venderse: el costo promedio del
+    -- producto en ese momento. Se guarda, como el precio, para que la
+    -- ganancia de un periodo no cambie con las compras posteriores. Nulo si
+    -- el producto todavia no tenia costo.
+    costo_unitario  NUMERIC(10,2),
     PRIMARY KEY (id_venta, id_producto, id_almacen),
     CONSTRAINT fk_detventa_venta FOREIGN KEY (id_venta) REFERENCES venta(id_venta),
     CONSTRAINT fk_detventa_stock FOREIGN KEY (id_producto, id_almacen)
         REFERENCES producto_almacen(id_producto, id_almacen),
-    CONSTRAINT ck_detventa_cant CHECK (cantidad > 0)
+    CONSTRAINT ck_detventa_cant CHECK (cantidad > 0),
+    CONSTRAINT ck_detventa_costo CHECK (costo_unitario IS NULL OR costo_unitario >= 0)
 );
 
 CREATE TABLE pedido (
@@ -405,11 +419,14 @@ CREATE TABLE detalle_pedido (
     id_almacen      INT NOT NULL,
     cantidad        INT NOT NULL,
     precio_unitario NUMERIC(10,2) NOT NULL,
+    -- Igual que en detalle_venta: el costo promedio al hacerse el pedido.
+    costo_unitario  NUMERIC(10,2),
     PRIMARY KEY (id_pedido, id_producto, id_almacen),
     CONSTRAINT fk_detpedido_pedido FOREIGN KEY (id_pedido) REFERENCES pedido(id_pedido),
     CONSTRAINT fk_detpedido_stock  FOREIGN KEY (id_producto, id_almacen)
         REFERENCES producto_almacen(id_producto, id_almacen),
-    CONSTRAINT ck_detpedido_cant CHECK (cantidad > 0)
+    CONSTRAINT ck_detpedido_cant CHECK (cantidad > 0),
+    CONSTRAINT ck_detpedido_costo CHECK (costo_unitario IS NULL OR costo_unitario >= 0)
 );
 
 -- Ultima posicion conocida de cada repartidor mientras lleva un pedido: el
@@ -488,6 +505,11 @@ CREATE TABLE lote_almacen (
     CONSTRAINT fk_lotealm_almacen FOREIGN KEY (id_almacen) REFERENCES almacen(id_almacen),
     CONSTRAINT ck_lotealm_stock CHECK (stock_actual >= 0)
 );
+
+-- Cada ingreso de un perecedero dice a que lote entro: es lo que permite ver
+-- un lote con su precio de compra, su vencimiento y lo que queda de el.
+ALTER TABLE detalle_ingreso_insumo
+    ADD CONSTRAINT fk_detingins_lote FOREIGN KEY (id_lote) REFERENCES lote(id_lote);
 
 -- =====================================================================
 -- Contador de visitas del sitio (RF-WEB-03)
@@ -646,6 +668,7 @@ CREATE INDEX ix_visita_fecha             ON visita(fecha DESC);
 CREATE INDEX ix_lote_ingrediente          ON lote(id_ingrediente);
 CREATE INDEX ix_lote_vencimiento          ON lote(fecha_vencimiento);
 CREATE INDEX ix_lotealm_almacen           ON lote_almacen(id_almacen);
+CREATE INDEX ix_detingins_lote            ON detalle_ingreso_insumo(id_lote);
 
 -- Un solo almacen preferido por tipo de conservacion: si hubiera dos, la
 -- ambiguedad que la preferencia viene a resolver volveria por otro lado.
