@@ -6,7 +6,6 @@ import {
   Armchair,
   Banknote,
   ChefHat,
-  CreditCard,
   Minus,
   Plus,
   QrCode,
@@ -51,10 +50,14 @@ interface LineaTicket {
   stockDisponible: number;
 }
 
+/*
+ * Sin tarjeta: cobrarla en el local pide una terminal —el «tarjetero»— y el
+ * negocio no la tiene. El servidor tampoco la admite en el mostrador
+ * (`METODOS_PAGO_VENTA`); en los pedidos del portal sigue.
+ */
 const METODOS: { valor: MetodoPago; icono: typeof Banknote }[] = [
   { valor: 'Efectivo', icono: Banknote },
   { valor: 'QR', icono: QrCode },
-  { valor: 'Tarjeta', icono: CreditCard },
 ];
 
 /**
@@ -494,7 +497,7 @@ function PuntoDeVenta() {
               <p className="mb-2 text-[10px] font-medium uppercase tracking-wider text-tinta-tenue">
                 Pago
               </p>
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 {METODOS.map((metodo) => {
                   const Icono = metodo.icono;
                   return (

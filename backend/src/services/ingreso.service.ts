@@ -3,8 +3,17 @@ import * as notaModel from '../models/nota-ingreso.model.js';
 import { pagina, type Pagina } from '../dtos/paginacion.dto.js';
 import * as stockModel from '../models/stock.model.js';
 import type { ClientePrisma } from '../models/stock.model.js';
-import type { DatosCrearIngreso, NotaIngresoDTO } from '../dtos/movimiento.dto.js';
-import { aNotaIngresoDTO } from './movimiento.mapper.js';
+import type {
+  DatosCrearIngreso,
+  DatosFiltroLotes,
+  NotaIngresoDTO,
+  PaginaLotesDTO,
+} from '../dtos/movimiento.dto.js';
+import { aNotaIngresoDTO, diaDe } from './movimiento.mapper.js';
+import * as productoModel from '../models/producto.model.js';
+import type { MotivoIngreso } from '../config/dominio.js';
+import { dosDecimales } from '../utils/dinero.js';
+import { redondearCantidad } from '../utils/cantidad.js';
 import {
   calcularTotal,
   consolidar,
@@ -34,11 +43,77 @@ async function leerNota(id: number): Promise<NotaIngresoDTO> {
 
 export async function listar(
   idUsuario: number,
-  filtro: notaModel.FiltroNotas,
+  filtro: DatosFiltroLotes,
 ): Promise<Pagina<NotaIngresoDTO>> {
   await exigirEmpleado(idUsuario, 'consultar las notas de ingreso');
-  const [notas, total] = await notaModel.listar(filtro);
+  // Buscar por nombre es buscar las notas que traen ese ítem: la vista «por
+  // lote» de Inventario › Lotes.
+  const porNombre = filtro.termino
+    ? {
+        idsInsumo: await insumoModel.idsQueCoinciden(filtro.termino),
+        idsProducto: await productoModel.idsQueCoinciden(filtro.termino),
+      }
+    : {};
+  const [notas, total] = await notaModel.listar({ ...filtro, ...porNombre });
   return pagina(notas.map(aNotaIngresoDTO), total, filtro);
+}
+
+/**
+ * Inventario › Lotes, vista por ítem: cada línea de ingreso es un lote de su
+ * insumo o producto, con lo que costó la unidad en esa entrada.
+ *
+ * El costo del insumo es un promedio de sus compras y el del producto, de sus
+ * ingresos: ninguno dice a cuánto se pagó cada entrada. Esto sí, y al buscar
+ * un ítem resume cuánto varió su precio de un lote a otro.
+ */
+export async function lotes(idUsuario: number, filtro: DatosFiltroLotes): Promise<PaginaLotesDTO> {
+  await exigirEmpleado(idUsuario, 'consultar los lotes');
+
+  const [filas, total] = await notaModel.lotes(filtro);
+  const resumen = filtro.termino ? await notaModel.resumenDeLotes(filtro) : [];
+
+  // El costo de hoy de los productos se deduce de sus ingresos, no está en una columna.
+  const costoDeProducto = await productoModel.costosPromedio(
+    resumen.filter((r) => r.tipo === 'producto').map((r) => r.id_item),
+  );
+
+  return {
+    ...pagina(
+      filas.map((f) => ({
+        idNota: f.id_nota_ingreso,
+        fecha: f.fecha.toISOString(),
+        motivo: f.motivo as MotivoIngreso,
+        proveedor: f.proveedor,
+        numeroDocumento: f.numero_documento,
+        tipo: f.tipo,
+        id: f.id_item,
+        nombre: f.nombre,
+        unidad: f.unidad,
+        idAlmacen: f.id_almacen,
+        almacen: f.almacen,
+        cantidad: f.cantidad,
+        costoUnitario: f.costo_unitario,
+        subtotal: dosDecimales(f.cantidad * f.costo_unitario),
+        lote: f.fecha_vencimiento
+          ? { codigo: f.codigo_lote, vencimiento: diaDe(f.fecha_vencimiento), queda: f.queda ?? 0 }
+          : null,
+      })),
+      total,
+      filtro,
+    ),
+    resumen: resumen.map((r) => ({
+      tipo: r.tipo,
+      id: r.id_item,
+      nombre: r.nombre,
+      unidad: r.unidad,
+      lotes: r.lotes,
+      cantidad: redondearCantidad(r.cantidad),
+      costoMinimo: r.minimo,
+      costoMaximo: r.maximo,
+      costoUltimo: r.ultimo,
+      costoActual: r.tipo === 'insumo' ? r.costo_actual : (costoDeProducto.get(r.id_item) ?? null),
+    })),
+  };
 }
 
 export async function obtener(idUsuario: number, id: number): Promise<NotaIngresoDTO> {
@@ -89,6 +164,8 @@ export async function registrarEnTransaccion(
   // Primero el stock: crea la fila que el detalle necesita como clave foránea.
   // Para los insumos, el incremento pasa por el servicio de lotes, que
   // mantiene sincronizados el total consolidado y su desglose por vencimiento.
+  // El lote al que entró cada línea de un perecedero, por insumo y almacén.
+  const loteDe = new Map<string, number | null>();
   if (insumos.length > 0) {
     const metadatos = new Map(
       (await insumoModel.existentes(insumos.map((l) => l.idItem), tx, false)).map((i) => [
@@ -99,7 +176,7 @@ export async function registrarEnTransaccion(
 
     for (const linea of insumos) {
       const insumo = metadatos.get(linea.idItem);
-      await loteService.ingresar(tx, {
+      const idLote = await loteService.ingresar(tx, {
         idIngrediente: linea.idItem,
         idAlmacen: linea.idAlmacen,
         cantidad: linea.cantidad,
@@ -107,6 +184,7 @@ export async function registrarEnTransaccion(
         lote: linea.lote ?? null,
         nombreInsumo: insumo?.nombre ?? `insumo ${linea.idItem}`,
       });
+      loteDe.set(`${linea.idItem}@${linea.idAlmacen}`, idLote);
     }
   }
   for (const linea of productos) {
@@ -122,6 +200,7 @@ export async function registrarEnTransaccion(
         id_almacen: l.idAlmacen,
         cantidad: l.cantidad,
         costo_unitario: l.costoUnitario,
+        id_lote: loteDe.get(`${l.idItem}@${l.idAlmacen}`) ?? null,
       })),
     );
   }

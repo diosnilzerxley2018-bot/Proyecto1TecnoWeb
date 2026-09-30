@@ -74,10 +74,13 @@ model detalle_ingreso_insumo {
   id_almacen          Int
   cantidad            Decimal             @db.Decimal(12, 3)
   costo_unitario      Decimal             @db.Decimal(10, 2)
+  id_lote             Int?
+  lote                lote?               @relation(fields: [id_lote], references: [id_lote], onDelete: NoAction, onUpdate: NoAction, map: "fk_detingins_lote")
   nota_ingreso        nota_ingreso        @relation(fields: [id_nota_ingreso], references: [id_nota_ingreso], onDelete: NoAction, onUpdate: NoAction, map: "fk_detingins_nota")
   ingrediente_almacen ingrediente_almacen @relation(fields: [id_ingrediente, id_almacen], references: [id_ingrediente, id_almacen], onDelete: NoAction, onUpdate: NoAction, map: "fk_detingins_stock")
 
   @@id([id_nota_ingreso, id_ingrediente, id_almacen])
+  @@index([id_lote], map: "ix_detingins_lote")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -100,6 +103,7 @@ model detalle_pedido {
   id_almacen       Int
   cantidad         Int
   precio_unitario  Decimal          @db.Decimal(10, 2)
+  costo_unitario   Decimal?         @db.Decimal(10, 2)
   pedido           pedido           @relation(fields: [id_pedido], references: [id_pedido], onDelete: NoAction, onUpdate: NoAction, map: "fk_detpedido_pedido")
   producto_almacen producto_almacen @relation(fields: [id_producto, id_almacen], references: [id_producto, id_almacen], onDelete: NoAction, onUpdate: NoAction, map: "fk_detpedido_stock")
 
@@ -124,6 +128,7 @@ model detalle_venta {
   id_almacen       Int
   cantidad         Int
   precio_unitario  Decimal          @db.Decimal(10, 2)
+  costo_unitario   Decimal?         @db.Decimal(10, 2)
   producto_almacen producto_almacen @relation(fields: [id_producto, id_almacen], references: [id_producto, id_almacen], onDelete: NoAction, onUpdate: NoAction, map: "fk_detventa_stock")
   venta            venta            @relation(fields: [id_venta], references: [id_venta], onDelete: NoAction, onUpdate: NoAction, map: "fk_detventa_venta")
 
@@ -412,13 +417,14 @@ model visita {
 }
 
 model lote {
-  id_lote           Int            @id @default(autoincrement())
-  codigo            String?        @db.VarChar(50)
-  fecha_vencimiento DateTime       @db.Date
-  fecha_registro    DateTime       @default(now()) @db.Timestamp(6)
-  id_ingrediente    Int
-  ingrediente       ingrediente    @relation(fields: [id_ingrediente], references: [id_ingrediente], onDelete: NoAction, onUpdate: NoAction, map: "fk_lote_ingrediente")
-  lote_almacen      lote_almacen[]
+  id_lote                Int                      @id @default(autoincrement())
+  codigo                 String?                  @db.VarChar(50)
+  fecha_vencimiento      DateTime                 @db.Date
+  fecha_registro         DateTime                 @default(now()) @db.Timestamp(6)
+  id_ingrediente         Int
+  detalle_ingreso_insumo detalle_ingreso_insumo[]
+  ingrediente            ingrediente              @relation(fields: [id_ingrediente], references: [id_ingrediente], onDelete: NoAction, onUpdate: NoAction, map: "fk_lote_ingrediente")
+  lote_almacen           lote_almacen[]
 
   @@index([id_ingrediente], map: "ix_lote_ingrediente")
   @@index([fecha_vencimiento], map: "ix_lote_vencimiento")

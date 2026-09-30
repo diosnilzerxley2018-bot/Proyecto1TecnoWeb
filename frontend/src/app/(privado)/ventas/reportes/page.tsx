@@ -6,7 +6,8 @@ import { RequierePermiso } from '@/components/RequierePermiso';
 import { Selector } from '@/components/ui/Selector';
 import { MarcoReporte } from '@/components/reportes/MarcoReporte';
 import { Cifra, Cifras, TablaReporte } from '@/components/reportes/PiezasReporte';
-import type { ProductoCatalogo, ReporteVentas } from '@/types';
+import { CifrasGanancia, columnasGanancia } from '@/components/reportes/Ganancia';
+import type { LineaProductoReporte, ProductoCatalogo, ReporteVentas } from '@/types';
 import { formatearBs } from '@/lib/formato';
 import { formatearPorcentaje } from '@/lib/formato';
 
@@ -15,9 +16,10 @@ import { formatearPorcentaje } from '@/lib/formato';
  * exportable a PDF y enviable por correo electrónico.
  *
  * Es lo que convierte al sistema de *"registra datos"* en *"me dice cómo va el
- * negocio"*. Por eso lo primero que se ve son las cuatro cifras del resumen, y
- * el detalle viene después: quien abre esta pantalla quiere una respuesta, no
- * una tabla.
+ * negocio"*. Por eso lo primero que se ve son las cifras del resumen —cuánto se
+ * vendió y cuánto se ganó—, y el detalle viene después: quien abre esta
+ * pantalla quiere una respuesta, no una tabla. Filtrado por un producto, todo
+ * es de ese producto, también la ganancia.
  */
 export default function PaginaReportes() {
   return (
@@ -44,7 +46,7 @@ function Reportes() {
   return (
     <MarcoReporte<ReporteVentas>
       titulo="Reporte de ventas"
-      descripcion="Cuánto se vendió, qué se vendió y por qué medio se cobró"
+      descripcion="Cuánto se vendió, cuánto se ganó y por qué medio se cobró"
       recurso="ventas"
       filtros={{ idProducto: idProducto ?? undefined }}
       controles={
@@ -74,6 +76,8 @@ function Reportes() {
             />
           </Cifras>
 
+          <CifrasGanancia ganancia={reporte.resumen} />
+
           <TablaReporte
             titulo="Por producto"
             filas={reporte.porProducto}
@@ -87,6 +91,7 @@ function Reportes() {
                 numerica: true,
                 celda: (p) => formatearPorcentaje(p.participacion),
               },
+              ...columnasGanancia<LineaProductoReporte>(),
             ]}
           />
 

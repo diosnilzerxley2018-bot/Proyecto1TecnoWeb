@@ -1,5 +1,6 @@
 import { prisma } from '../config/prisma.js';
 import * as pedidoModel from '../models/pedido.model.js';
+import * as productoModel from '../models/producto.model.js';
 import type { PedidoConDetalle } from '../models/pedido.model.js';
 import type { ClientePrisma } from '../models/stock.model.js';
 import {
@@ -128,6 +129,12 @@ export async function confirmar(
       total,
     });
 
+    // El costo de hoy de cada producto, para la ganancia del pedido.
+    const costoDe = await productoModel.costosPromedio(
+      asignaciones.map((a) => a.idProducto),
+      tx,
+    );
+
     await pedidoModel.crearDetalle(
       tx,
       asignaciones.map((a) => ({
@@ -136,6 +143,7 @@ export async function confirmar(
         id_almacen: a.idAlmacen,
         cantidad: a.cantidad,
         precio_unitario: precioDe.get(a.idProducto)!,
+        costo_unitario: costoDe.get(a.idProducto) ?? null,
       })),
     );
 

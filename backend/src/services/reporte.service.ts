@@ -3,6 +3,7 @@ import { exigirEmpleado } from './actor.service.js';
 import type {
   DatosEnviarReporte,
   DatosReporteVentas,
+  GananciaDTO,
   LineaProductoReporteDTO,
   ReporteVentasDTO,
   ResumenReporteDTO,
@@ -10,6 +11,7 @@ import type {
 import {
   fechaLegible,
   generarPdf,
+  type ColumnaReporte,
   type DocumentoReporte,
 } from './reporte-pdf.service.js';
 import * as avisoService from './aviso.service.js';
@@ -17,6 +19,13 @@ import { limitesDelDia } from '../utils/fechas.js';
 import { ErrorApp } from '../errors/error-app.js';
 import { bolivianos, dosDecimales } from '../utils/dinero.js';
 import { formatearPorcentaje } from '../utils/cantidad.js';
+import {
+  cerrarGanancia,
+  gananciaVacia,
+  notaDeGanancia,
+  sumarLinea,
+  type AcumuladoGanancia,
+} from './ganancia.js';
 
 /**
  * RF-VEN-07 — reporte parametrizado de ventas.
@@ -60,12 +69,16 @@ export async function ventas(
    * venta: si alguien compró un jugo y una ensalada, el reporte del jugo no
    * puede atribuirse la ensalada.
    */
-  const porProducto = new Map<number, { nombre: string; unidades: number; importe: number }>();
+  const porProducto = new Map<
+    number,
+    { nombre: string; unidades: number; importe: number; ganancia: AcumuladoGanancia }
+  >();
   const porMetodo = new Map<string, { cantidadVentas: number; total: number }>();
   const porDia = new Map<string, { cantidadVentas: number; total: number }>();
 
   let unidades = 0;
   let total = 0;
+  const ganancia = gananciaVacia();
 
   for (const venta of ventasDelPeriodo) {
     const lineas = filtro.idProducto
@@ -79,17 +92,23 @@ export async function ventas(
       importeDeEstaVenta += importe;
       unidades += linea.cantidad;
 
-      const acumulado = porProducto.get(linea.id_producto);
-      if (acumulado) {
-        acumulado.unidades += linea.cantidad;
-        acumulado.importe = dosDecimales(acumulado.importe + importe);
-      } else {
-        porProducto.set(linea.id_producto, {
-          nombre: linea.producto_almacen.producto.nombre,
-          unidades: linea.cantidad,
-          importe,
-        });
-      }
+      const vendida = {
+        cantidad: linea.cantidad,
+        importe,
+        costoUnitario: linea.costo_unitario === null ? null : Number(linea.costo_unitario),
+      };
+      sumarLinea(ganancia, vendida);
+
+      const acumulado = porProducto.get(linea.id_producto) ?? {
+        nombre: linea.producto_almacen.producto.nombre,
+        unidades: 0,
+        importe: 0,
+        ganancia: gananciaVacia(),
+      };
+      acumulado.unidades += linea.cantidad;
+      acumulado.importe = dosDecimales(acumulado.importe + importe);
+      sumarLinea(acumulado.ganancia, vendida);
+      porProducto.set(linea.id_producto, acumulado);
     }
 
     importeDeEstaVenta = dosDecimales(importeDeEstaVenta);
@@ -115,6 +134,7 @@ export async function ventas(
       unidades: p.unidades,
       importe: p.importe,
       participacion: total === 0 ? 0 : dosDecimales((p.importe / total) * 100),
+      ...cerrarGanancia(p.ganancia),
     }))
     .sort((a, b) => b.importe - a.importe);
 
@@ -129,6 +149,7 @@ export async function ventas(
       total,
       ticketPromedio:
         ventasDelPeriodo.length === 0 ? 0 : dosDecimales(total / ventasDelPeriodo.length),
+      ...cerrarGanancia(ganancia),
     },
     porProducto: lineas,
     porMetodoPago: [...porMetodo]
@@ -139,6 +160,37 @@ export async function ventas(
       .sort((a, b) => a.dia.localeCompare(b.dia)),
   };
 }
+
+/** Una cifra de dinero que puede no existir: sin costo no hay ganancia. */
+const importeOSinCosto = (valor: number | null) => (valor === null ? 'sin costo' : bolivianos(valor));
+
+/** Costo, ganancia y margen, en el encabezado del PDF de ventas y de pedidos. */
+export const cifrasDeGanancia = (g: GananciaDTO) => [
+  { etiqueta: 'Costo de lo vendido', valor: importeOSinCosto(g.costo) },
+  { etiqueta: 'Ganancia', valor: importeOSinCosto(g.ganancia) },
+  { etiqueta: 'Margen', valor: g.margen === null ? 'sin costo' : formatearPorcentaje(g.margen) },
+];
+
+/** La tabla «Por producto», igual en el PDF de ventas y en el de pedidos. */
+export const COLUMNAS_POR_PRODUCTO: ColumnaReporte[] = [
+  { titulo: 'Producto', proporcion: 0.25 },
+  { titulo: 'Unidades', proporcion: 0.1, alinear: 'right' },
+  { titulo: 'Importe', proporcion: 0.14, alinear: 'right' },
+  { titulo: '% del total', proporcion: 0.11, alinear: 'right' },
+  { titulo: 'Costo', proporcion: 0.14, alinear: 'right' },
+  { titulo: 'Ganancia', proporcion: 0.14, alinear: 'right' },
+  { titulo: 'Margen', proporcion: 0.12, alinear: 'right' },
+];
+
+export const filaDeProducto = (p: LineaProductoReporteDTO) => [
+  p.nombre,
+  String(p.unidades),
+  bolivianos(p.importe),
+  formatearPorcentaje(p.participacion),
+  p.costo === null ? '—' : bolivianos(p.costo),
+  p.ganancia === null ? '—' : bolivianos(p.ganancia),
+  p.margen === null ? '—' : formatearPorcentaje(p.margen),
+];
 
 /** Describe el reporte de ventas para el generador de PDF. */
 function documentoDeVentas(reporte: ReporteVentasDTO): DocumentoReporte {
@@ -153,22 +205,14 @@ function documentoDeVentas(reporte: ReporteVentasDTO): DocumentoReporte {
       { etiqueta: 'Unidades', valor: String(reporte.resumen.unidades) },
       { etiqueta: 'Total', valor: bolivianos(reporte.resumen.total) },
       { etiqueta: 'Ticket promedio', valor: bolivianos(reporte.resumen.ticketPromedio) },
+      ...cifrasDeGanancia(reporte.resumen),
     ],
+    notas: notaDeGanancia(reporte.resumen),
     secciones: [
       {
         titulo: 'Por producto',
-        columnas: [
-          { titulo: 'Producto', proporcion: 0.44 },
-          { titulo: 'Unidades', proporcion: 0.15, alinear: 'right' },
-          { titulo: 'Importe', proporcion: 0.23, alinear: 'right' },
-          { titulo: '% del total', proporcion: 0.18, alinear: 'right' },
-        ],
-        filas: reporte.porProducto.map((p) => [
-          p.nombre,
-          String(p.unidades),
-          bolivianos(p.importe),
-          formatearPorcentaje(p.participacion),
-        ]),
+        columnas: COLUMNAS_POR_PRODUCTO,
+        filas: reporte.porProducto.map(filaDeProducto),
         vacio: 'No hubo ventas en el período seleccionado.',
       },
       {
@@ -216,7 +260,10 @@ export async function enviarVentasPorCorreo(
     titulo: 'Reporte de ventas',
     descripcion:
       `Reporte de ventas ${alcance}. ` +
-      `${reporte.resumen.cantidadVentas} venta(s) por un total de ${bolivianos(reporte.resumen.total)}.`,
+      `${reporte.resumen.cantidadVentas} venta(s) por un total de ${bolivianos(reporte.resumen.total)}` +
+      (reporte.resumen.ganancia === null
+        ? '.'
+        : `, con una ganancia de ${bolivianos(reporte.resumen.ganancia)}.`),
     adjunto: {
       nombre: `ventas-${reporte.desde}-a-${reporte.hasta}.pdf`,
       contenido: pdf,

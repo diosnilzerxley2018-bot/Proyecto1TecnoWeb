@@ -2,6 +2,7 @@ import type { NotaIngresoConsultada } from '../models/nota-ingreso.model.js';
 import type { NotaEgresoConsultada } from '../models/nota-egreso.model.js';
 import type {
   LineaMovimientoDTO,
+  LoteDeVencimientoDTO,
   NotaEgresoDTO,
   NotaIngresoDTO,
 } from '../dtos/movimiento.dto.js';
@@ -27,6 +28,23 @@ function subtotal(cantidad: number, costoUnitario: number): number {
   return Math.round(cantidad * costoUnitario * 100) / 100;
 }
 
+/** Fecha de calendario `AAAA-MM-DD`: el vencimiento no tiene hora. */
+export const diaDe = (fecha: Date) => fecha.toISOString().slice(0, 10);
+
+/** El lote de un ingreso, con lo que queda de él en el almacén de la línea. */
+function loteDeLinea(
+  lote: NotaIngresoConsultada['detalle_ingreso_insumo'][number]['lote'],
+  idAlmacen: number,
+): LoteDeVencimientoDTO | null {
+  if (!lote) return null;
+  const aqui = lote.lote_almacen.find((la) => la.id_almacen === idAlmacen);
+  return {
+    codigo: lote.codigo,
+    vencimiento: diaDe(lote.fecha_vencimiento),
+    queda: aqui ? Number(aqui.stock_actual) : 0,
+  };
+}
+
 export function aNotaIngresoDTO(nota: NotaIngresoConsultada): NotaIngresoDTO {
   const insumos: LineaMovimientoDTO[] = nota.detalle_ingreso_insumo.map((d) => {
     const cantidad = Number(d.cantidad);
@@ -41,6 +59,7 @@ export function aNotaIngresoDTO(nota: NotaIngresoConsultada): NotaIngresoDTO {
       cantidad,
       costoUnitario,
       subtotal: subtotal(cantidad, costoUnitario),
+      lote: loteDeLinea(d.lote, d.id_almacen),
     };
   });
 

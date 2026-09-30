@@ -306,19 +306,38 @@ export const existentes = (ids: number[], tx: ClientePrisma, soloActivos: boolea
  * almacenado.
  */
 export async function costoPromedio(idProducto: number): Promise<number | null> {
-  const agregado = await prisma.detalle_ingreso_producto.aggregate({
-    where: { id_producto: idProducto },
-    _sum: { cantidad: true },
+  return (await costosPromedio([idProducto])).get(idProducto) ?? null;
+}
+
+/**
+ * El costo promedio de varios productos a la vez, dentro de una transacción.
+ *
+ * Es el que se guarda en cada línea de una venta o un pedido al registrarlos
+ * (`costo_unitario`), para calcular la ganancia. Lee con el cliente de la
+ * transacción: en una venta con producción al instante, el producto acaba de
+ * ingresar a ese costo y todavía no está confirmado. Un producto que nunca
+ * ingresó no figura: no tiene costo.
+ */
+export async function costosPromedio(
+  ids: number[],
+  tx: ClientePrisma = prisma,
+): Promise<Map<number, number>> {
+  const lineas = await tx.detalle_ingreso_producto.findMany({
+    where: { id_producto: { in: ids } },
+    select: { id_producto: true, cantidad: true, costo_unitario: true },
   });
 
-  const unidades = agregado._sum.cantidad ?? 0;
-  if (unidades === 0) return null;
+  const acumulado = new Map<number, { unidades: number; total: number }>();
+  for (const l of lineas) {
+    const a = acumulado.get(l.id_producto) ?? { unidades: 0, total: 0 };
+    a.unidades += l.cantidad;
+    a.total += l.cantidad * Number(l.costo_unitario);
+    acumulado.set(l.id_producto, a);
+  }
 
-  const lineas = await prisma.detalle_ingreso_producto.findMany({
-    where: { id_producto: idProducto },
-    select: { cantidad: true, costo_unitario: true },
-  });
-
-  const total = lineas.reduce((suma, l) => suma + l.cantidad * Number(l.costo_unitario), 0);
-  return Math.round((total / unidades) * 100) / 100;
+  return new Map(
+    [...acumulado]
+      .filter(([, a]) => a.unidades > 0)
+      .map(([id, a]) => [id, Math.round((a.total / a.unidades) * 100) / 100]),
+  );
 }

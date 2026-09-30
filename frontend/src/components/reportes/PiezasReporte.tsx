@@ -13,11 +13,17 @@ export function Cifra({
   etiqueta,
   valor,
   destacada = false,
+  negativa = false,
+  ayuda,
 }: {
   etiqueta: string;
   valor: string;
   /** Una por reporte: la que responde la pregunta principal. */
   destacada?: boolean;
+  /** Una cifra que es una pérdida: una ganancia bajo cero. */
+  negativa?: boolean;
+  /** Qué significa la cifra, en una línea debajo. */
+  ayuda?: string;
 }) {
   return (
     <div className="superficie-tarjeta rounded-2xl p-4">
@@ -26,11 +32,12 @@ export function Cifra({
       </p>
       <p
         className={`mt-1.5 text-xl font-semibold tabular-nums ${
-          destacada ? 'text-marca-300' : 'text-tinta'
+          negativa ? 'text-peligro' : destacada ? 'text-marca-300' : 'text-tinta'
         }`}
       >
         {valor}
       </p>
+      {ayuda && <p className="mt-1 text-[11px] leading-snug text-tinta-tenue">{ayuda}</p>}
     </div>
   );
 }

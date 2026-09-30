@@ -46,6 +46,16 @@ afterAll(async () => {
   invalidarCache();
 });
 
+describe('En el mostrador no se cobra con tarjeta', () => {
+  it('rechaza una venta con Tarjeta: no hay terminal', async () => {
+    const staff = await obtenerToken();
+    const r = await ventaConPago(staff, 'Tarjeta');
+
+    expect(r.status).toBe(400);
+    expect(r.body.error).toContain('no hay terminal para tarjeta');
+  });
+});
+
 describe('Modo de cobro', () => {
   it('el sistema nace en modo simulado', async () => {
     const admin = await obtenerToken();
@@ -139,11 +149,12 @@ describe('Cobro de una venta', () => {
    * salía como QR: quien elegía Tarjeta recibía un código para escanear.
    */
   it('un cobro con Tarjeta no se dibuja como QR', async () => {
-    const staff = await obtenerToken();
-    const venta = await ventaConPago(staff, 'Tarjeta');
+    // La tarjeta se paga en el portal: el mostrador no tiene terminal.
+    const cliente = await registrarCliente();
+    const pedido = await pedidoConPago(cliente.token, 'Tarjeta');
 
-    expect(venta.status).toBe(201);
-    const cobro = venta.body.cobro;
+    expect(pedido.status).toBe(201);
+    const cobro = pedido.body.cobro;
     expect(cobro.tipoDatos).toBe('url');
     // Y sin tipo `qr` no se genera la imagen, que era lo que se veía en pantalla.
     expect(cobro.qrImagen).toBeUndefined();
@@ -192,7 +203,7 @@ describe('Cobro de una venta', () => {
 
   it('un empleado puede confirmar a mano y queda constancia', async () => {
     const staff = await obtenerToken();
-    const venta = await ventaConPago(staff, 'Tarjeta');
+    const venta = await ventaConPago(staff, 'QR');
     const idPago = venta.body.cobro.id;
 
     const r = await request(app)

@@ -24,7 +24,13 @@ import { Boton } from '@/components/ui/Boton';
 import { Dialogo } from '@/components/ui/Dialogo';
 import { FormularioMovimiento, type Direccion } from '@/components/inventario/FormularioMovimiento';
 import type { LineaMovimiento, NotaEgreso, NotaIngreso, Pagina } from '@/types';
-import { ETIQUETA_MOTIVO, TONO_MOTIVO } from '@/lib/inventario';
+import {
+  detalleDeIngreso,
+  ETIQUETA_MOTIVO,
+  formatearVencimiento,
+  numeroDeIngreso,
+  TONO_MOTIVO,
+} from '@/lib/inventario';
 import { formatearBs, formatearCantidad, formatearFecha } from '@/lib/formato';
 import { cn } from '@/lib/cn';
 
@@ -50,22 +56,6 @@ const paginaVacia = <T,>(): Pagina<T> => ({
 });
 
 /** CU-INV-03 Gestionar Ingreso y CU-INV-04 Gestionar Egreso. */
-/**
- * Qué se lee debajo de un ingreso.
- *
- * Una orden de producción firma su nota de ingreso con «OP-17» y la de egreso
- * con «Orden de producción 17»: en la lista, las dos mitades de la misma
- * orden parecían cosas distintas. Se leen igual; el dato guardado no cambia.
- */
-function detalleDeIngreso(nota: {
-  motivo: string;
-  proveedor: string | null;
-  numeroDocumento: string | null;
-}): string | null {
-  const orden = /^OP-(\d+)$/.exec(nota.numeroDocumento ?? '');
-  if (nota.motivo === 'Produccion' && orden) return `Orden de producción ${orden[1]}`;
-  return [nota.proveedor, nota.numeroDocumento].filter(Boolean).join(' · ') || null;
-}
 
 /**
  * Qué se movió, con nombres: «Leche, Tomate y 2 más» dice lo que «4 ítem(s)»
@@ -178,8 +168,8 @@ export default function PaginaMovimientos() {
         acciones={
           <>
             {/* El ingreso va primero y destacado: es lo cotidiano, las compras.
-                El egreso manual es para mermas y ajustes; el de producción lo
-                registra la orden al finalizarse. */}
+                El egreso manual es para mermas, ajustes y devoluciones al
+                proveedor; el de producción lo registra la orden al finalizarse. */}
             {puedeEgresar && (
               <Boton
                 variante="contorno"
@@ -231,7 +221,7 @@ export default function PaginaMovimientos() {
                 ? 'Todavía no hay notas de egreso'
                 : 'Sin movimientos registrados'
           }
-          descripcion="Las notas de ingreso documentan lo que entra al almacén; las de egreso, las salidas por producción, merma o ajuste."
+          descripcion="Las notas de ingreso documentan lo que entra al almacén; las de egreso, las salidas por producción, merma, ajuste o devolución al proveedor."
           accion={
             vista === 'egreso'
               ? puedeEgresar && (
@@ -276,7 +266,7 @@ export default function PaginaMovimientos() {
         descripcion={
           registrando === 'ingreso'
             ? 'Todo lo que entra al almacén, con su costo y documento de respaldo'
-            : 'Salidas por producción, merma o ajuste de inventario'
+            : 'Salidas por merma, ajuste o devolución al proveedor'
         }
       >
         {registrando && (
@@ -336,7 +326,9 @@ function TarjetaMovimiento({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-mono text-[11px] text-tinta-tenue">
-              {entra ? 'ING' : 'EGR'}-{String(movimiento.id).padStart(4, '0')}
+              {entra
+                ? numeroDeIngreso(movimiento.id)
+                : `EGR-${String(movimiento.id).padStart(4, '0')}`}
             </span>
             <Insignia tono={TONO_MOTIVO[movimiento.motivo] ?? 'neutro'}>
               {ETIQUETA_MOTIVO[movimiento.motivo] ?? movimiento.motivo}
@@ -390,7 +382,12 @@ function TarjetaMovimiento({
 
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm text-tinta">{linea.nombre}</p>
-                    <p className="mt-0.5 text-[11px] text-tinta-tenue">{linea.almacen}</p>
+                    <p className="mt-0.5 text-[11px] text-tinta-tenue">
+                      {linea.almacen}
+                      {/* El lote de un perecedero: qué vence y cuándo. */}
+                      {linea.lote &&
+                        ` · Lote ${linea.lote.codigo ?? 'sin código'}, vence ${formatearVencimiento(linea.lote.vencimiento)}`}
+                    </p>
                   </div>
 
                   <div className="shrink-0 text-right">

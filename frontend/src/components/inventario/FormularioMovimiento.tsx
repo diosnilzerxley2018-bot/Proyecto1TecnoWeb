@@ -16,7 +16,8 @@ import {
 import { api, ErrorApi } from '@/lib/api';
 import { useNotificaciones } from '@/components/ui/Notificaciones';
 import {
-  AYUDA_MOTIVO,
+  AYUDA_MOTIVO_EGRESO,
+  AYUDA_MOTIVO_INGRESO,
   ETIQUETA_MOTIVO,
   MOTIVO_SOLO_PRODUCTOS,
   MOTIVOS_EGRESO_MANUAL,
@@ -30,6 +31,7 @@ export type Direccion = 'ingreso' | 'egreso';
 /** Qué documento respalda un ingreso, según su motivo. */
 const AYUDA_DOCUMENTO: Record<string, string> = {
   Compra: 'Factura o comprobante',
+  Reposicion: 'Nota o guía del proveedor, si la hay',
   Devolucion: 'Comprobante de la devolución, si lo hay',
   Ajuste: 'Acta o planilla del recuento, si la hay',
 };
@@ -44,7 +46,14 @@ const OBSERVACION_EGRESO: Record<string, { marcador: string; ayuda: string }> = 
     marcador: 'Por qué no coincidía: recuento, error de carga…',
     ayuda: 'Opcional, pero explica la diferencia a quien revise el inventario',
   },
+  Devolucion: {
+    marcador: 'A qué proveedor y por qué: vencido, dañado, equivocado…',
+    ayuda: 'Lo que el proveedor reponga se registra después como ingreso por Reposición',
+  },
 };
+
+/** El proveedor se anota en lo que viene de él: una compra o su reposición. */
+const CON_PROVEEDOR = new Set(['Compra', 'Reposicion']);
 
 /**
  * Registro de una nota de ingreso o de egreso (CU-INV-03 y CU-INV-04).
@@ -142,6 +151,7 @@ export function FormularioMovimiento({
     () => (esIngreso ? MOTIVOS_INGRESO_MANUAL : MOTIVOS_EGRESO_MANUAL),
     [esIngreso],
   );
+  const ayudaMotivo = esIngreso ? AYUDA_MOTIVO_INGRESO : AYUDA_MOTIVO_EGRESO;
   /** Lo que vuelve en una devolución es lo que se entregó: un producto terminado. */
   const soloProductos = esIngreso && motivo === MOTIVO_SOLO_PRODUCTOS;
 
@@ -236,9 +246,9 @@ export function FormularioMovimiento({
       if (esIngreso) {
         await api.post('/ingresos', {
           motivo,
-          // El proveedor solo existe en una compra; lo escrito antes de cambiar
-          // de motivo no viaja.
-          proveedor: motivo === 'Compra' ? proveedor.trim() || null : null,
+          // El proveedor solo existe en lo que viene de él; lo escrito antes de
+          // cambiar de motivo no viaja.
+          proveedor: CON_PROVEEDOR.has(motivo) ? proveedor.trim() || null : null,
           numeroDocumento: numeroDocumento.trim() || null,
           insumos,
           productos,
@@ -281,17 +291,17 @@ export function FormularioMovimiento({
         etiqueta="Motivo"
         valor={motivo}
         onCambiar={setMotivo}
-        ayuda={AYUDA_MOTIVO[motivo]}
+        ayuda={ayudaMotivo[motivo]}
         opciones={motivos.map((m) => ({
           valor: m,
           etiqueta: ETIQUETA_MOTIVO[m],
-          descripcion: AYUDA_MOTIVO[m],
+          descripcion: ayudaMotivo[m],
         }))}
       />
 
       {esIngreso ? (
         <div className="grid gap-4 sm:grid-cols-2">
-          {motivo === 'Compra' && (
+          {CON_PROVEEDOR.has(motivo) && (
             <Campo
               etiqueta="Proveedor"
               maxLength={150}

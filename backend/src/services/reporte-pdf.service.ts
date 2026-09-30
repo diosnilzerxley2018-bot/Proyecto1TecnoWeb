@@ -50,6 +50,8 @@ export interface DocumentoReporte {
   generadoEn: string;
   /** Las cifras del encabezado. Son la respuesta; las tablas, el detalle. */
   cifras: { etiqueta: string; valor: string }[];
+  /** Aclaraciones debajo de las cifras: qué significa una, qué quedó fuera. */
+  notas?: string[];
   secciones: SeccionReporte[];
 }
 
@@ -64,6 +66,7 @@ export function generarPdf(documento: DocumentoReporte): Promise<Buffer> {
 
     encabezado(doc, documento);
     if (documento.cifras.length > 0) cifras(doc, documento.cifras);
+    if (documento.notas?.length) notas(doc, documento.notas);
     for (const seccion of documento.secciones) tabla(doc, seccion);
     pieDePaginas(doc);
 
@@ -98,27 +101,43 @@ function encabezado(doc: Documento, documento: DocumentoReporte) {
   doc.moveDown(0.8);
 }
 
-/** Las cifras que responden "cómo fue el período", en una fila. */
+/** Cuántas cifras caben en una fila sin que un importe se parta en dos. */
+const CIFRAS_POR_FILA = 4;
+
+/**
+ * Las cifras que responden "cómo fue el período", de a cuatro por fila. Con la
+ * ganancia, el reporte de ventas pasó a tener siete, y en una sola fila
+ * «Bs 3.275,96» ya no entraba.
+ */
 function cifras(doc: Documento, valores: { etiqueta: string; valor: string }[]) {
-  const ancho = ANCHO_UTIL / valores.length;
-  const y = doc.y;
+  const ancho = ANCHO_UTIL / Math.min(valores.length, CIFRAS_POR_FILA);
 
-  valores.forEach((c, i) => {
-    const x = MARGEN + ancho * i;
-    doc
-      .fillColor(APAGADO)
-      .fontSize(8)
-      .font('Helvetica')
-      .text(c.etiqueta.toUpperCase(), x, y, { width: ancho });
-    doc
-      .fillColor(TINTA)
-      .fontSize(13)
-      .font('Helvetica-Bold')
-      .text(c.valor, x, y + 12, { width: ancho });
-  });
+  for (let inicio = 0; inicio < valores.length; inicio += CIFRAS_POR_FILA) {
+    const y = doc.y;
+    valores.slice(inicio, inicio + CIFRAS_POR_FILA).forEach((c, i) => {
+      const x = MARGEN + ancho * i;
+      doc
+        .fillColor(APAGADO)
+        .fontSize(8)
+        .font('Helvetica')
+        .text(c.etiqueta.toUpperCase(), x, y, { width: ancho });
+      doc
+        .fillColor(TINTA)
+        .fontSize(13)
+        .font('Helvetica-Bold')
+        .text(c.valor, x, y + 12, { width: ancho });
+    });
+    doc.y = y + 40;
+  }
 
-  doc.y = y + 40;
+  doc.x = MARGEN;
   doc.moveDown(0.5);
+}
+
+function notas(doc: Documento, textos: string[]) {
+  doc.fillColor(APAGADO).fontSize(8).font('Helvetica');
+  for (const texto of textos) doc.text(texto, MARGEN, doc.y, { width: ANCHO_UTIL });
+  doc.moveDown(0.8);
 }
 
 function tabla(doc: Documento, seccion: SeccionReporte) {

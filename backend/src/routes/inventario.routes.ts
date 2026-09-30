@@ -14,6 +14,8 @@ import { esquemaCrearEgreso, esquemaCrearIngreso } from '../dtos/movimiento.dto.
 export const ingresos = Router();
 ingresos.use(requiereAutenticacion);
 ingresos.get('/', requierePermiso('STOCK_CONSULTAR'), ingresoCtrl.listar);
+// Antes que `/:id`: si no, «lotes» se leería como el número de una nota.
+ingresos.get('/lotes', requierePermiso('STOCK_CONSULTAR'), ingresoCtrl.lotes);
 ingresos.get('/:id', requierePermiso('STOCK_CONSULTAR'), validarIdParam, ingresoCtrl.obtener);
 ingresos.post(
   '/',

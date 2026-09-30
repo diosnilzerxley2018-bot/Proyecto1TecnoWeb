@@ -47,6 +47,16 @@ export const METODOS_PAGO = ['Efectivo', 'Tarjeta', 'QR'] as const;
 export type MetodoPago = (typeof METODOS_PAGO)[number];
 
 /**
+ * Cómo se cobra en el mostrador (CU-VEN-01).
+ *
+ * Sin la tarjeta: cobrarla en el local pide una terminal —el «tarjetero»— y el
+ * negocio no la tiene. La tarjeta sigue en los pedidos del portal, donde se
+ * paga en la página de la pasarela. `ck_venta_pago` la sigue admitiendo, para
+ * las ventas que ya se cobraron así.
+ */
+export const METODOS_PAGO_VENTA = ['Efectivo', 'QR'] as const satisfies readonly MetodoPago[];
+
+/**
  * Flujo de estados que puede hacer avanzar el empleado (RF-PED-08):
  * recibido → en preparación → en camino → entregado.
  *
@@ -164,8 +174,8 @@ export const TAMANO_MAXIMO_IMAGEN_PRODUCTO = 3 * 1024 * 1024;
  * detalle de la venta o del pedido, que registra el almacén de origen. La nota
  * de egreso documenta las salidas que no tienen otro respaldo.
  */
-export const MOTIVOS_INGRESO = ['Compra', 'Produccion', 'Ajuste', 'Devolucion'] as const;
-export const MOTIVOS_EGRESO = ['Produccion', 'Merma', 'Ajuste'] as const;
+export const MOTIVOS_INGRESO = ['Compra', 'Produccion', 'Ajuste', 'Devolucion', 'Reposicion'] as const;
+export const MOTIVOS_EGRESO = ['Produccion', 'Merma', 'Ajuste', 'Devolucion'] as const;
 
 /**
  * Los motivos que se eligen al registrar una nota a mano (CU-INV-03 y CU-INV-04).
@@ -176,13 +186,22 @@ export const MOTIVOS_EGRESO = ['Produccion', 'Merma', 'Ajuste'] as const;
  * —el reporte de producción no lo veía— y se prestaba a contar dos veces lo
  * elaborado.
  */
-export const MOTIVOS_INGRESO_MANUAL = ['Compra', 'Ajuste', 'Devolucion'] as const;
-export const MOTIVOS_EGRESO_MANUAL = ['Merma', 'Ajuste'] as const;
+export const MOTIVOS_INGRESO_MANUAL = ['Compra', 'Reposicion', 'Ajuste', 'Devolucion'] as const;
+export const MOTIVOS_EGRESO_MANUAL = ['Merma', 'Ajuste', 'Devolucion'] as const;
 
-/**
- * Lo que vuelve en una devolución es lo que se entregó: un producto terminado.
- * Un insumo no sale del negocio hacia nadie, así que no puede volver; si el
- * recuento encuentra más insumo del que figura, es un Ajuste.
+/*
+ * «Devolución» nombra dos movimientos opuestos, y la dirección de la nota los
+ * distingue:
+ *
+ * - En un **ingreso**, lo que vuelve del cliente. Lo que se le entregó es un
+ *   producto terminado, así que solo admite productos (`MOTIVO_SOLO_PRODUCTOS`):
+ *   un insumo de más que aparece en el recuento es un Ajuste.
+ * - En un **egreso**, lo que el negocio le devuelve al proveedor: vencido,
+ *   dañado o equivocado. Admite insumos y productos comprados.
+ *
+ * Lo que el proveedor repone después entra como **Reposición**: vuelve lo que
+ * ya se había pagado, así que, como el Ajuste, no recalcula el costo del
+ * insumo (solo la Compra lo hace, `costeo.service`).
  */
 export const MOTIVO_SOLO_PRODUCTOS = 'Devolucion';
 
@@ -199,6 +218,7 @@ export const ETIQUETA_MOTIVO: Record<string, string> = {
   Produccion: 'Producción',
   Ajuste: 'Ajuste',
   Devolucion: 'Devolución',
+  Reposicion: 'Reposición',
   Merma: 'Merma',
   Venta: 'Venta',
   Pedido: 'Pedido',

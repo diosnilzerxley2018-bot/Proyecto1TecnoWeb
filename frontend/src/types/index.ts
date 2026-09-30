@@ -303,8 +303,8 @@ export interface Receta {
 /* Etapa 4 — CU-INV-03, CU-INV-04 y CU-INV-05                          */
 /* ------------------------------------------------------------------ */
 
-export type MotivoIngreso = 'Compra' | 'Produccion' | 'Ajuste' | 'Devolucion';
-export type MotivoEgreso = 'Produccion' | 'Merma' | 'Ajuste';
+export type MotivoIngreso = 'Compra' | 'Produccion' | 'Ajuste' | 'Devolucion' | 'Reposicion';
+export type MotivoEgreso = 'Produccion' | 'Merma' | 'Ajuste' | 'Devolucion';
 export type TipoItem = 'insumo' | 'producto';
 
 export interface LineaMovimiento {
@@ -317,6 +317,59 @@ export interface LineaMovimiento {
   cantidad: number;
   costoUnitario: number | null;
   subtotal: number | null;
+  /** El lote de vencimiento al que entró, en el ingreso de un perecedero. */
+  lote?: LoteDeVencimiento | null;
+}
+
+export interface LoteDeVencimiento {
+  codigo: string | null;
+  /** `AAAA-MM-DD`. */
+  vencimiento: string;
+  /** Lo que queda de ese lote en el almacén de la línea. */
+  queda: number;
+}
+
+/**
+ * Inventario › Lotes, vista por ítem: lo que entró de un ítem en una nota de
+ * ingreso, con lo que costó la unidad en esa entrada.
+ */
+export interface LoteDeIngreso {
+  /** El número de lote es el de su nota de ingreso. */
+  idNota: number;
+  fecha: string;
+  motivo: MotivoIngreso;
+  proveedor: string | null;
+  numeroDocumento: string | null;
+  tipo: TipoItem;
+  id: number;
+  nombre: string;
+  unidad: string;
+  idAlmacen: number;
+  almacen: string;
+  cantidad: number;
+  costoUnitario: number;
+  subtotal: number;
+  lote: LoteDeVencimiento | null;
+}
+
+/** Cuánto varió el precio de un ítem de un lote a otro. */
+export interface ResumenLotesItem {
+  tipo: TipoItem;
+  id: number;
+  nombre: string;
+  unidad: string;
+  lotes: number;
+  cantidad: number;
+  costoMinimo: number;
+  costoMaximo: number;
+  costoUltimo: number;
+  /** El que usa hoy el sistema: el del insumo o el promedio del producto. */
+  costoActual: number | null;
+}
+
+export interface PaginaLotes extends Pagina<LoteDeIngreso> {
+  /** Vacío si no se buscó por nombre. */
+  resumen: ResumenLotesItem[];
 }
 
 interface NotaBase {
@@ -625,7 +678,22 @@ export interface Perfil {
 
 /* --- Reportes (RF-VEN-07) --- */
 
-export interface LineaProductoReporte {
+/**
+ * La ganancia de lo vendido. Los importes son nulos cuando nada de lo vendido
+ * tenía costo: sin costo no hay ganancia que dar.
+ */
+export interface GananciaReporte {
+  /** Lo que costó lo vendido, con el costo guardado al vender. */
+  costo: number | null;
+  /** Lo cobrado menos ese costo (ganancia bruta). */
+  ganancia: number | null;
+  /** La ganancia como porcentaje de lo cobrado. */
+  margen: number | null;
+  /** Unidades vendidas sin costo registrado: no entran en la ganancia. */
+  unidadesSinCosto: number;
+}
+
+export interface LineaProductoReporte extends GananciaReporte {
   idProducto: number;
   nombre: string;
   unidades: number;
@@ -634,7 +702,7 @@ export interface LineaProductoReporte {
   participacion: number;
 }
 
-export interface ResumenReporte {
+export interface ResumenReporte extends GananciaReporte {
   cantidadVentas: number;
   unidades: number;
   total: number;
@@ -711,9 +779,12 @@ export interface ReportePedidos {
   /** Nulos cuando el reporte no filtra por ese criterio. */
   estado: string | null;
   repartidor: string | null;
+  producto: string | null;
   generadoEn: string;
-  resumen: {
+  /** La ganancia es la de los pedidos no cancelados, los mismos del total. */
+  resumen: GananciaReporte & {
     cantidadPedidos: number;
+    unidades: number;
     entregados: number;
     cancelados: number;
     total: number;
@@ -721,6 +792,8 @@ export interface ReportePedidos {
     minutosPromedio: number | null;
   };
   porEstado: { estado: string; cantidad: number; total: number }[];
+  /** Lo vendido en los pedidos no cancelados. */
+  porProducto: LineaProductoReporte[];
   porRepartidor: {
     repartidor: string;
     /** Todos los que tuvo asignados, se hayan entregado o no. */

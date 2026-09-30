@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { cantidadDeInsumo } from './cantidad.dto.js';
-import { camposDeFecha, camposDePagina } from './paginacion.dto.js';
+import { camposDeFecha, camposDePagina, type Pagina } from './paginacion.dto.js';
 import {
   MOTIVO_SOLO_PRODUCTOS,
   MOTIVOS_EGRESO,
@@ -77,7 +77,7 @@ export const esquemaCrearIngreso = z
     motivo: z
       .enum(MOTIVOS_INGRESO_MANUAL, {
         error:
-          'el motivo debe ser Compra, Ajuste o Devolución; lo elaborado lo ingresa la orden de producción al finalizarse',
+          'el motivo debe ser Compra, Reposición, Ajuste o Devolución; lo elaborado lo ingresa la orden de producción al finalizarse',
       })
       .default('Compra'),
     proveedor: z.string().trim().max(150).nullable().optional(),
@@ -87,7 +87,8 @@ export const esquemaCrearIngreso = z
   })
   .refine(alMenosUnaLinea, { message: MENSAJE_SIN_LINEAS, path: ['insumos'] })
   .refine((datos) => datos.motivo !== MOTIVO_SOLO_PRODUCTOS || datos.insumos.length === 0, {
-    message: 'una devolución es de productos terminados; un insumo de más se registra como Ajuste',
+    message:
+      'una devolución de cliente es de productos terminados; un insumo de más se registra como Ajuste',
     path: ['insumos'],
   });
 
@@ -95,7 +96,7 @@ export const esquemaCrearEgreso = z
   .object({
     motivo: z.enum(MOTIVOS_EGRESO_MANUAL, {
       error:
-        'el motivo debe ser Merma o Ajuste; los insumos de una orden de producción los descuenta la orden al finalizarse',
+        'el motivo debe ser Merma, Ajuste o Devolución; los insumos de una orden de producción los descuenta la orden al finalizarse',
     }),
     observacion: z.string().trim().max(200).nullable().optional(),
     insumos: z.array(esquemaLineaInsumoEgreso).max(100).default([]),
@@ -116,6 +117,19 @@ export interface LineaMovimientoDTO {
   cantidad: number;
   costoUnitario: number | null;
   subtotal: number | null;
+  /**
+   * El lote de vencimiento al que entró, en el ingreso de un perecedero. Nulo
+   * en lo demás: la harina no lleva lote, y un egreso no dice a cuál afectó.
+   */
+  lote?: LoteDeVencimientoDTO | null;
+}
+
+export interface LoteDeVencimientoDTO {
+  codigo: string | null;
+  /** Fecha `AAAA-MM-DD`. */
+  vencimiento: string;
+  /** Lo que queda de ese lote en el almacén de la línea. */
+  queda: number;
 }
 
 interface NotaBaseDTO {
@@ -137,12 +151,74 @@ export interface NotaEgresoDTO extends NotaBaseDTO {
   observacion: string | null;
 }
 
-/** Filtros de listado de notas. */
+/** Buscar por nombre del ítem y acotar a insumos o a productos. */
+const camposDeItem = {
+  termino: z.string().trim().max(100).optional(),
+  tipo: z.enum(['insumo', 'producto']).optional(),
+} as const;
+
+/**
+ * Filtros de listado de notas de ingreso. Con `termino` o `tipo`, solo las
+ * notas que traen un ítem así: es la vista «por lote» de Inventario › Lotes,
+ * donde cada nota es un lote con todo lo que entró junto.
+ */
 export const esquemaFiltroIngresos = z.object({
   motivo: z.enum(MOTIVOS_INGRESO).optional(),
+  ...camposDeItem,
   ...camposDeFecha,
   ...camposDePagina,
 });
+
+/**
+ * Inventario › Lotes, vista «por ítem»: cada línea de ingreso es un lote de
+ * ese insumo o producto, con lo que costó la unidad en esa entrada.
+ */
+export const esquemaFiltroLotes = esquemaFiltroIngresos;
+export type DatosFiltroLotes = z.infer<typeof esquemaFiltroLotes>;
+
+/** Un lote: lo que entró de un ítem en una nota de ingreso. */
+export interface LoteDeIngresoDTO {
+  /** El número de lote es el de su nota de ingreso. */
+  idNota: number;
+  fecha: string;
+  motivo: MotivoIngreso;
+  proveedor: string | null;
+  numeroDocumento: string | null;
+  tipo: 'insumo' | 'producto';
+  id: number;
+  nombre: string;
+  unidad: string;
+  idAlmacen: number;
+  almacen: string;
+  cantidad: number;
+  costoUnitario: number;
+  subtotal: number;
+  lote: LoteDeVencimientoDTO | null;
+}
+
+/**
+ * Cómo varió el precio de un ítem entre sus lotes. Se arma cuando se busca
+ * por nombre: es lo que responde «¿a cuánto compramos el aceite?».
+ */
+export interface ResumenLotesItemDTO {
+  tipo: 'insumo' | 'producto';
+  id: number;
+  nombre: string;
+  unidad: string;
+  lotes: number;
+  cantidad: number;
+  costoMinimo: number;
+  costoMaximo: number;
+  /** El de la entrada más reciente. */
+  costoUltimo: number;
+  /** El que usa hoy el sistema: el del insumo o el promedio del producto. */
+  costoActual: number | null;
+}
+
+export interface PaginaLotesDTO extends Pagina<LoteDeIngresoDTO> {
+  /** Vacío si no se buscó por nombre. */
+  resumen: ResumenLotesItemDTO[];
+}
 export const esquemaFiltroEgresos = z.object({
   motivo: z.enum(MOTIVOS_EGRESO).optional(),
   ...camposDeFecha,

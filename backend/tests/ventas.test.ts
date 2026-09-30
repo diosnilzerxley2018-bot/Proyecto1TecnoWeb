@@ -107,7 +107,7 @@ describe('CU-VEN-01 Gestionar venta', () => {
     const producto = await buscarProducto('Galletas de avena');
 
     const r = await registrarVenta(staff, {
-      metodoPago: 'Tarjeta',
+      metodoPago: 'QR',
       idCliente: perfil.body.id,
       items: [{ idProducto: producto.id, cantidad: 1 }],
     });

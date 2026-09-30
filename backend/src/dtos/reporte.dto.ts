@@ -84,7 +84,23 @@ export const esquemaEnviarReporte = z.object({
 export type DatosReporteVentas = z.infer<typeof esquemaReporteVentas>;
 export type DatosEnviarReporte = z.infer<typeof esquemaEnviarReporte>;
 
-export interface LineaProductoReporteDTO {
+/**
+ * La ganancia de lo vendido (`services/ganancia.ts`). Los tres importes son
+ * nulos cuando ninguna línea tenía costo: sin costo no hay ganancia que dar, y
+ * un cero diría que se vendió sin ganar nada.
+ */
+export interface GananciaDTO {
+  /** Lo que costó lo vendido: cantidad por el costo guardado al vender. */
+  costo: number | null;
+  /** Lo cobrado menos ese costo (ganancia bruta). */
+  ganancia: number | null;
+  /** La ganancia como porcentaje de lo cobrado. */
+  margen: number | null;
+  /** Unidades vendidas sin costo registrado: no entran en la ganancia. */
+  unidadesSinCosto: number;
+}
+
+export interface LineaProductoReporteDTO extends GananciaDTO {
   idProducto: number;
   nombre: string;
   unidades: number;
@@ -93,7 +109,7 @@ export interface LineaProductoReporteDTO {
   participacion: number;
 }
 
-export interface ResumenReporteDTO {
+export interface ResumenReporteDTO extends GananciaDTO {
   cantidadVentas: number;
   unidades: number;
   total: number;
@@ -128,6 +144,8 @@ export const esquemaReportePedidos = z
     ...rango,
     estado: z.enum(ESTADOS_PEDIDO).optional(),
     idRepartidor: z.coerce.number().int().positive().optional(),
+    /** Los pedidos que llevan ese producto, y el dinero de ese producto. */
+    idProducto: z.coerce.number().int().positive().optional(),
   })
   .refine(rangoOrdenado, MENSAJE_ORDEN)
   .refine(rangoAcotado, MENSAJE_TOPE);
@@ -137,6 +155,11 @@ export interface LineaPedidoReporteDTO {
   fecha: string;
   estado: string;
   metodoPago: string;
+  /**
+   * Lo que suma el pedido. Filtrado por un producto, lo que suma ese producto
+   * en el pedido: el reporte de un jugo no se atribuye la ensalada que iba al
+   * lado, igual que en el de ventas.
+   */
   total: number;
   repartidor: string | null;
   /** Minutos entre la confirmación y la entrega. Nulo si aún no se entregó. */
@@ -148,9 +171,13 @@ export interface ReportePedidosDTO {
   hasta: string;
   estado: string | null;
   repartidor: string | null;
+  producto: string | null;
   generadoEn: string;
-  resumen: {
+  /** La ganancia es la de los pedidos no cancelados, los mismos del total. */
+  resumen: GananciaDTO & {
     cantidadPedidos: number;
+    /** Unidades de los pedidos no cancelados. */
+    unidades: number;
     entregados: number;
     cancelados: number;
     /**
@@ -162,6 +189,8 @@ export interface ReportePedidosDTO {
     minutosPromedio: number | null;
   };
   porEstado: { estado: string; cantidad: number; total: number }[];
+  /** Lo vendido en los pedidos no cancelados, del producto que más dejó al que menos. */
+  porProducto: LineaProductoReporteDTO[];
   porRepartidor: {
     repartidor: string;
     /** Todos los que tuvo asignados, se hayan entregado o no. */

@@ -1,6 +1,14 @@
 import * as reporteModel from '../models/reporte.model.js';
 import { exigirEmpleado } from './actor.service.js';
 import { fechaLegible, type DocumentoReporte } from './reporte-pdf.service.js';
+import { cifrasDeGanancia, COLUMNAS_POR_PRODUCTO, filaDeProducto } from './reporte.service.js';
+import {
+  cerrarGanancia,
+  gananciaVacia,
+  notaDeGanancia,
+  sumarLinea,
+  type AcumuladoGanancia,
+} from './ganancia.js';
 import type {
   DatosReporteInventario,
   DatosReportePedidos,
@@ -53,11 +61,26 @@ export async function pedidos(
     repartidor = `${encontrado.usuario.nombre} ${encontrado.usuario.apellido}`;
   }
 
+  let producto: string | null = null;
+  if (filtro.idProducto) {
+    const encontrado = await reporteModel.nombreDeProducto(filtro.idProducto);
+    if (!encontrado) throw new ErrorApp(404, 'El producto indicado no existe');
+    producto = encontrado.nombre;
+  }
+
   const encontrados = await reporteModel.pedidosDelPeriodo({
     ...rangoDelPeriodo(filtro),
     estado: filtro.estado,
     idRepartidor: filtro.idRepartidor,
+    idProducto: filtro.idProducto,
   });
+
+  const ganancia = gananciaVacia();
+  const porProducto = new Map<
+    number,
+    { nombre: string; unidades: number; importe: number; ganancia: AcumuladoGanancia }
+  >();
+  let unidades = 0;
 
   const porEstado = new Map<string, { cantidad: number; total: number }>();
   const porRepartidor = new Map<
@@ -68,9 +91,41 @@ export async function pedidos(
   let total = 0;
 
   const lineas: LineaPedidoReporteDTO[] = encontrados.map((p) => {
-    const importe = Number(p.total);
-    // Un cancelado no dejó dinero: figura en su estado, no en el total.
-    if (p.estado_pedido !== 'Cancelado') total = dosDecimales(total + importe);
+    // Con un producto elegido, cuenta lo de ese producto y no el pedido entero.
+    const vendido = filtro.idProducto
+      ? p.detalle_pedido.filter((d) => d.id_producto === filtro.idProducto)
+      : p.detalle_pedido;
+    const importe = filtro.idProducto
+      ? dosDecimales(
+          vendido.reduce((suma, d) => suma + d.cantidad * Number(d.precio_unitario), 0),
+        )
+      : Number(p.total);
+
+    // Un cancelado no dejó dinero: figura en su estado, no en el total ni en
+    // la ganancia, y lo que llevaba volvió al almacén.
+    if (p.estado_pedido !== 'Cancelado') {
+      total = dosDecimales(total + importe);
+      for (const d of vendido) {
+        const linea = {
+          cantidad: d.cantidad,
+          importe: dosDecimales(d.cantidad * Number(d.precio_unitario)),
+          costoUnitario: d.costo_unitario === null ? null : Number(d.costo_unitario),
+        };
+        unidades += d.cantidad;
+        sumarLinea(ganancia, linea);
+
+        const acumulado = porProducto.get(d.id_producto) ?? {
+          nombre: d.producto_almacen.producto.nombre,
+          unidades: 0,
+          importe: 0,
+          ganancia: gananciaVacia(),
+        };
+        acumulado.unidades += d.cantidad;
+        acumulado.importe = dosDecimales(acumulado.importe + linea.importe);
+        sumarLinea(acumulado.ganancia, linea);
+        porProducto.set(d.id_producto, acumulado);
+      }
+    }
 
     // El tiempo de entrega no está guardado: se deduce de las dos marcas.
     const minutos = p.fecha_entrega
@@ -116,15 +171,28 @@ export async function pedidos(
     hasta: filtro.hasta,
     estado: filtro.estado ?? null,
     repartidor,
+    producto,
     generadoEn: new Date().toISOString(),
     resumen: {
       cantidadPedidos: encontrados.length,
+      unidades,
       entregados: porEstado.get('Entregado')?.cantidad ?? 0,
       cancelados: porEstado.get('Cancelado')?.cantidad ?? 0,
       total,
       minutosPromedio: promedio(minutosEntregados),
+      ...cerrarGanancia(ganancia),
     },
     porEstado: [...porEstado].map(([estado, e]) => ({ estado, ...e })),
+    porProducto: [...porProducto]
+      .map(([idProducto, p]) => ({
+        idProducto,
+        nombre: p.nombre,
+        unidades: p.unidades,
+        importe: p.importe,
+        participacion: total === 0 ? 0 : dosDecimales((p.importe / total) * 100),
+        ...cerrarGanancia(p.ganancia),
+      }))
+      .sort((a, b) => b.importe - a.importe),
     porRepartidor: [...porRepartidor]
       .map(([nombre, r]) => ({
         repartidor: nombre,
@@ -139,6 +207,7 @@ export async function pedidos(
 
 export function documentoDePedidos(reporte: ReportePedidosDTO): DocumentoReporte {
   const filtros = [
+    reporte.producto,
     reporte.estado ? `estado ${reporte.estado}` : null,
     reporte.repartidor ? `repartidor ${reporte.repartidor}` : null,
   ].filter(Boolean);
@@ -160,8 +229,19 @@ export function documentoDePedidos(reporte: ReportePedidosDTO): DocumentoReporte
             ? 'sin datos'
             : `${reporte.resumen.minutosPromedio} min`,
       },
+      ...cifrasDeGanancia(reporte.resumen),
+    ],
+    notas: [
+      ...notaDeGanancia(reporte.resumen),
+      'El total y la ganancia no cuentan los pedidos cancelados: no dejaron dinero.',
     ],
     secciones: [
+      {
+        titulo: 'Por producto',
+        columnas: COLUMNAS_POR_PRODUCTO,
+        filas: reporte.porProducto.map(filaDeProducto),
+        vacio: 'No se vendió nada en pedidos no cancelados.',
+      },
       {
         titulo: 'Por estado',
         columnas: [
@@ -773,7 +853,8 @@ export const entregaDePedidos = (r: ReportePedidosDTO): EntregaReporte => ({
   descripcion:
     `Reporte de pedidos del ${r.desde} al ${r.hasta}. ` +
     `${r.resumen.cantidadPedidos} pedido(s), ${r.resumen.entregados} entregado(s), ` +
-    `por un total de ${bolivianos(r.resumen.total)} sin contar los cancelados.`,
+    `por un total de ${bolivianos(r.resumen.total)} sin contar los cancelados` +
+    (r.resumen.ganancia === null ? '.' : `, con una ganancia de ${bolivianos(r.resumen.ganancia)}.`),
 });
 
 export const entregaDeProduccion = (r: ReporteProduccionDTO): EntregaReporte => ({

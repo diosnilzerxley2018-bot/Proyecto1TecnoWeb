@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 import * as ingresoService from '../services/ingreso.service.js';
-import { esquemaFiltroIngresos } from '../dtos/movimiento.dto.js';
+import { esquemaFiltroIngresos, esquemaFiltroLotes } from '../dtos/movimiento.dto.js';
 import { idUsuarioDeSesion } from '../utils/sesion.js';
 import { ErrorApp } from '../errors/error-app.js';
 
@@ -12,6 +12,15 @@ export async function listar(req: Request, res: Response) {
     throw new ErrorApp(400, filtro.error.issues.map((i) => i.message).join('; '));
   }
   res.json(await ingresoService.listar(idUsuarioDeSesion(req), filtro.data));
+}
+
+/** Inventario › Lotes, vista por ítem. */
+export async function lotes(req: Request, res: Response) {
+  const filtro = esquemaFiltroLotes.safeParse(req.query);
+  if (!filtro.success) {
+    throw new ErrorApp(400, filtro.error.issues.map((i) => i.message).join('; '));
+  }
+  res.json(await ingresoService.lotes(idUsuarioDeSesion(req), filtro.data));
 }
 
 export async function obtener(req: Request, res: Response) {

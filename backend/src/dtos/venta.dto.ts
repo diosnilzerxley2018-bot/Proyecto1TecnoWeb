@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { camposDeFecha, camposDePagina } from './paginacion.dto.js';
-import { METODOS_PAGO, TIPOS_VENTA, type MetodoPago, type TipoVenta } from '../config/dominio.js';
+import { METODOS_PAGO_VENTA, TIPOS_VENTA, type MetodoPago, type TipoVenta } from '../config/dominio.js';
 import type { PagoDTO } from '../services/pago.service.js';
 
 /** Valores admitidos por `ck_venta_estado_pago`. */
@@ -24,7 +24,9 @@ const esquemaLinea = z.object({
  */
 export const esquemaCrearVenta = z.object({
   tipoVenta: z.enum(TIPOS_VENTA).default('Mesa'),
-  metodoPago: z.enum(METODOS_PAGO),
+  metodoPago: z.enum(METODOS_PAGO_VENTA, {
+    error: 'en el mostrador se cobra en efectivo o con QR: no hay terminal para tarjeta',
+  }),
   idCliente: z.number().int().positive().nullable().optional(),
   items: z.array(esquemaLinea).min(1, 'la venta debe contener al menos un producto').max(50),
 });

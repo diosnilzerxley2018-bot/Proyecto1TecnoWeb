@@ -37,6 +37,7 @@ export const ventasDelPeriodo = (filtro: FiltroVentas) =>
           id_producto: true,
           cantidad: true,
           precio_unitario: true,
+          costo_unitario: true,
           producto_almacen: { select: { producto: { select: { nombre: true } } } },
         },
       },
@@ -59,6 +60,7 @@ export interface FiltroPedidos {
   hasta: Date;
   estado?: string;
   idRepartidor?: number;
+  idProducto?: number;
 }
 
 /**
@@ -74,6 +76,9 @@ export const pedidosDelPeriodo = (filtro: FiltroPedidos) =>
       fecha: { gte: filtro.desde, lte: filtro.hasta },
       ...(filtro.estado ? { estado_pedido: filtro.estado } : {}),
       ...(filtro.idRepartidor ? { id_repartidor: filtro.idRepartidor } : {}),
+      ...(filtro.idProducto
+        ? { detalle_pedido: { some: { id_producto: filtro.idProducto } } }
+        : {}),
     },
     orderBy: { fecha: 'asc' },
     select: {
@@ -84,6 +89,16 @@ export const pedidosDelPeriodo = (filtro: FiltroPedidos) =>
       estado_pago: true,
       metodo_pago: true,
       total: true,
+      // Lo vendido, con su costo al pedirse: es lo que da la ganancia.
+      detalle_pedido: {
+        select: {
+          id_producto: true,
+          cantidad: true,
+          precio_unitario: true,
+          costo_unitario: true,
+          producto_almacen: { select: { producto: { select: { nombre: true } } } },
+        },
+      },
       empleado: { select: { id_empleado: true, usuario: { select: { nombre: true, apellido: true } } } },
     },
   });

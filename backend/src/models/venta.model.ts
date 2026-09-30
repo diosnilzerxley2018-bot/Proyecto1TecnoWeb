@@ -109,6 +109,8 @@ export const crearDetalle = (
     id_almacen: number;
     cantidad: number;
     precio_unitario: number;
+    /** Costo promedio del producto al registrarse; nulo si no tenía. */
+    costo_unitario: number | null;
   }[],
 ) => tx.detalle_venta.createMany({ data: lineas });
 

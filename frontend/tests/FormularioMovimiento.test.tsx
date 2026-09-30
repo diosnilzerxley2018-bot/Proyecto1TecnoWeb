@@ -176,9 +176,20 @@ describe('Nota de ingreso', () => {
     const motivos = screen.getAllByRole('option').map((o) => o.textContent);
     expect(motivos).toEqual([
       expect.stringContaining('Compra'),
+      expect.stringContaining('Reposición'),
       expect.stringContaining('Ajuste'),
       expect.stringContaining('Devolución'),
     ]);
+    // La devolución de un ingreso es la del cliente.
+    expect(motivos[3]).toContain('vuelven del cliente');
+  });
+
+  it('una reposición viene del proveedor: pide su nombre', async () => {
+    const usuario = await dibujar('ingreso');
+
+    await elegir(usuario, 'Motivo', /Reposición/);
+
+    expect(screen.getByLabelText('Proveedor')).toBeInTheDocument();
   });
 
   it('una devolución ofrece solo productos, y señala el insumo elegido antes de cambiar de motivo', async () => {
@@ -205,13 +216,29 @@ describe('Nota de ingreso', () => {
 });
 
 describe('Nota de egreso', () => {
-  it('solo ofrece Merma y Ajuste: los insumos de una orden los descuenta la orden', async () => {
+  it('ofrece Merma, Ajuste y Devolución, sin Producción: esa la descuenta la orden', async () => {
     const usuario = await dibujar('egreso');
 
     await usuario.click(screen.getByRole('combobox', { name: 'Motivo' }));
 
     const motivos = screen.getAllByRole('option').map((o) => o.textContent);
-    expect(motivos).toEqual([expect.stringContaining('Merma'), expect.stringContaining('Ajuste')]);
+    expect(motivos).toEqual([
+      expect.stringContaining('Merma'),
+      expect.stringContaining('Ajuste'),
+      expect.stringContaining('Devolución'),
+    ]);
+    // La devolución de un egreso es la que se le hace al proveedor.
+    expect(motivos[2]).toContain('se le devuelve al proveedor');
+  });
+
+  it('una devolución al proveedor admite insumos y pide anotar a quién y por qué', async () => {
+    const usuario = await dibujar('egreso');
+
+    await elegir(usuario, 'Motivo', /Devolución/);
+    await elegir(usuario, 'Ítem', /Avena/);
+
+    expect(screen.getByRole('combobox', { name: 'Ítem' })).toHaveTextContent('Avena');
+    expect(screen.getByPlaceholderText(/A qué proveedor y por qué/)).toBeInTheDocument();
   });
 
   it('cada almacén dice cuánto hay, y no deja sacar más de eso', async () => {

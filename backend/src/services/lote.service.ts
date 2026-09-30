@@ -23,6 +23,9 @@ export interface DatosLote {
  *
  * Un insumo que no controla vencimiento —harina, avena— no genera lote: su
  * existencia vive solo en la cifra consolidada.
+ *
+ * Devuelve el lote al que entró, o nulo si no lleva: la nota lo anota en su
+ * línea para que el lote pueda verse con su precio de compra.
  */
 export async function ingresar(
   tx: ClientePrisma,
@@ -34,7 +37,7 @@ export async function ingresar(
     lote: DatosLote | null;
     nombreInsumo: string;
   },
-): Promise<void> {
+): Promise<number | null> {
   if (datos.controlaVencimiento && !datos.lote) {
     throw new ErrorApp(
       400,
@@ -44,7 +47,7 @@ export async function ingresar(
 
   await stockModel.incrementarInsumo(tx, datos.idIngrediente, datos.idAlmacen, datos.cantidad);
 
-  if (!datos.lote) return;
+  if (!datos.lote) return null;
 
   const idLote = await loteModel.obtenerOCrear(tx, {
     idIngrediente: datos.idIngrediente,
@@ -52,6 +55,7 @@ export async function ingresar(
     fechaVencimiento: datos.lote.fechaVencimiento,
   });
   await loteModel.incrementar(tx, idLote, datos.idAlmacen, datos.cantidad);
+  return idLote;
 }
 
 export interface LoteConsumido {

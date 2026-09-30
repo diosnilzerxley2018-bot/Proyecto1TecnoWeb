@@ -9,6 +9,7 @@ import {
   Factory,
   Gauge,
   History,
+  Layers,
   ScanLine,
   ShieldCheck,
   ShoppingBag,
@@ -119,6 +120,13 @@ export const MODULOS: Modulo[] = [
         etiqueta: 'Movimientos',
         icono: ArrowLeftRight,
         alias: 'ingreso egreso compra merma nota',
+      },
+      {
+        // Cada ingreso es un lote, con el precio que se pagó por unidad.
+        ruta: '/inventario/lotes',
+        etiqueta: 'Lotes',
+        icono: Layers,
+        alias: 'precio compra costo unitario proveedor vencimiento entradas',
       },
       { ruta: '/inventario/insumos', etiqueta: 'Insumos', icono: Boxes, alias: 'materia prima' },
       {

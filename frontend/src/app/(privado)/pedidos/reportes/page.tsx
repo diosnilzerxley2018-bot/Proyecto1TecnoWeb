@@ -6,8 +6,14 @@ import { RequierePermiso } from '@/components/RequierePermiso';
 import { Selector } from '@/components/ui/Selector';
 import { MarcoReporte } from '@/components/reportes/MarcoReporte';
 import { Cifra, Cifras, TablaReporte } from '@/components/reportes/PiezasReporte';
-import type { ReportePedidos, Repartidor } from '@/types';
-import { formatearBs } from '@/lib/formato';
+import { CifrasGanancia, columnasGanancia } from '@/components/reportes/Ganancia';
+import type {
+  LineaProductoReporte,
+  ProductoCatalogo,
+  ReportePedidos,
+  Repartidor,
+} from '@/types';
+import { formatearBs, formatearPorcentaje } from '@/lib/formato';
 import { ETIQUETA_ESTADO } from '@/lib/pedidos';
 
 /**
@@ -18,6 +24,10 @@ import { ETIQUETA_ESTADO } from '@/lib/pedidos';
  * tarda en llevarlos. El tiempo no está guardado en ninguna columna; sale de
  * restar la confirmación a la entrega, y por eso solo lo tienen los pedidos que
  * de verdad llegaron.
+ *
+ * También dice cuánto se ganó: el mismo cálculo que el reporte de ventas, sobre
+ * los pedidos no cancelados. Filtrado por un producto, el dinero es el de ese
+ * producto, no el del pedido entero.
  */
 export default function PaginaReportePedidos() {
   return (
@@ -34,24 +44,44 @@ function ReportePedidosPantalla() {
   const [estado, setEstado] = useState<string | null>(null);
   const [idRepartidor, setIdRepartidor] = useState<number | null>(null);
   const [repartidores, setRepartidores] = useState<Repartidor[]>([]);
+  const [idProducto, setIdProducto] = useState<number | null>(null);
+  const [productos, setProductos] = useState<ProductoCatalogo[]>([]);
 
   useEffect(() => {
+    // Sin una lista, su filtro queda vacío; el reporte general sigue vivo.
     api
       .get<Repartidor[]>('/gestion/repartidores')
       .then(setRepartidores)
-      .catch(() => {
-        // Sin la lista el filtro queda vacío; el reporte general sigue vivo.
-      });
+      .catch(() => {});
+    api
+      .get<ProductoCatalogo[]>('/catalogo')
+      .then(setProductos)
+      .catch(() => {});
   }, []);
 
   return (
     <MarcoReporte<ReportePedidos>
       titulo="Reporte de pedidos"
-      descripcion="Cuántos pedidos entraron, en qué estado quedaron y cuánto se tardó en entregarlos"
+      descripcion="Cuántos pedidos entraron, cuánto se ganó con ellos y cuánto se tardó en entregarlos"
       recurso="pedidos"
-      filtros={{ estado: estado ?? undefined, idRepartidor: idRepartidor ?? undefined }}
+      filtros={{
+        estado: estado ?? undefined,
+        idRepartidor: idRepartidor ?? undefined,
+        idProducto: idProducto ?? undefined,
+      }}
       controles={
-        <div className="grid gap-4 sm:grid-cols-2 lg:col-span-1">
+        // Tres filtros no caben en la columna de uno: van en su propia fila.
+        <div className="grid gap-4 sm:col-span-2 sm:grid-cols-3 lg:col-span-3">
+          <Selector<number>
+            etiqueta="Producto"
+            valor={idProducto}
+            marcador="Todos"
+            onCambiar={(v) => setIdProducto(v === -1 ? null : v)}
+            opciones={[
+              { valor: -1, etiqueta: 'Todos los productos' },
+              ...productos.map((p) => ({ valor: p.id, etiqueta: p.nombre })),
+            ]}
+          />
           <Selector<string>
             etiqueta="Estado"
             valor={estado}
@@ -98,6 +128,26 @@ function ReportePedidosPantalla() {
             />
           </Cifras>
 
+          {/* Como el total: sin los cancelados, cuyo stock volvió al almacén. */}
+          <CifrasGanancia ganancia={reporte.resumen} />
+
+          <TablaReporte
+            titulo="Por producto"
+            filas={reporte.porProducto}
+            clave={(p) => p.idProducto}
+            columnas={[
+              { titulo: 'Producto', celda: (p) => p.nombre },
+              { titulo: 'Unidades', numerica: true, celda: (p) => p.unidades },
+              { titulo: 'Importe', numerica: true, celda: (p) => formatearBs(p.importe) },
+              {
+                titulo: '% del total',
+                numerica: true,
+                celda: (p) => formatearPorcentaje(p.participacion),
+              },
+              ...columnasGanancia<LineaProductoReporte>(),
+            ]}
+          />
+
           <TablaReporte
             titulo="Por estado"
             filas={reporte.porEstado}
@@ -137,7 +187,12 @@ function ReportePedidosPantalla() {
               },
               { titulo: 'Estado', celda: (p) => p.estado },
               { titulo: 'Repartidor', celda: (p) => p.repartidor ?? '—' },
-              { titulo: 'Total', numerica: true, celda: (p) => formatearBs(p.total) },
+              {
+                // Filtrado por producto, es lo de ese producto en el pedido.
+                titulo: reporte.producto ? 'Importe del producto' : 'Total',
+                numerica: true,
+                celda: (p) => formatearBs(p.total),
+              },
               {
                 titulo: 'Entrega',
                 numerica: true,

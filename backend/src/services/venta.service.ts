@@ -2,6 +2,7 @@ import { prisma } from '../config/prisma.js';
 import * as ventaModel from '../models/venta.model.js';
 import { pagina, type Pagina } from '../dtos/paginacion.dto.js';
 import * as clienteModel from '../models/cliente.model.js';
+import * as productoModel from '../models/producto.model.js';
 import type { VentaConsultada } from '../models/venta.model.js';
 import type { ClientePrisma } from '../models/stock.model.js';
 import type {
@@ -175,6 +176,13 @@ async function registrarVentaEnTransaccion(
     idEmpleado: datos.idEmpleado,
   });
 
+  // Lo que le cuesta al negocio cada producto hoy: con el precio, da la
+  // ganancia de la venta sin que la muevan las compras posteriores.
+  const costoDe = await productoModel.costosPromedio(
+    asignaciones.map((a) => a.idProducto),
+    tx,
+  );
+
   await ventaModel.crearDetalle(
     tx,
     asignaciones.map((a) => ({
@@ -183,6 +191,7 @@ async function registrarVentaEnTransaccion(
       id_almacen: a.idAlmacen,
       cantidad: a.cantidad,
       precio_unitario: precioDe.get(a.idProducto)!,
+      costo_unitario: costoDe.get(a.idProducto) ?? null,
     })),
   );
 
