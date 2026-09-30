@@ -233,6 +233,28 @@ const AJUSTES: Ajuste[] = [
       `CREATE INDEX IF NOT EXISTS ix_detingins_lote ON detalle_ingreso_insumo(id_lote)`,
     ],
   },
+  {
+    nombre: 'devolución ↔ compra y reposición ↔ devolución — las notas quedan encadenadas',
+    sentencias: [
+      `ALTER TABLE nota_egreso ADD COLUMN IF NOT EXISTS id_nota_ingreso INT`,
+      `ALTER TABLE nota_egreso DROP CONSTRAINT IF EXISTS fk_notaegr_ingreso`,
+      `ALTER TABLE nota_egreso ADD CONSTRAINT fk_notaegr_ingreso
+         FOREIGN KEY (id_nota_ingreso) REFERENCES nota_ingreso(id_nota_ingreso)`,
+      `ALTER TABLE nota_egreso DROP CONSTRAINT IF EXISTS ck_notaegr_devolucion`,
+      `ALTER TABLE nota_egreso ADD CONSTRAINT ck_notaegr_devolucion
+         CHECK (id_nota_ingreso IS NULL OR motivo = 'Devolucion')`,
+      `CREATE INDEX IF NOT EXISTS ix_notaegr_ingreso ON nota_egreso(id_nota_ingreso)`,
+
+      `ALTER TABLE nota_ingreso ADD COLUMN IF NOT EXISTS id_nota_egreso INT`,
+      `ALTER TABLE nota_ingreso DROP CONSTRAINT IF EXISTS fk_notaing_egreso`,
+      `ALTER TABLE nota_ingreso ADD CONSTRAINT fk_notaing_egreso
+         FOREIGN KEY (id_nota_egreso) REFERENCES nota_egreso(id_nota_egreso)`,
+      `ALTER TABLE nota_ingreso DROP CONSTRAINT IF EXISTS ck_notaing_reposicion`,
+      `ALTER TABLE nota_ingreso ADD CONSTRAINT ck_notaing_reposicion
+         CHECK (id_nota_egreso IS NULL OR motivo = 'Reposicion')`,
+      `CREATE INDEX IF NOT EXISTS ix_notaing_egreso ON nota_ingreso(id_nota_egreso)`,
+    ],
+  },
 ];
 
 const url = process.env.DATABASE_URL;

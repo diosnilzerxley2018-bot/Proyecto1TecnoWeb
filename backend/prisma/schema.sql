@@ -244,11 +244,16 @@ CREATE TABLE nota_ingreso (
     numero_documento    VARCHAR(50),
     total               NUMERIC(12,2) NOT NULL DEFAULT 0,
     id_empleado         INT NOT NULL,
+    -- En una Reposicion, la devolucion al proveedor que repone. Su clave
+    -- foranea se declara junto a nota_egreso, que se crea despues.
+    id_nota_egreso      INT,
     CONSTRAINT fk_notaing_empleado FOREIGN KEY (id_empleado) REFERENCES empleado(id_empleado),
     -- Produccion solo lo escribe la orden al finalizarse. Devolucion es lo que
     -- vuelve del cliente; Reposicion, lo que el proveedor repone de lo que se
     -- le devolvio, sin nuevo pago.
-    CONSTRAINT ck_notaing_motivo CHECK (motivo IN ('Compra','Produccion','Ajuste','Devolucion','Reposicion'))
+    CONSTRAINT ck_notaing_motivo CHECK (motivo IN ('Compra','Produccion','Ajuste','Devolucion','Reposicion')),
+    -- Solo una reposicion dice que devolucion repone.
+    CONSTRAINT ck_notaing_reposicion CHECK (id_nota_egreso IS NULL OR motivo = 'Reposicion')
 );
 
 CREATE TABLE detalle_ingreso_insumo (
@@ -286,11 +291,22 @@ CREATE TABLE nota_egreso (
     motivo          VARCHAR(20) NOT NULL,
     observacion     VARCHAR(200),
     id_empleado     INT NOT NULL,
+    -- En una Devolucion, la compra que se le devuelve al proveedor: se
+    -- devuelve de lo que entro en ella, y hasta lo que entro.
+    id_nota_ingreso INT,
     CONSTRAINT fk_notaegr_empleado FOREIGN KEY (id_empleado) REFERENCES empleado(id_empleado),
+    CONSTRAINT fk_notaegr_ingreso FOREIGN KEY (id_nota_ingreso) REFERENCES nota_ingreso(id_nota_ingreso),
     -- Devolucion es lo que se le devuelve al proveedor: vencido, danado o
     -- equivocado. Lo repone despues con una nota de ingreso por Reposicion.
-    CONSTRAINT ck_notaegr_motivo CHECK (motivo IN ('Produccion','Merma','Ajuste','Devolucion'))
+    CONSTRAINT ck_notaegr_motivo CHECK (motivo IN ('Produccion','Merma','Ajuste','Devolucion')),
+    -- Solo una devolucion dice que compra devuelve.
+    CONSTRAINT ck_notaegr_devolucion CHECK (id_nota_ingreso IS NULL OR motivo = 'Devolucion')
 );
+
+-- La reposicion apunta a la devolucion que repone: Compra -> Devolucion ->
+-- Reposicion quedan encadenadas.
+ALTER TABLE nota_ingreso
+    ADD CONSTRAINT fk_notaing_egreso FOREIGN KEY (id_nota_egreso) REFERENCES nota_egreso(id_nota_egreso);
 
 CREATE TABLE detalle_egreso_insumo (
     id_nota_egreso  INT NOT NULL,
@@ -662,6 +678,9 @@ CREATE INDEX ix_ordprod_estado           ON orden_produccion(estado);
 CREATE INDEX ix_ordprod_fecha           ON orden_produccion(fecha DESC);
 CREATE INDEX ix_notaing_fecha           ON nota_ingreso(fecha DESC);
 CREATE INDEX ix_notaegr_fecha           ON nota_egreso(fecha DESC);
+-- Cuanto se devolvio de una compra y cuanto se repuso de una devolucion.
+CREATE INDEX ix_notaegr_ingreso         ON nota_egreso(id_nota_ingreso);
+CREATE INDEX ix_notaing_egreso          ON nota_ingreso(id_nota_egreso);
 CREATE INDEX ix_visita_fecha             ON visita(fecha DESC);
 
 -- Lotes: la consulta clave es "que vence primero" dentro de un almacen
