@@ -1,5 +1,6 @@
 import { prisma } from '../config/prisma.js';
 import type { ClientePrisma } from './stock.model.js';
+import { cantidadExacta } from './cantidad-exacta.js';
 
 /**
  * Capa Model — clases de análisis tblLote y tblLoteAlmacen (hallazgo A6).
@@ -99,9 +100,11 @@ export async function descontar(
   idAlmacen: number,
   cantidad: number,
 ): Promise<boolean> {
+  // Decimal exacto: en coma flotante, sacar justo lo que quedaba podía no alcanzar.
+  const exacta = cantidadExacta(cantidad);
   const { count } = await tx.lote_almacen.updateMany({
-    where: { id_lote: idLote, id_almacen: idAlmacen, stock_actual: { gte: cantidad } },
-    data: { stock_actual: { decrement: cantidad } },
+    where: { id_lote: idLote, id_almacen: idAlmacen, stock_actual: { gte: exacta } },
+    data: { stock_actual: { decrement: exacta } },
   });
   return count === 1;
 }

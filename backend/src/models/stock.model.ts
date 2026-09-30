@@ -1,4 +1,5 @@
 import type { Prisma } from '@prisma/client';
+import { cantidadExacta } from './cantidad-exacta.js';
 
 /**
  * Capa Model — clase de análisis tblProductoAlmacen.
@@ -69,9 +70,11 @@ export async function descontarInsumo(
   idAlmacen: number,
   cantidad: number,
 ): Promise<boolean> {
+  // Decimal exacto: en coma flotante, sacar justo lo que quedaba podía no alcanzar.
+  const exacta = cantidadExacta(cantidad);
   const { count } = await tx.ingrediente_almacen.updateMany({
-    where: { id_ingrediente: idIngrediente, id_almacen: idAlmacen, stock_actual: { gte: cantidad } },
-    data: { stock_actual: { increment: -cantidad } },
+    where: { id_ingrediente: idIngrediente, id_almacen: idAlmacen, stock_actual: { gte: exacta } },
+    data: { stock_actual: { decrement: exacta } },
   });
   return count === 1;
 }

@@ -327,3 +327,34 @@ describe('A6 · Consulta de vencimientos', () => {
     expect(r.status).toBe(401);
   });
 });
+
+describe('Sacar exactamente lo que queda', () => {
+  /*
+   * 65,4 en coma flotante vale 65,400000000000005…: comparado con exactitud
+   * contra la columna NUMERIC, «hay 65,400 ≥ 65,4» daba falso, y sacar todo lo
+   * que quedaba de un lote o de un insumo se rechazaba por falta de stock.
+   */
+  it('se puede sacar todo lo que queda de un lote de 65,4 y de su insumo', async () => {
+    const staff = await obtenerToken();
+    const almacen = await idAlmacen(staff, 'Camara Refrigerada');
+    const insumo = await crearPerecedero(staff);
+    await request(app)
+      .post('/api/ingresos')
+      .set(cabecera(staff))
+      .send({
+        insumos: [
+          { idIngrediente: insumo.id, idAlmacen: almacen, cantidad: 65.4, costoUnitario: 10, fechaVencimiento: enDias(10) },
+        ],
+      })
+      .expect(201);
+
+    const r = await request(app)
+      .post('/api/egresos')
+      .set(cabecera(staff))
+      .send({ motivo: 'Merma', insumos: [{ idIngrediente: insumo.id, idAlmacen: almacen, cantidad: 65.4 }] });
+
+    expect(r.status).toBe(201);
+    const despues = await buscarInsumo(staff, insumo.nombre);
+    expect(despues.stockTotal).toBe(0);
+  });
+});
