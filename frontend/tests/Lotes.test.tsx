@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import PaginaLotes from '@/app/(privado)/inventario/lotes/page';
 
@@ -120,6 +120,20 @@ describe('Inventario › Lotes', () => {
     expect(screen.getByText('Último lote: Bs 15,00 · Costo actual: Bs 13,50')).toBeInTheDocument();
     expect(screen.getByText('ING-0008')).toBeInTheDocument();
     expect(consultar).toHaveBeenLastCalledWith('/ingresos/lotes?pagina=1');
+  });
+
+  it('filtra por rango de fechas', async () => {
+    render(<PaginaLotes />);
+    await screen.findByText('Lote ING-0012');
+
+    fireEvent.change(screen.getByLabelText('Desde'), { target: { value: '2026-09-01' } });
+    fireEvent.change(screen.getByLabelText('Hasta'), { target: { value: '2026-09-30' } });
+
+    await waitFor(() =>
+      expect(consultar).toHaveBeenLastCalledWith(
+        '/ingresos?pagina=1&desde=2026-09-01&hasta=2026-09-30',
+      ),
+    );
   });
 
   it('busca por nombre en el servidor, después de dejar de escribir', async () => {

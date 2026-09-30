@@ -12,7 +12,11 @@ const DETALLE_INSUMO = {
     ingrediente_almacen: {
       select: {
         ingrediente: {
-          select: { nombre: true, unidad_medida: { select: { abreviatura: true } } },
+          select: {
+            nombre: true,
+            controla_vencimiento: true,
+            unidad_medida: { select: { abreviatura: true } },
+          },
         },
         almacen: { select: { nombre: true } },
       },
@@ -70,13 +74,20 @@ export const buscarPorId = (id: number) =>
 
 export const crear = (
   tx: ClientePrisma,
-  datos: { motivo: string; observacion: string | null; idEmpleado: number },
+  datos: {
+    motivo: string;
+    observacion: string | null;
+    idEmpleado: number;
+    /** En una Devolución, la compra que devuelve. */
+    idNotaIngreso?: number | null;
+  },
 ) =>
   tx.nota_egreso.create({
     data: {
       motivo: datos.motivo,
       observacion: datos.observacion,
       id_empleado: datos.idEmpleado,
+      id_nota_ingreso: datos.idNotaIngreso ?? null,
     },
     select: { id_nota_egreso: true },
   });
@@ -102,3 +113,46 @@ export const crearDetalleProductos = (
 ) => tx.detalle_egreso_producto.createMany({ data: lineas });
 
 export type NotaEgresoConsultada = NonNullable<Awaited<ReturnType<typeof buscarPorId>>>;
+
+/* ------------------------------------------------------------------ */
+/* Compra → Devolución → Reposición                                    */
+/* ------------------------------------------------------------------ */
+
+/** Lo que salió en cada línea, sin nombres: para sumar lo devuelto. */
+const CANTIDADES = {
+  detalle_egreso_insumo: { select: { id_ingrediente: true, id_almacen: true, cantidad: true } },
+  detalle_egreso_producto: { select: { id_producto: true, id_almacen: true, cantidad: true } },
+} as const;
+
+/** Las devoluciones de unas compras: cuánto se devolvió ya de cada una. */
+export const devueltoDe = (idsCompra: number[], tx: ClientePrisma = prisma) =>
+  tx.nota_egreso.findMany({
+    where: { id_nota_ingreso: { in: idsCompra } },
+    select: { id_nota_ingreso: true, ...CANTIDADES },
+  });
+
+/**
+ * Las devoluciones al proveedor más recientes, con lo que salió: son las que
+ * el formulario ofrece para reponer.
+ */
+export const devolucionesRecientes = (tope: number) =>
+  prisma.nota_egreso.findMany({
+    where: { motivo: 'Devolucion', id_nota_ingreso: { not: null } },
+    orderBy: { fecha: 'desc' },
+    take: tope,
+    select: {
+      id_nota_egreso: true,
+      fecha: true,
+      observacion: true,
+      id_nota_ingreso: true,
+      detalle_egreso_insumo: DETALLE_INSUMO,
+      detalle_egreso_producto: DETALLE_PRODUCTO,
+    },
+  });
+
+/** Una devolución, para validar la reposición que la repone. */
+export const buscarDevolucion = (tx: ClientePrisma, id: number) =>
+  tx.nota_egreso.findUnique({
+    where: { id_nota_egreso: id },
+    select: { id_nota_egreso: true, motivo: true, id_nota_ingreso: true, ...CANTIDADES },
+  });

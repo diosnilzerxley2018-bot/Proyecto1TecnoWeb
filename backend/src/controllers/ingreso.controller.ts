@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import * as ingresoService from '../services/ingreso.service.js';
+import * as devolucionService from '../services/devolucion.service.js';
 import { esquemaFiltroIngresos, esquemaFiltroLotes } from '../dtos/movimiento.dto.js';
 import { idUsuarioDeSesion } from '../utils/sesion.js';
 import { ErrorApp } from '../errors/error-app.js';
@@ -12,6 +13,11 @@ export async function listar(req: Request, res: Response) {
     throw new ErrorApp(400, filtro.error.issues.map((i) => i.message).join('; '));
   }
   res.json(await ingresoService.listar(idUsuarioDeSesion(req), filtro.data));
+}
+
+/** Las compras que todavía pueden devolverse al proveedor. */
+export async function devolubles(req: Request, res: Response) {
+  res.json(await devolucionService.comprasDevolubles(idUsuarioDeSesion(req)));
 }
 
 /** Inventario › Lotes, vista por ítem. */

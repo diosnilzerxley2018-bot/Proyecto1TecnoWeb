@@ -77,9 +77,47 @@ const BARRA = {
   imagenActualizadaEn: null,
 };
 
+/** La compra F-101: 5 L de leche a Bs 15, de los que ya se devolvió 1. */
+const COMPRA = {
+  id: 12,
+  fecha: '2026-09-29T14:00:00.000Z',
+  proveedor: 'Distribuidora Sur',
+  numeroDocumento: 'F-101',
+  idCompra: null,
+  observacion: null,
+  lineas: [
+    {
+      tipo: 'insumo',
+      id: 1,
+      nombre: 'Leche',
+      unidad: 'L',
+      idAlmacen: 2,
+      almacen: 'Camara Refrigerada',
+      cantidad: 5,
+      vinculado: 1,
+      pendiente: 4,
+      existencia: 5,
+      costoUnitario: 15,
+      controlaVencimiento: false,
+      lote: null,
+    },
+  ],
+};
+
+/** La devolución EGR-0005 de esa compra: 2 L por reponer. */
+const DEVOLUCION = {
+  ...COMPRA,
+  id: 5,
+  idCompra: 12,
+  observacion: 'Llegó vencida',
+  lineas: [{ ...COMPRA.lineas[0], cantidad: 2, vinculado: 0, pendiente: 2, existencia: null }],
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   consultar.mockImplementation((ruta: string) => {
+    if (ruta === '/ingresos/devolubles') return Promise.resolve([COMPRA] as never);
+    if (ruta === '/egresos/reponibles') return Promise.resolve([DEVOLUCION] as never);
     if (ruta.startsWith('/insumos')) return Promise.resolve(INSUMOS as never);
     if (ruta === '/productos/7') return Promise.resolve({ ...BARRA, costoPromedio: 5.5 } as never);
     if (ruta.startsWith('/productos')) return Promise.resolve([BARRA] as never);
@@ -231,14 +269,33 @@ describe('Nota de egreso', () => {
     expect(motivos[2]).toContain('se le devuelve al proveedor');
   });
 
-  it('una devolución al proveedor admite insumos y pide anotar a quién y por qué', async () => {
+  it('una devolución al proveedor se elige de una compra, y devuelve hasta lo que falta', async () => {
     const usuario = await dibujar('egreso');
 
     await elegir(usuario, 'Motivo', /Devolución/);
-    await elegir(usuario, 'Ítem', /Avena/);
+    // No se eligen ítems sueltos: se elige la compra, buscándola.
+    expect(screen.queryByRole('combobox', { name: 'Ítem' })).not.toBeInTheDocument();
+    await elegir(usuario, 'Compra que se devuelve', /ING-0012 · Distribuidora Sur/);
 
-    expect(screen.getByRole('combobox', { name: 'Ítem' })).toHaveTextContent('Avena');
-    expect(screen.getByPlaceholderText(/A qué proveedor y por qué/)).toBeInTheDocument();
+    expect(screen.getByText(/entraron 5 L a Bs 15,00, ya se devolvieron 1/)).toBeInTheDocument();
+    const cantidad = screen.getByLabelText('Cantidad a devolver');
+    await usuario.type(cantidad, '5');
+    await usuario.click(screen.getByRole('button', { name: 'Registrar egreso' }));
+    expect(await screen.findByText('Hasta 4 L')).toBeInTheDocument();
+    expect(registrar).not.toHaveBeenCalled();
+
+    await usuario.clear(cantidad);
+    await usuario.type(cantidad, '2');
+    await usuario.type(screen.getByLabelText('Observación'), 'Llegó vencida');
+    await usuario.click(screen.getByRole('button', { name: 'Registrar egreso' }));
+
+    expect(registrar).toHaveBeenCalledWith('/egresos', {
+      motivo: 'Devolucion',
+      observacion: 'Llegó vencida',
+      idNotaIngreso: 12,
+      insumos: [{ idIngrediente: 1, idAlmacen: 2, cantidad: 2 }],
+      productos: [],
+    });
   });
 
   it('cada almacén dice cuánto hay, y no deja sacar más de eso', async () => {
@@ -264,6 +321,32 @@ describe('Nota de egreso', () => {
     // El error reemplaza a la ayuda cuando esta termina de salir.
     expect(await screen.findByText('Solo hay 1 kg en Deposito Central')).toBeInTheDocument();
     expect(registrar).not.toHaveBeenCalled();
+  });
+});
+
+describe('Reposición', () => {
+  it('se elige la devolución y ya propone lo que falta reponer, al precio de la compra', async () => {
+    registrar.mockResolvedValue({} as never);
+    const usuario = await dibujar('ingreso');
+
+    await elegir(usuario, 'Motivo', /Reposición/);
+    await elegir(usuario, 'Devolución que se repone', /EGR-0005/);
+
+    expect(screen.getByLabelText('Cantidad a reponer')).toHaveValue(2);
+    expect(screen.getByText(/Vuelve al precio de la compra: Bs 15,00/)).toBeInTheDocument();
+    // El proveedor es el de la compra.
+    expect(screen.getByLabelText('Proveedor')).toHaveValue('Distribuidora Sur');
+
+    await usuario.click(screen.getByRole('button', { name: 'Registrar ingreso' }));
+
+    expect(registrar).toHaveBeenCalledWith('/ingresos', {
+      motivo: 'Reposicion',
+      proveedor: 'Distribuidora Sur',
+      numeroDocumento: null,
+      idNotaEgreso: 5,
+      insumos: [{ idIngrediente: 1, idAlmacen: 2, cantidad: 2, costoUnitario: 15 }],
+      productos: [],
+    });
   });
 });
 

@@ -180,34 +180,42 @@ model ingrediente_almacen {
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model nota_egreso {
-  id_nota_egreso          Int                       @id @default(autoincrement())
-  fecha                   DateTime                  @default(now()) @db.Timestamp(6)
-  motivo                  String                    @db.VarChar(20)
-  observacion             String?                   @db.VarChar(200)
-  id_empleado             Int
-  detalle_egreso_insumo   detalle_egreso_insumo[]
-  detalle_egreso_producto detalle_egreso_producto[]
-  empleado                empleado                  @relation(fields: [id_empleado], references: [id_empleado], onDelete: NoAction, onUpdate: NoAction, map: "fk_notaegr_empleado")
-  orden_produccion        orden_produccion[]
+  id_nota_egreso                                         Int                       @id @default(autoincrement())
+  fecha                                                  DateTime                  @default(now()) @db.Timestamp(6)
+  motivo                                                 String                    @db.VarChar(20)
+  observacion                                            String?                   @db.VarChar(200)
+  id_empleado                                            Int
+  id_nota_ingreso                                        Int?
+  detalle_egreso_insumo                                  detalle_egreso_insumo[]
+  detalle_egreso_producto                                detalle_egreso_producto[]
+  empleado                                               empleado                  @relation(fields: [id_empleado], references: [id_empleado], onDelete: NoAction, onUpdate: NoAction, map: "fk_notaegr_empleado")
+  nota_ingreso_nota_egreso_id_nota_ingresoTonota_ingreso nota_ingreso?             @relation("nota_egreso_id_nota_ingresoTonota_ingreso", fields: [id_nota_ingreso], references: [id_nota_ingreso], onDelete: NoAction, onUpdate: NoAction, map: "fk_notaegr_ingreso")
+  nota_ingreso_nota_ingreso_id_nota_egresoTonota_egreso  nota_ingreso[]            @relation("nota_ingreso_id_nota_egresoTonota_egreso")
+  orden_produccion                                       orden_produccion[]
 
   @@index([fecha(sort: Desc)], map: "ix_notaegr_fecha")
+  @@index([id_nota_ingreso], map: "ix_notaegr_ingreso")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model nota_ingreso {
-  id_nota_ingreso          Int                        @id @default(autoincrement())
-  fecha                    DateTime                   @default(now()) @db.Timestamp(6)
-  motivo                   String                     @default("Compra") @db.VarChar(20)
-  proveedor                String?                    @db.VarChar(150)
-  numero_documento         String?                    @db.VarChar(50)
-  total                    Decimal                    @default(0) @db.Decimal(12, 2)
-  id_empleado              Int
-  detalle_ingreso_insumo   detalle_ingreso_insumo[]
-  detalle_ingreso_producto detalle_ingreso_producto[]
-  empleado                 empleado                   @relation(fields: [id_empleado], references: [id_empleado], onDelete: NoAction, onUpdate: NoAction, map: "fk_notaing_empleado")
-  orden_produccion         orden_produccion[]
+  id_nota_ingreso                                       Int                        @id @default(autoincrement())
+  fecha                                                 DateTime                   @default(now()) @db.Timestamp(6)
+  motivo                                                String                     @default("Compra") @db.VarChar(20)
+  proveedor                                             String?                    @db.VarChar(150)
+  numero_documento                                      String?                    @db.VarChar(50)
+  total                                                 Decimal                    @default(0) @db.Decimal(12, 2)
+  id_empleado                                           Int
+  id_nota_egreso                                        Int?
+  detalle_ingreso_insumo                                detalle_ingreso_insumo[]
+  detalle_ingreso_producto                              detalle_ingreso_producto[]
+  nota_egreso_nota_egreso_id_nota_ingresoTonota_ingreso nota_egreso[]              @relation("nota_egreso_id_nota_ingresoTonota_ingreso")
+  nota_egreso_nota_ingreso_id_nota_egresoTonota_egreso  nota_egreso?               @relation("nota_ingreso_id_nota_egresoTonota_egreso", fields: [id_nota_egreso], references: [id_nota_egreso], onDelete: NoAction, onUpdate: NoAction, map: "fk_notaing_egreso")
+  empleado                                              empleado                   @relation(fields: [id_empleado], references: [id_empleado], onDelete: NoAction, onUpdate: NoAction, map: "fk_notaing_empleado")
+  orden_produccion                                      orden_produccion[]
 
   @@index([fecha(sort: Desc)], map: "ix_notaing_fecha")
+  @@index([id_nota_egreso], map: "ix_notaing_egreso")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.

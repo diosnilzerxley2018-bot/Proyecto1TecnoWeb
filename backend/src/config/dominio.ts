@@ -218,6 +218,17 @@ export const MOTIVOS_EGRESO_MANUAL = ['Merma', 'Ajuste', 'Devolucion'] as const;
  */
 export const MOTIVO_SOLO_PRODUCTOS = 'Devolucion';
 
+/*
+ * Compra → Devolución → Reposición quedan encadenadas: la devolución al
+ * proveedor dice qué compra devuelve (`nota_egreso.id_nota_ingreso`) y solo
+ * saca lo que entró en ella; la reposición dice qué devolución repone
+ * (`nota_ingreso.id_nota_egreso`), repone solo lo que salió y al precio de la
+ * compra.
+ */
+export const MOTIVO_COMPRA = 'Compra';
+export const MOTIVO_DEVOLUCION = 'Devolucion';
+export const MOTIVO_REPOSICION = 'Reposicion';
+
 /**
  * Cómo se lee cada motivo de movimiento en un documento.
  *

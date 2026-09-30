@@ -13,6 +13,13 @@ import {
   type ItemMovible,
   type Linea,
 } from './EditorLineas';
+import {
+  claveVinculada,
+  LineasVinculadas,
+  revisarVinculadas,
+  valoresIniciales,
+  type ValorVinculado,
+} from './LineasVinculadas';
 import { api, ErrorApi } from '@/lib/api';
 import { useNotificaciones } from '@/components/ui/Notificaciones';
 import {
@@ -22,9 +29,17 @@ import {
   MOTIVO_SOLO_PRODUCTOS,
   MOTIVOS_EGRESO_MANUAL,
   MOTIVOS_INGRESO_MANUAL,
+  numeroDeEgreso,
+  numeroDeIngreso,
 } from '@/lib/inventario';
-import type { Almacen, Insumo, Producto, ResultadoEgreso } from '@/types';
-import { formatearCantidad } from '@/lib/formato';
+import type {
+  Almacen,
+  DocumentoVinculable,
+  Insumo,
+  Producto,
+  ResultadoEgreso,
+} from '@/types';
+import { formatearCantidad, formatearFecha } from '@/lib/formato';
 
 export type Direccion = 'ingreso' | 'egreso';
 
@@ -65,6 +80,12 @@ const CON_PROVEEDOR = new Set(['Compra', 'Reposicion']);
  *
  * El motivo Producción no se ofrece: lo escribe la orden de producción al
  * finalizarse (RF-PRO-07), y cargarlo aquí también lo contaba dos veces.
+ *
+ * Compra → Devolución → Reposición: una devolución al proveedor sale de una
+ * compra, y una reposición repone una devolución. Con esos dos motivos no se
+ * eligen ítems sueltos: se elige el documento —con buscador, porque pueden ser
+ * muchos— y se indica cuánto de cada línea (`LineasVinculadas`). El servidor
+ * comprueba lo mismo y pone el precio de la reposición.
  */
 export function FormularioMovimiento({
   direccion,
@@ -94,6 +115,40 @@ export function FormularioMovimiento({
   const [intentado, setIntentado] = useState(false);
   /** Productos cuyo costo ya se pidió a la ficha, para no repetir la consulta. */
   const costosPedidos = useRef(new Set<string>());
+
+  /** Una devolución al proveedor o una reposición: van atadas a un documento. */
+  const vinculada = esIngreso ? motivo === 'Reposicion' : motivo === 'Devolucion';
+  const [documentos, setDocumentos] = useState<DocumentoVinculable[] | null>(null);
+  const [idDocumento, setIdDocumento] = useState<number | null>(null);
+  const [valoresVinculados, setValoresVinculados] = useState<Record<string, ValorVinculado>>({});
+  const documento = documentos?.find((d) => d.id === idDocumento) ?? null;
+
+  // Las compras que pueden devolverse, o las devoluciones por reponer: se
+  // piden la primera vez que se elige el motivo.
+  useEffect(() => {
+    if (!vinculada || documentos !== null) return;
+    api
+      .get<DocumentoVinculable[]>(esIngreso ? '/egresos/reponibles' : '/ingresos/devolubles')
+      .then(setDocumentos)
+      .catch(() => {
+        setDocumentos([]);
+        notificar(
+          'error',
+          esIngreso
+            ? 'No se pudieron cargar las devoluciones por reponer'
+            : 'No se pudieron cargar las compras',
+        );
+      });
+  }, [vinculada, documentos, esIngreso, notificar]);
+
+  function elegirDocumento(id: number) {
+    const elegido = documentos?.find((d) => d.id === id);
+    if (!elegido) return;
+    setIdDocumento(id);
+    setValoresVinculados(valoresIniciales(elegido, esIngreso));
+    // Repone el mismo proveedor al que se le devolvió.
+    if (esIngreso && !proveedor.trim() && elegido.proveedor) setProveedor(elegido.proveedor);
+  }
 
   useEffect(() => {
     // Un egreso por merma o ajuste debe poder vaciar del almacén un ítem ya
@@ -193,11 +248,109 @@ export function FormularioMovimiento({
   const problemas = intentado
     ? revisarLineas(lineas, items, almacenes, esIngreso, soloProductos)
     : null;
+  const problemasVinculados =
+    intentado && documento ? revisarVinculadas(documento, valoresVinculados, esIngreso) : null;
+
+  /** CU-INV-04: tras descontar, el sistema avisa qué insumos alcanzaron su mínimo. */
+  function avisarAlertas(resultado: ResultadoEgreso) {
+    for (const alerta of resultado.alertas) {
+      notificar(
+        'info',
+        `${alerta.nombre} alcanzó su stock mínimo: quedan ${formatearCantidad(alerta.stockTotal)} ${alerta.unidad}`,
+      );
+    }
+  }
+
+  async function enviarVinculada() {
+    if (!documento) {
+      setError(esIngreso ? 'Elija la devolución que se repone' : 'Elija la compra que se devuelve');
+      return;
+    }
+    const pendientes = revisarVinculadas(documento, valoresVinculados, esIngreso).size;
+    if (pendientes > 0) {
+      setError(
+        pendientes === 1
+          ? 'Revise la línea marcada arriba'
+          : `Revise las ${pendientes} líneas marcadas arriba`,
+      );
+      return;
+    }
+    const valorDe = (l: DocumentoVinculable['lineas'][number]) =>
+      valoresVinculados[claveVinculada(l)];
+    const elegidas = documento.lineas.filter((l) => Number(valorDe(l)?.cantidad || 0) > 0);
+    if (elegidas.length === 0) {
+      setError(
+        esIngreso ? 'Indique cuánto se repone' : 'Indique cuánto se devuelve de al menos un ítem',
+      );
+      return;
+    }
+
+    const insumos = elegidas
+      .filter((l) => l.tipo === 'insumo')
+      .map((l) => {
+        const valor = valorDe(l);
+        return {
+          idIngrediente: l.id,
+          idAlmacen: l.idAlmacen,
+          cantidad: Number(valor.cantidad),
+          ...(esIngreso
+            ? {
+                // El servidor lo pone igual: es el precio de la compra.
+                costoUnitario: l.costoUnitario,
+                ...(valor.codigoLote.trim() ? { codigoLote: valor.codigoLote.trim() } : {}),
+                ...(valor.fechaVencimiento ? { fechaVencimiento: valor.fechaVencimiento } : {}),
+              }
+            : {}),
+        };
+      });
+    const productos = elegidas
+      .filter((l) => l.tipo === 'producto')
+      .map((l) => ({
+        idProducto: l.id,
+        idAlmacen: l.idAlmacen,
+        cantidad: Number(valorDe(l).cantidad),
+        ...(esIngreso ? { costoUnitario: l.costoUnitario } : {}),
+      }));
+
+    setEnviando(true);
+    try {
+      if (esIngreso) {
+        await api.post('/ingresos', {
+          motivo,
+          proveedor: proveedor.trim() || null,
+          numeroDocumento: numeroDocumento.trim() || null,
+          idNotaEgreso: documento.id,
+          insumos,
+          productos,
+        });
+        notificar('exito', `Reposición registrada: repone ${numeroDeEgreso(documento.id)}`);
+      } else {
+        const resultado = await api.post<ResultadoEgreso>('/egresos', {
+          motivo,
+          observacion: observacion.trim() || null,
+          idNotaIngreso: documento.id,
+          insumos,
+          productos,
+        });
+        notificar(
+          'exito',
+          `Devolución registrada: sale de la compra ${numeroDeIngreso(documento.id)}`,
+        );
+        avisarAlertas(resultado);
+      }
+      onListo();
+    } catch (e) {
+      setError(e instanceof ErrorApi ? e.message : 'No se pudo registrar la nota');
+    } finally {
+      setEnviando(false);
+    }
+  }
 
   async function enviar(evento: React.FormEvent) {
     evento.preventDefault();
     setError(null);
     setIntentado(true);
+    if (vinculada) return enviarVinculada();
 
     const llenas = lineas.filter((l) => !enBlanco(l));
     if (llenas.length === 0) {
@@ -263,14 +416,7 @@ export function FormularioMovimiento({
           productos,
         });
         notificar('exito', 'Nota de egreso registrada, stock descontado');
-
-        // CU-INV-04: tras descontar, el sistema avisa qué insumos alcanzaron su mínimo.
-        for (const alerta of resultado.alertas) {
-          notificar(
-            'info',
-            `${alerta.nombre} alcanzó su stock mínimo: quedan ${formatearCantidad(alerta.stockTotal)} ${alerta.unidad}`,
-          );
-        }
+        avisarAlertas(resultado);
       }
       onListo();
     } catch (e) {
@@ -299,6 +445,47 @@ export function FormularioMovimiento({
           descripcion: ayudaMotivo[m],
         }))}
       />
+
+      {vinculada &&
+        (documentos === null ? (
+          <p className="text-sm text-tinta-tenue">
+            {esIngreso ? 'Cargando las devoluciones…' : 'Cargando las compras…'}
+          </p>
+        ) : documentos.length === 0 ? (
+          <p className="rounded-xl border border-aviso/30 bg-aviso/[0.06] px-3.5 py-3 text-xs leading-relaxed text-tinta-suave">
+            {esIngreso
+              ? 'No hay devoluciones por reponer. Primero se registra la devolución al proveedor, en una nota de egreso por Devolución.'
+              : 'No hay compras con algo por devolver: todo lo comprado ya se devolvió.'}
+          </p>
+        ) : (
+          <Selector<number>
+            etiqueta={esIngreso ? 'Devolución que se repone' : 'Compra que se devuelve'}
+            valor={idDocumento}
+            onCambiar={elegirDocumento}
+            buscable
+            marcador={esIngreso ? 'Elija la devolución' : 'Elija la compra'}
+            ayuda={
+              esIngreso
+                ? 'Se repone lo que salió en ella, al precio de la compra'
+                : 'Se devuelve lo que entró en ella, del almacén donde entró'
+            }
+            opciones={documentos.map((d) => ({
+              valor: d.id,
+              etiqueta: [
+                esIngreso ? numeroDeEgreso(d.id) : numeroDeIngreso(d.id),
+                d.proveedor ?? 'sin proveedor',
+              ].join(' · '),
+              descripcion: [
+                formatearFecha(d.fecha),
+                d.idCompra ? `de la compra ${numeroDeIngreso(d.idCompra)}` : null,
+                d.numeroDocumento,
+                [...new Set(d.lineas.map((l) => l.nombre))].join(', '),
+              ]
+                .filter(Boolean)
+                .join(' · '),
+            }))}
+          />
+        ))}
 
       {esIngreso ? (
         <div className="grid gap-4 sm:grid-cols-2">
@@ -330,19 +517,36 @@ export function FormularioMovimiento({
         />
       )}
 
-      <EditorLineas
-        lineas={lineas}
-        items={items}
-        almacenes={almacenes}
-        esIngreso={esIngreso}
-        esCompra={motivo === 'Compra'}
-        soloProductos={soloProductos}
-        problemas={problemas}
-        onCambiar={setLineas}
-        onItemElegido={alElegir}
-      />
+      {vinculada ? (
+        documento && (
+          <LineasVinculadas
+            documento={documento}
+            reponiendo={esIngreso}
+            valores={valoresVinculados}
+            problemas={problemasVinculados}
+            onCambiar={(clave, cambios) =>
+              setValoresVinculados((actuales) => ({
+                ...actuales,
+                [clave]: { ...actuales[clave], ...cambios },
+              }))
+            }
+          />
+        )
+      ) : (
+        <EditorLineas
+          lineas={lineas}
+          items={items}
+          almacenes={almacenes}
+          esIngreso={esIngreso}
+          esCompra={motivo === 'Compra'}
+          soloProductos={soloProductos}
+          problemas={problemas}
+          onCambiar={setLineas}
+          onItemElegido={alElegir}
+        />
+      )}
 
-      {!esIngreso && (
+      {!esIngreso && !vinculada && (
         <p className="flex items-start gap-2 rounded-xl border border-borde bg-white/[0.02] px-3.5 py-2.5 text-xs text-tinta-tenue">
           <AlertCircle className="mt-0.5 size-3.5 shrink-0" aria-hidden />
           Cada almacén muestra cuánto hay. El sistema vuelve a verificarlo al registrar: si

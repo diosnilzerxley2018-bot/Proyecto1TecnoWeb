@@ -16,6 +16,8 @@ ingresos.use(requiereAutenticacion);
 ingresos.get('/', requierePermiso('STOCK_CONSULTAR'), ingresoCtrl.listar);
 // Antes que `/:id`: si no, «lotes» se leería como el número de una nota.
 ingresos.get('/lotes', requierePermiso('STOCK_CONSULTAR'), ingresoCtrl.lotes);
+// Lo que ofrece el formulario al registrar una devolución al proveedor.
+ingresos.get('/devolubles', requierePermiso('EGRESO_REGISTRAR'), ingresoCtrl.devolubles);
 ingresos.get('/:id', requierePermiso('STOCK_CONSULTAR'), validarIdParam, ingresoCtrl.obtener);
 ingresos.post(
   '/',
@@ -27,6 +29,8 @@ ingresos.post(
 export const egresos = Router();
 egresos.use(requiereAutenticacion);
 egresos.get('/', requierePermiso('STOCK_CONSULTAR'), egresoCtrl.listar);
+// Lo que ofrece el formulario al registrar una reposición; antes que `/:id`.
+egresos.get('/reponibles', requierePermiso('INGRESO_REGISTRAR'), egresoCtrl.reponibles);
 egresos.get('/:id', requierePermiso('STOCK_CONSULTAR'), validarIdParam, egresoCtrl.obtener);
 egresos.post(
   '/',

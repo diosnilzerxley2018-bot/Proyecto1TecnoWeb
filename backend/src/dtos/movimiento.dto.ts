@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { cantidadDeInsumo } from './cantidad.dto.js';
 import { camposDeFecha, camposDePagina, type Pagina } from './paginacion.dto.js';
 import {
+  MOTIVO_DEVOLUCION,
+  MOTIVO_REPOSICION,
   MOTIVO_SOLO_PRODUCTOS,
   MOTIVOS_EGRESO,
   MOTIVOS_EGRESO_MANUAL,
@@ -82,10 +84,17 @@ export const esquemaCrearIngreso = z
       .default('Compra'),
     proveedor: z.string().trim().max(150).nullable().optional(),
     numeroDocumento: z.string().trim().max(50).nullable().optional(),
+    /** En una Reposición, la devolución al proveedor que repone. */
+    idNotaEgreso: z.number().int().positive().optional(),
     insumos: z.array(esquemaLineaInsumoIngreso).max(100).default([]),
     productos: z.array(esquemaLineaProductoIngreso).max(100).default([]),
   })
   .refine(alMenosUnaLinea, { message: MENSAJE_SIN_LINEAS, path: ['insumos'] })
+  .refine((datos) => (datos.motivo === MOTIVO_REPOSICION) === (datos.idNotaEgreso !== undefined), {
+    message:
+      'una reposición indica la devolución al proveedor que repone, y solo una reposición la indica',
+    path: ['idNotaEgreso'],
+  })
   .refine((datos) => datos.motivo !== MOTIVO_SOLO_PRODUCTOS || datos.insumos.length === 0, {
     message:
       'una devolución de cliente es de productos terminados; un insumo de más se registra como Ajuste',
@@ -99,10 +108,16 @@ export const esquemaCrearEgreso = z
         'el motivo debe ser Merma, Ajuste o Devolución; los insumos de una orden de producción los descuenta la orden al finalizarse',
     }),
     observacion: z.string().trim().max(200).nullable().optional(),
+    /** En una Devolución, la compra que se le devuelve al proveedor. */
+    idNotaIngreso: z.number().int().positive().optional(),
     insumos: z.array(esquemaLineaInsumoEgreso).max(100).default([]),
     productos: z.array(esquemaLineaProductoEgreso).max(100).default([]),
   })
-  .refine(alMenosUnaLinea, { message: MENSAJE_SIN_LINEAS, path: ['insumos'] });
+  .refine(alMenosUnaLinea, { message: MENSAJE_SIN_LINEAS, path: ['insumos'] })
+  .refine((datos) => (datos.motivo === MOTIVO_DEVOLUCION) === (datos.idNotaIngreso !== undefined), {
+    message: 'una devolución al proveedor indica la compra que devuelve, y solo una devolución la indica',
+    path: ['idNotaIngreso'],
+  });
 
 export type DatosCrearIngreso = z.infer<typeof esquemaCrearIngreso>;
 export type DatosCrearEgreso = z.infer<typeof esquemaCrearEgreso>;
@@ -144,11 +159,58 @@ export interface NotaIngresoDTO extends NotaBaseDTO {
   proveedor: string | null;
   numeroDocumento: string | null;
   total: number;
+  /** En una Reposición, la devolución al proveedor que repone. */
+  idDevolucion: number | null;
 }
 
 export interface NotaEgresoDTO extends NotaBaseDTO {
   motivo: MotivoEgreso;
   observacion: string | null;
+  /** En una Devolución, la compra que se le devolvió al proveedor. */
+  idCompra: number | null;
+}
+
+/**
+ * Una línea de una compra que todavía puede devolverse, o de una devolución
+ * que falta reponer. Es lo que ofrece el formulario al elegir el documento:
+ * la devolución sale de lo que entró en la compra, y la reposición repone lo
+ * que salió en la devolución.
+ */
+export interface LineaVinculableDTO {
+  tipo: 'insumo' | 'producto';
+  id: number;
+  nombre: string;
+  unidad: string;
+  idAlmacen: number;
+  almacen: string;
+  /** Lo que entró en la compra, o lo que salió en la devolución. */
+  cantidad: number;
+  /** Lo ya devuelto de esa compra, o lo ya repuesto de esa devolución. */
+  vinculado: number;
+  /** Lo que todavía se puede devolver, o lo que falta reponer. */
+  pendiente: number;
+  /**
+   * Lo que hay hoy para devolver: lo que queda del lote de la compra, o del
+   * ítem en su almacén. Nulo en una reposición, que no saca nada.
+   */
+  existencia: number | null;
+  /** El precio de la compra, que es también el de su reposición. */
+  costoUnitario: number;
+  controlaVencimiento: boolean;
+  /** En la compra de un perecedero, su lote: lo que se devuelve sale de él. */
+  lote: LoteDeVencimientoDTO | null;
+}
+
+/** Una compra que puede devolverse, o una devolución que falta reponer. */
+export interface DocumentoVinculableDTO {
+  id: number;
+  fecha: string;
+  proveedor: string | null;
+  numeroDocumento: string | null;
+  /** En una devolución, la compra de la que salió. */
+  idCompra: number | null;
+  observacion: string | null;
+  lineas: LineaVinculableDTO[];
 }
 
 /** Buscar por nombre del ítem y acotar a insumos o a productos. */

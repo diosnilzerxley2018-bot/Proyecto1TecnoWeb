@@ -384,11 +384,52 @@ export interface NotaIngreso extends NotaBase {
   proveedor: string | null;
   numeroDocumento: string | null;
   total: number;
+  /** En una Reposición, la devolución al proveedor que repone. */
+  idDevolucion: number | null;
 }
 
 export interface NotaEgreso extends NotaBase {
   motivo: MotivoEgreso;
   observacion: string | null;
+  /** En una Devolución, la compra que se le devolvió al proveedor. */
+  idCompra: number | null;
+}
+
+/**
+ * Una línea de una compra que todavía puede devolverse, o de una devolución
+ * que falta reponer: Compra → Devolución → Reposición.
+ */
+export interface LineaVinculable {
+  tipo: TipoItem;
+  id: number;
+  nombre: string;
+  unidad: string;
+  idAlmacen: number;
+  almacen: string;
+  /** Lo que entró en la compra, o lo que salió en la devolución. */
+  cantidad: number;
+  /** Lo ya devuelto de esa compra, o lo ya repuesto de esa devolución. */
+  vinculado: number;
+  /** Lo que todavía se puede devolver, o lo que falta reponer. */
+  pendiente: number;
+  /** Lo que hay hoy para devolver (del lote de la compra, o del almacén). Nulo al reponer. */
+  existencia: number | null;
+  /** El precio de la compra, que es también el de su reposición. */
+  costoUnitario: number;
+  controlaVencimiento: boolean;
+  lote: LoteDeVencimiento | null;
+}
+
+/** Una compra que puede devolverse, o una devolución que falta reponer. */
+export interface DocumentoVinculable {
+  id: number;
+  fecha: string;
+  proveedor: string | null;
+  numeroDocumento: string | null;
+  /** En una devolución, la compra de la que salió. */
+  idCompra: number | null;
+  observacion: string | null;
+  lineas: LineaVinculable[];
 }
 
 export interface AlertaStock {

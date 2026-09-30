@@ -72,6 +72,9 @@ export const AYUDA_MOTIVO_EGRESO: Record<string, string> = {
  */
 export const numeroDeIngreso = (id: number) => `ING-${String(id).padStart(4, '0')}`;
 
+/** El número de una nota de egreso: «EGR-0005». */
+export const numeroDeEgreso = (id: number) => `EGR-${String(id).padStart(4, '0')}`;
+
 /**
  * De dónde vino un ingreso: el proveedor y su documento, o la orden.
  *
@@ -83,10 +86,22 @@ export function detalleDeIngreso(nota: {
   motivo: string;
   proveedor: string | null;
   numeroDocumento: string | null;
+  idDevolucion?: number | null;
 }): string | null {
   const orden = /^OP-(\d+)$/.exec(nota.numeroDocumento ?? '');
   if (nota.motivo === 'Produccion' && orden) return `Orden de producción ${orden[1]}`;
-  return [nota.proveedor, nota.numeroDocumento].filter(Boolean).join(' · ') || null;
+  // Una reposición dice qué devolución repone: Compra → Devolución → Reposición.
+  const repone = nota.idDevolucion ? `Repone ${numeroDeEgreso(nota.idDevolucion)}` : null;
+  return [repone, nota.proveedor, nota.numeroDocumento].filter(Boolean).join(' · ') || null;
+}
+
+/** Qué se lee debajo de un egreso: de qué compra es una devolución, y su observación. */
+export function detalleDeEgreso(nota: {
+  idCompra: number | null;
+  observacion: string | null;
+}): string | null {
+  const devuelve = nota.idCompra ? `Devuelve ${numeroDeIngreso(nota.idCompra)}` : null;
+  return [devuelve, nota.observacion].filter(Boolean).join(' · ') || null;
 }
 
 /**

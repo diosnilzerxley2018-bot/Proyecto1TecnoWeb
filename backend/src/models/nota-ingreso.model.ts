@@ -15,7 +15,11 @@ const DETALLE_INSUMO = {
     ingrediente_almacen: {
       select: {
         ingrediente: {
-          select: { nombre: true, unidad_medida: { select: { abreviatura: true } } },
+          select: {
+            nombre: true,
+            controla_vencimiento: true,
+            unidad_medida: { select: { abreviatura: true } },
+          },
         },
         almacen: { select: { nombre: true } },
       },
@@ -116,6 +120,8 @@ export const crear = (
     numeroDocumento: string | null;
     total: number;
     idEmpleado: number;
+    /** En una Reposición, la devolución que repone. */
+    idNotaEgreso?: number | null;
   },
 ) =>
   tx.nota_ingreso.create({
@@ -125,6 +131,7 @@ export const crear = (
       numero_documento: datos.numeroDocumento,
       total: datos.total,
       id_empleado: datos.idEmpleado,
+      id_nota_egreso: datos.idNotaEgreso ?? null,
     },
     select: { id_nota_ingreso: true },
   });
@@ -286,3 +293,46 @@ export const resumenDeLotes = (filtro: FiltroLotes) =>
      GROUP BY tipo, id_item, nombre, unidad
      ORDER BY nombre
      LIMIT ${TOPE_RESUMEN}`;
+
+/* ------------------------------------------------------------------ */
+/* Compra → Devolución → Reposición                                    */
+/* ------------------------------------------------------------------ */
+
+/** Una compra con lo que entró, sus precios y el lote de cada perecedero. */
+const COMPRA = {
+  id_nota_ingreso: true,
+  fecha: true,
+  motivo: true,
+  proveedor: true,
+  numero_documento: true,
+  detalle_ingreso_insumo: {
+    select: { ...DETALLE_INSUMO.select, id_lote: true },
+  },
+  detalle_ingreso_producto: DETALLE_PRODUCTO,
+} as const;
+
+/** Las compras más recientes: las que el formulario ofrece para devolver. */
+export const comprasRecientes = (tope: number) =>
+  prisma.nota_ingreso.findMany({
+    where: { motivo: 'Compra' },
+    orderBy: { fecha: 'desc' },
+    take: tope,
+    select: COMPRA,
+  });
+
+/** Unas notas por su número: las compras de las que salieron unas devoluciones. */
+export const comprasPorId = (ids: number[], tx: ClientePrisma = prisma) =>
+  tx.nota_ingreso.findMany({ where: { id_nota_ingreso: { in: ids } }, select: COMPRA });
+
+/** Las reposiciones de unas devoluciones: cuánto se repuso ya de cada una. */
+export const repuestoDe = (idsDevolucion: number[], tx: ClientePrisma = prisma) =>
+  tx.nota_ingreso.findMany({
+    where: { id_nota_egreso: { in: idsDevolucion } },
+    select: {
+      id_nota_egreso: true,
+      detalle_ingreso_insumo: { select: { id_ingrediente: true, id_almacen: true, cantidad: true } },
+      detalle_ingreso_producto: { select: { id_producto: true, id_almacen: true, cantidad: true } },
+    },
+  });
+
+export type CompraConsultada = Awaited<ReturnType<typeof comprasPorId>>[number];

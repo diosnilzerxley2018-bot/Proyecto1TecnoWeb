@@ -16,6 +16,7 @@ import { alertas } from './control-stock.service.js';
 import { exigirEmpleado } from './actor.service.js';
 import * as insumoModel from '../models/insumo.model.js';
 import * as loteService from './lote.service.js';
+import * as devolucionService from './devolucion.service.js';
 import { ErrorApp } from '../errors/error-app.js';
 
 /**
@@ -75,6 +76,10 @@ export async function registrarEnTransaccion(
     insumos: LineaConsolidada[];
     productos: LineaConsolidada[];
     idEmpleado: number;
+    /** En una Devolución, la compra que devuelve. */
+    idNotaIngreso?: number | null;
+    /** El lote del que sale cada perecedero devuelto, por `idItem@idAlmacen`. */
+    lotes?: Map<string, number>;
   },
 ): Promise<number> {
   const { insumos, productos } = datos;
@@ -98,6 +103,7 @@ export async function registrarEnTransaccion(
     motivo: datos.motivo,
     observacion: datos.observacion,
     idEmpleado: datos.idEmpleado,
+    idNotaIngreso: datos.idNotaIngreso,
   });
 
   if (insumos.length > 0) {
@@ -136,12 +142,14 @@ export async function registrarEnTransaccion(
     );
 
     for (const linea of insumos) {
-      // Consume primero el lote que vence antes (FEFO) y descuenta el total.
+      // Consume primero el lote que vence antes (FEFO) y descuenta el total;
+      // lo devuelto al proveedor sale del lote de su compra.
       await loteService.consumir(tx, {
         idIngrediente: linea.idItem,
         idAlmacen: linea.idAlmacen,
         cantidad: linea.cantidad,
         nombreInsumo: nombres.get(linea.idItem) ?? `insumo ${linea.idItem}`,
+        idLote: datos.lotes?.get(`${linea.idItem}@${linea.idAlmacen}`),
       });
     }
   }
@@ -180,15 +188,22 @@ export async function crear(
     })),
   );
 
-  const idNota = await prisma.$transaction((tx: ClientePrisma) =>
-    registrarEnTransaccion(tx, {
+  const idNota = await prisma.$transaction(async (tx: ClientePrisma) => {
+    // Una devolución al proveedor solo saca lo que entró en su compra.
+    const lotes = datos.idNotaIngreso
+      ? await devolucionService.validarDevolucion(tx, datos.idNotaIngreso, { insumos, productos })
+      : undefined;
+
+    return registrarEnTransaccion(tx, {
       motivo: datos.motivo,
       observacion: datos.observacion ?? null,
       insumos,
       productos,
       idEmpleado,
-    }),
-  );
+      idNotaIngreso: datos.idNotaIngreso ?? null,
+      lotes,
+    });
+  });
 
   return {
     nota: await leerNota(idNota),

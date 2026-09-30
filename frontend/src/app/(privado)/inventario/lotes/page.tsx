@@ -64,6 +64,9 @@ export default function PaginaLotes() {
   const [vista, setVista] = useState<Vista>('lote');
   const [tipo, setTipo] = useState<FiltroTipo>('todos');
   const [motivo, setMotivo] = useState('');
+  /** Rango de fechas de la entrada; vacío, sin límite. */
+  const [desde, setDesde] = useState('');
+  const [hasta, setHasta] = useState('');
   const [busqueda, setBusqueda] = useState('');
   const termino = useRetardo(busqueda.trim());
   const [pagina, setPagina] = useState(1);
@@ -85,6 +88,8 @@ export default function PaginaLotes() {
     if (termino) parametros.set('termino', termino);
     if (tipo !== 'todos') parametros.set('tipo', tipo);
     if (motivo) parametros.set('motivo', motivo);
+    if (desde) parametros.set('desde', desde);
+    if (hasta) parametros.set('hasta', hasta);
 
     try {
       if (vista === 'lote') {
@@ -102,7 +107,7 @@ export default function PaginaLotes() {
     } finally {
       if (numero === ultimaConsulta.current) setCargando(false);
     }
-  }, [vista, tipo, motivo, termino, pagina, notificar]);
+  }, [vista, tipo, motivo, desde, hasta, termino, pagina, notificar]);
 
   useEffect(() => {
     void cargar();
@@ -146,7 +151,7 @@ export default function PaginaLotes() {
             ]}
           />
         </div>
-        <div className="grid gap-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,2fr)_repeat(3,minmax(0,1fr))]">
           <Campo
             etiqueta="Buscar insumo o producto"
             placeholder="Aceite, harina, agua…"
@@ -161,6 +166,20 @@ export default function PaginaLotes() {
               valor: m,
               etiqueta: m === '' ? 'Todos los orígenes' : ETIQUETA_MOTIVO[m],
             }))}
+          />
+          <Campo
+            etiqueta="Desde"
+            type="date"
+            value={desde}
+            max={hasta || undefined}
+            onChange={(e) => filtrar(() => setDesde(e.target.value))}
+          />
+          <Campo
+            etiqueta="Hasta"
+            type="date"
+            value={hasta}
+            min={desde || undefined}
+            onChange={(e) => filtrar(() => setHasta(e.target.value))}
           />
         </div>
       </section>

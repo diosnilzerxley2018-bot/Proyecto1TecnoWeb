@@ -81,6 +81,11 @@ export async function consumir(
     idAlmacen: number;
     cantidad: number;
     nombreInsumo: string;
+    /**
+     * Un lote en particular, en lugar del que vence antes: el de la compra que
+     * se le devuelve al proveedor, que es el que llegó vencido o dañado.
+     */
+    idLote?: number;
   },
 ): Promise<LoteConsumido[]> {
   const aplicado = await stockModel.descontarInsumo(
@@ -94,6 +99,17 @@ export async function consumir(
       409,
       `El stock de "${datos.nombreInsumo}" cambió durante la operación. Intente nuevamente.`,
     );
+  }
+
+  if (datos.idLote !== undefined) {
+    const descontado = await loteModel.descontar(tx, datos.idLote, datos.idAlmacen, datos.cantidad);
+    if (!descontado) {
+      throw new ErrorApp(
+        409,
+        `Del lote de "${datos.nombreInsumo}" de esa compra no queda tanto en el almacén: se devuelve lo que queda de él`,
+      );
+    }
+    return [];
   }
 
   const lotes = await loteModel.disponiblesPorVencimiento(

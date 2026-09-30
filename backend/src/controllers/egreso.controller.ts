@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import * as egresoService from '../services/egreso.service.js';
+import * as devolucionService from '../services/devolucion.service.js';
 import { esquemaFiltroEgresos } from '../dtos/movimiento.dto.js';
 import { idUsuarioDeSesion } from '../utils/sesion.js';
 import { ErrorApp } from '../errors/error-app.js';
@@ -12,6 +13,11 @@ export async function listar(req: Request, res: Response) {
     throw new ErrorApp(400, filtro.error.issues.map((i) => i.message).join('; '));
   }
   res.json(await egresoService.listar(idUsuarioDeSesion(req), filtro.data));
+}
+
+/** Las devoluciones al proveedor que todavía falta reponer. */
+export async function reponibles(req: Request, res: Response) {
+  res.json(await devolucionService.devolucionesReponibles(idUsuarioDeSesion(req)));
 }
 
 export async function obtener(req: Request, res: Response) {

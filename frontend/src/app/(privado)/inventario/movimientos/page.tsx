@@ -25,6 +25,7 @@ import { Dialogo } from '@/components/ui/Dialogo';
 import { FormularioMovimiento, type Direccion } from '@/components/inventario/FormularioMovimiento';
 import type { LineaMovimiento, NotaEgreso, NotaIngreso, Pagina } from '@/types';
 import {
+  detalleDeEgreso,
   detalleDeIngreso,
   ETIQUETA_MOTIVO,
   formatearVencimiento,
@@ -125,7 +126,7 @@ export default function PaginaMovimientos() {
           registradoPor: n.registradoPor.nombreCompleto,
           lineas: n.lineas,
           total: null,
-          detalle: n.observacion,
+          detalle: detalleDeEgreso(n),
         })),
       ].sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
 

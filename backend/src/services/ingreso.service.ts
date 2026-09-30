@@ -24,6 +24,7 @@ import { exigirEmpleado } from './actor.service.js';
 import * as insumoModel from '../models/insumo.model.js';
 import * as loteService from './lote.service.js';
 import * as costeoService from './costeo.service.js';
+import * as devolucionService from './devolucion.service.js';
 import { ErrorApp } from '../errors/error-app.js';
 
 /**
@@ -139,6 +140,8 @@ export async function registrarEnTransaccion(
     insumos: LineaConsolidada[];
     productos: LineaConsolidada[];
     idEmpleado: number;
+    /** En una Reposición, la devolución que repone. */
+    idNotaEgreso?: number | null;
   },
 ): Promise<number> {
   const { insumos, productos } = datos;
@@ -154,6 +157,7 @@ export async function registrarEnTransaccion(
     numeroDocumento: datos.numeroDocumento,
     total: calcularTotal([...insumos, ...productos]),
     idEmpleado: datos.idEmpleado,
+    idNotaEgreso: datos.idNotaEgreso,
   });
 
   // Cuánto había antes de sumar esta nota. Se lee ahora porque el incremento
@@ -266,16 +270,39 @@ export async function crear(
     })),
   );
 
-  const idNota = await prisma.$transaction((tx: ClientePrisma) =>
-    registrarEnTransaccion(tx, {
-      motivo: datos.motivo,
-      proveedor: datos.proveedor ?? null,
-      numeroDocumento: datos.numeroDocumento ?? null,
+  const idNota = await prisma.$transaction(async (tx: ClientePrisma) => {
+    if (!datos.idNotaEgreso) {
+      return registrarEnTransaccion(tx, {
+        motivo: datos.motivo,
+        proveedor: datos.proveedor ?? null,
+        numeroDocumento: datos.numeroDocumento ?? null,
+        insumos,
+        productos,
+        idEmpleado,
+      });
+    }
+
+    // Una reposición repone lo que salió en su devolución, al precio de la
+    // compra: el costo lo pone el servidor, como el precio de una venta.
+    const reposicion = await devolucionService.validarReposicion(tx, datos.idNotaEgreso, {
       insumos,
       productos,
+    });
+    const alPrecioDeCompra = (tipo: 'insumo' | 'producto') => (l: LineaConsolidada) => ({
+      ...l,
+      costoUnitario: reposicion.precio(tipo, l.idItem, l.idAlmacen),
+    });
+
+    return registrarEnTransaccion(tx, {
+      motivo: datos.motivo,
+      proveedor: datos.proveedor ?? reposicion.proveedor,
+      numeroDocumento: datos.numeroDocumento ?? null,
+      insumos: insumos.map(alPrecioDeCompra('insumo')),
+      productos: productos.map(alPrecioDeCompra('producto')),
       idEmpleado,
-    }),
-  );
+      idNotaEgreso: datos.idNotaEgreso,
+    });
+  });
 
   return leerNota(idNota);
 }

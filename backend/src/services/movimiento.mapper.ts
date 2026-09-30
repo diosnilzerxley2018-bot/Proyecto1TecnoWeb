@@ -85,6 +85,7 @@ export function aNotaIngresoDTO(nota: NotaIngresoConsultada): NotaIngresoDTO {
     proveedor: nota.proveedor,
     numeroDocumento: nota.numero_documento,
     total: Number(nota.total),
+    idDevolucion: nota.id_nota_egreso,
     registradoPor: {
       id: nota.empleado.id_empleado,
       nombreCompleto: nombreCompleto(nota.empleado.usuario),
@@ -123,6 +124,7 @@ export function aNotaEgresoDTO(nota: NotaEgresoConsultada): NotaEgresoDTO {
     fecha: nota.fecha.toISOString(),
     motivo: nota.motivo as MotivoEgreso,
     observacion: nota.observacion,
+    idCompra: nota.id_nota_ingreso,
     registradoPor: {
       id: nota.empleado.id_empleado,
       nombreCompleto: nombreCompleto(nota.empleado.usuario),
