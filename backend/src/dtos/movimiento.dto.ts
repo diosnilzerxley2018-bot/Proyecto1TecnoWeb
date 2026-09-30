@@ -2,8 +2,11 @@ import { z } from 'zod';
 import { cantidadDeInsumo } from './cantidad.dto.js';
 import { camposDeFecha, camposDePagina } from './paginacion.dto.js';
 import {
+  MOTIVO_SOLO_PRODUCTOS,
   MOTIVOS_EGRESO,
+  MOTIVOS_EGRESO_MANUAL,
   MOTIVOS_INGRESO,
+  MOTIVOS_INGRESO_MANUAL,
   type MotivoEgreso,
   type MotivoIngreso,
 } from '../config/dominio.js';
@@ -12,7 +15,8 @@ import {
  * CU-INV-03 Gestionar Ingreso y CU-INV-04 Gestionar Egreso.
  *
  * Ambas notas admiten insumos, productos terminados o ambos, por eso el cuerpo
- * lleva dos listas separadas. Los tipos de cantidad difieren porque así los
+ * lleva dos listas separadas; solo la devolución admite únicamente productos
+ * (`MOTIVO_SOLO_PRODUCTOS`). Los tipos de cantidad difieren porque así los
  * declara el esquema: los productos se cuentan en unidades enteras y los
  * insumos admiten tres decimales, el gramo o el mililitro.
  */
@@ -64,19 +68,35 @@ const alMenosUnaLinea = (datos: { insumos: unknown[]; productos: unknown[] }) =>
 
 const MENSAJE_SIN_LINEAS = 'La nota debe contener al menos un insumo o un producto';
 
+/*
+ * A mano no se registra el motivo Producción: lo escribe la orden al
+ * finalizarse (ver `MOTIVOS_INGRESO_MANUAL`). El listado sí filtra por él.
+ */
 export const esquemaCrearIngreso = z
   .object({
-    motivo: z.enum(MOTIVOS_INGRESO).default('Compra'),
+    motivo: z
+      .enum(MOTIVOS_INGRESO_MANUAL, {
+        error:
+          'el motivo debe ser Compra, Ajuste o Devolución; lo elaborado lo ingresa la orden de producción al finalizarse',
+      })
+      .default('Compra'),
     proveedor: z.string().trim().max(150).nullable().optional(),
     numeroDocumento: z.string().trim().max(50).nullable().optional(),
     insumos: z.array(esquemaLineaInsumoIngreso).max(100).default([]),
     productos: z.array(esquemaLineaProductoIngreso).max(100).default([]),
   })
-  .refine(alMenosUnaLinea, { message: MENSAJE_SIN_LINEAS, path: ['insumos'] });
+  .refine(alMenosUnaLinea, { message: MENSAJE_SIN_LINEAS, path: ['insumos'] })
+  .refine((datos) => datos.motivo !== MOTIVO_SOLO_PRODUCTOS || datos.insumos.length === 0, {
+    message: 'una devolución es de productos terminados; un insumo de más se registra como Ajuste',
+    path: ['insumos'],
+  });
 
 export const esquemaCrearEgreso = z
   .object({
-    motivo: z.enum(MOTIVOS_EGRESO),
+    motivo: z.enum(MOTIVOS_EGRESO_MANUAL, {
+      error:
+        'el motivo debe ser Merma o Ajuste; los insumos de una orden de producción los descuenta la orden al finalizarse',
+    }),
     observacion: z.string().trim().max(200).nullable().optional(),
     insumos: z.array(esquemaLineaInsumoEgreso).max(100).default([]),
     productos: z.array(esquemaLineaProductoEgreso).max(100).default([]),

@@ -285,21 +285,29 @@ describe('H5 · El costo de la corrida queda registrado', () => {
       .set(cabecera(staff));
     const avena = insumos.body[0];
 
-    await request(app)
-      .put(`/api/insumos/${avena.id}`)
-      .set(cabecera(staff))
-      .send({
-        nombre: avena.nombre,
-        idUnidad: avena.unidad.id,
-        costoUnitario: Number(avena.costoUnitario) * 2,
-        stockMinimo: avena.stockMinimo,
-        tipoConservacion: avena.tipoConservacion,
-        controlaVencimiento: avena.controlaVencimiento,
-      })
-      .expect(200);
+    const conCosto = (costoUnitario: number) =>
+      request(app)
+        .put(`/api/insumos/${avena.id}`)
+        .set(cabecera(staff))
+        .send({
+          nombre: avena.nombre,
+          idUnidad: avena.unidad.id,
+          costoUnitario,
+          stockMinimo: avena.stockMinimo,
+          tipoConservacion: avena.tipoConservacion,
+          controlaVencimiento: avena.controlaVencimiento,
+        })
+        .expect(200);
 
-    const despues = await request(app).get(`/api/ordenes/${id}`).set(cabecera(staff));
-    expect(despues.body.costoEstimado).toBeCloseTo(costoOriginal, 2);
+    await conCosto(Number(avena.costoUnitario) * 2);
+    try {
+      const despues = await request(app).get(`/api/ordenes/${id}`).set(cabecera(staff));
+      expect(despues.body.costoEstimado).toBeCloseTo(costoOriginal, 2);
+    } finally {
+      // La avena es del seed: ordenes.test calcula con su costo original, y
+      // si este archivo corría antes esperaba Bs 9,88 y obtenía 13,24.
+      await conCosto(Number(avena.costoUnitario));
+    }
   });
 
   it('el reporte de producción usa el costo registrado y cuenta la merma', async () => {

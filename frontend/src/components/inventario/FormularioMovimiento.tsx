@@ -1,8 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import Link from 'next/link';
-import { AlertCircle, ArrowUpRight, Factory } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { Campo, AreaTexto } from '@/components/ui/Campo';
 import { Selector } from '@/components/ui/Selector';
 import { Boton } from '@/components/ui/Boton';
@@ -15,13 +14,13 @@ import {
   type Linea,
 } from './EditorLineas';
 import { api, ErrorApi } from '@/lib/api';
-import { useAuth } from '@/context/AuthContext';
 import { useNotificaciones } from '@/components/ui/Notificaciones';
 import {
   AYUDA_MOTIVO,
   ETIQUETA_MOTIVO,
-  MOTIVOS_EGRESO,
-  MOTIVOS_INGRESO,
+  MOTIVO_SOLO_PRODUCTOS,
+  MOTIVOS_EGRESO_MANUAL,
+  MOTIVOS_INGRESO_MANUAL,
 } from '@/lib/inventario';
 import type { Almacen, Insumo, Producto, ResultadoEgreso } from '@/types';
 import { formatearCantidad } from '@/lib/formato';
@@ -33,7 +32,6 @@ const AYUDA_DOCUMENTO: Record<string, string> = {
   Compra: 'Factura o comprobante',
   Devolucion: 'Comprobante de la devolución, si lo hay',
   Ajuste: 'Acta o planilla del recuento, si la hay',
-  Produccion: 'Opcional',
 };
 
 /** Qué conviene anotar en un egreso, según su motivo. */
@@ -46,7 +44,6 @@ const OBSERVACION_EGRESO: Record<string, { marcador: string; ayuda: string }> = 
     marcador: 'Por qué no coincidía: recuento, error de carga…',
     ayuda: 'Opcional, pero explica la diferencia a quien revise el inventario',
   },
-  Produccion: { marcador: 'Qué se elaboró', ayuda: 'Opcional' },
 };
 
 /**
@@ -56,6 +53,9 @@ const OBSERVACION_EGRESO: Record<string, { marcador: string; ayuda: string }> = 
  * productos—, y se diferencian en tres cosas: los motivos admitidos, si las
  * líneas llevan costo y qué campo describe la nota. Un solo formulario
  * parametrizado evita duplicar el editor de líneas, que es lo caro.
+ *
+ * El motivo Producción no se ofrece: lo escribe la orden de producción al
+ * finalizarse (RF-PRO-07), y cargarlo aquí también lo contaba dos veces.
  */
 export function FormularioMovimiento({
   direccion,
@@ -66,7 +66,6 @@ export function FormularioMovimiento({
   onListo: () => void;
   onCancelar: () => void;
 }) {
-  const { tienePermiso } = useAuth();
   const { notificar } = useNotificaciones();
   const esIngreso = direccion === 'ingreso';
 
@@ -140,9 +139,11 @@ export function FormularioMovimiento({
   }, [esIngreso, notificar]);
 
   const motivos = useMemo(
-    () => (esIngreso ? MOTIVOS_INGRESO : MOTIVOS_EGRESO),
+    () => (esIngreso ? MOTIVOS_INGRESO_MANUAL : MOTIVOS_EGRESO_MANUAL),
     [esIngreso],
   );
+  /** Lo que vuelve en una devolución es lo que se entregó: un producto terminado. */
+  const soloProductos = esIngreso && motivo === MOTIVO_SOLO_PRODUCTOS;
 
   /**
    * El costo promedio del producto, para prellenar su línea.
@@ -178,7 +179,9 @@ export function FormularioMovimiento({
       .catch(() => fijar(null));
   }
 
-  const problemas = intentado ? revisarLineas(lineas, items, almacenes, esIngreso) : null;
+  const problemas = intentado
+    ? revisarLineas(lineas, items, almacenes, esIngreso, soloProductos)
+    : null;
 
   async function enviar(evento: React.FormEvent) {
     evento.preventDefault();
@@ -192,7 +195,7 @@ export function FormularioMovimiento({
     }
 
     // Una línea a medio llenar ya no se descarta en silencio: se señala.
-    const pendientes = revisarLineas(lineas, items, almacenes, esIngreso).size;
+    const pendientes = revisarLineas(lineas, items, almacenes, esIngreso, soloProductos).size;
     if (pendientes > 0) {
       setError(
         pendientes === 1
@@ -286,34 +289,6 @@ export function FormularioMovimiento({
         }))}
       />
 
-      {/*
-        El informe admite el motivo Producción en una nota manual, pero lo
-        elaborado con una orden ya movió el stock al finalizarla (RF-PRO-07).
-        Cargarlo aquí también lo contaría dos veces, y el reporte de producción
-        no vería esa elaboración: se avisa y se ofrece el camino correcto.
-      */}
-      {motivo === 'Produccion' && (
-        <div className="flex items-start gap-2.5 rounded-xl border border-aviso/30 bg-aviso/[0.06] px-3.5 py-3 text-xs leading-relaxed text-tinta-suave">
-          <Factory className="mt-0.5 size-4 shrink-0 text-aviso" aria-hidden />
-          <div>
-            <p>
-              Lo elaborado con una <strong className="text-tinta">orden de producción</strong> ya
-              movió el stock al finalizarla: la orden descuenta los insumos e ingresa el producto.
-              Use este motivo solo para lo producido sin orden, o se contará dos veces.
-            </p>
-            {tienePermiso('ORDEN_PRODUCCION_GESTIONAR') && (
-              <Link
-                href="/produccion/ordenes"
-                className="mt-1.5 inline-flex items-center gap-1 font-medium text-marca-300 hover:text-marca-400"
-              >
-                Ir a Órdenes de producción
-                <ArrowUpRight className="size-3.5" aria-hidden />
-              </Link>
-            )}
-          </div>
-        </div>
-      )}
-
       {esIngreso ? (
         <div className="grid gap-4 sm:grid-cols-2">
           {motivo === 'Compra' && (
@@ -350,6 +325,7 @@ export function FormularioMovimiento({
         almacenes={almacenes}
         esIngreso={esIngreso}
         esCompra={motivo === 'Compra'}
+        soloProductos={soloProductos}
         problemas={problemas}
         onCambiar={setLineas}
         onItemElegido={alElegir}

@@ -12,8 +12,11 @@ import { crearPedido, obtenerToken, registrarCliente, sufijo } from './ayudantes
  * movimientos. Al final, el reporte tiene que cuadrar con lo que hay:
  * stock inicial (0) + entradas − salidas = existencia.
  *
- * Usa insumos, un producto y un almacén propios, creados aquí, para que los
- * números no dependan de lo que hagan otras pruebas con el catálogo del seed.
+ * Usa insumos y un producto propios, creados aquí, para que los números no
+ * dependan de lo que hagan otras pruebas con el catálogo del seed. Los
+ * almacenes sí son los del seed: un almacén seco más dejaba a las órdenes de
+ * las pruebas siguientes sin poder deducir su destino (hay dos y ninguno es el
+ * preferido), y todas respondían 409.
  */
 
 const cabecera = (token: string) => ({ Authorization: `Bearer ${token}` });
@@ -28,7 +31,7 @@ const enDias = (dias: number) => {
 };
 
 let admin = '';
-let almacen = 0; // Seco, propio de esta prueba
+let almacen = 0; // el almacén seco del seed
 let refrigerado = 0; // la cámara del seed, para el perecedero
 let harina = 0; // insumo seco, en kg, que no controla vencimiento
 let leche = 0; // insumo perecedero, refrigerado
@@ -61,15 +64,12 @@ beforeAll(async () => {
   admin = await obtenerToken();
   const s = sufijo();
 
-  almacen = (
-    await request(app)
-      .post('/api/almacenes')
-      .set(cabecera(admin))
-      .send({ nombre: `Recorrido ${s}`, tipoConservacion: 'Seco' })
-      .expect(201)
-  ).body.id;
-  const almacenes = await request(app).get('/api/almacenes').set(cabecera(admin));
-  refrigerado = almacenes.body.find((a: { nombre: string }) => a.nombre === 'Camara Refrigerada').id;
+  const almacenes = (await request(app).get('/api/almacenes').set(cabecera(admin))).body as {
+    id: number;
+    nombre: string;
+  }[];
+  almacen = almacenes.find((a) => a.nombre === 'Almacen Seco')!.id;
+  refrigerado = almacenes.find((a) => a.nombre === 'Camara Refrigerada')!.id;
 
   const unidades = (await request(app).get('/api/insumos/unidades').set(cabecera(admin))).body as {
     id: number;

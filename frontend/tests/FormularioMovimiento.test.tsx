@@ -12,7 +12,6 @@ import type { Almacen } from '@/types';
  */
 
 const notificar = vi.fn();
-const permisos = new Set(['INGRESO_REGISTRAR', 'EGRESO_REGISTRAR', 'ORDEN_PRODUCCION_GESTIONAR']);
 
 vi.mock('@/lib/api', () => ({
   api: { get: vi.fn(), post: vi.fn() },
@@ -20,9 +19,6 @@ vi.mock('@/lib/api', () => ({
 }));
 vi.mock('@/components/ui/Notificaciones', () => ({
   useNotificaciones: () => ({ notificar }),
-}));
-vi.mock('@/context/AuthContext', () => ({
-  useAuth: () => ({ tienePermiso: (p: string) => permisos.has(p) }),
 }));
 
 const { api } = await import('@/lib/api');
@@ -172,20 +168,52 @@ describe('Nota de ingreso', () => {
     expect(registrar).not.toHaveBeenCalled();
   });
 
-  it('con el motivo Producción avisa que la orden ya movió el stock y lleva a las órdenes', async () => {
+  it('no ofrece el motivo Producción: lo registra la orden al finalizarse', async () => {
     const usuario = await dibujar('ingreso');
 
-    await elegir(usuario, 'Motivo', /Producción/);
+    await usuario.click(screen.getByRole('combobox', { name: 'Motivo' }));
 
-    expect(screen.getByText(/se contará dos veces/)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Órdenes de producción/ })).toHaveAttribute(
-      'href',
-      '/produccion/ordenes',
-    );
+    const motivos = screen.getAllByRole('option').map((o) => o.textContent);
+    expect(motivos).toEqual([
+      expect.stringContaining('Compra'),
+      expect.stringContaining('Ajuste'),
+      expect.stringContaining('Devolución'),
+    ]);
+  });
+
+  it('una devolución ofrece solo productos, y señala el insumo elegido antes de cambiar de motivo', async () => {
+    const usuario = await dibujar('ingreso');
+
+    await elegir(usuario, 'Ítem', /Leche/);
+    await elegir(usuario, 'Motivo', /Devolución/);
+    await usuario.type(screen.getByLabelText('Cantidad'), '1');
+    await usuario.click(screen.getByRole('button', { name: 'Registrar ingreso' }));
+
+    expect(
+      await screen.findByText('Una devolución es de productos terminados: cambie o quite este insumo'),
+    ).toBeInTheDocument();
+    expect(registrar).not.toHaveBeenCalled();
+
+    // Entre los ítems no está la avena; la leche sigue a la vista, apagada.
+    await usuario.click(screen.getByRole('combobox', { name: 'Ítem' }));
+    expect(screen.queryByRole('option', { name: /Avena/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /Barra de avena/ })).toBeInTheDocument();
+    const leche = screen.getByRole('option', { name: /Leche/ });
+    expect(leche).toHaveTextContent('una devolución es de productos terminados');
+    expect(within(leche).getByRole('button')).toBeDisabled();
   });
 });
 
 describe('Nota de egreso', () => {
+  it('solo ofrece Merma y Ajuste: los insumos de una orden los descuenta la orden', async () => {
+    const usuario = await dibujar('egreso');
+
+    await usuario.click(screen.getByRole('combobox', { name: 'Motivo' }));
+
+    const motivos = screen.getAllByRole('option').map((o) => o.textContent);
+    expect(motivos).toEqual([expect.stringContaining('Merma'), expect.stringContaining('Ajuste')]);
+  });
+
   it('cada almacén dice cuánto hay, y no deja sacar más de eso', async () => {
     const usuario = await dibujar('egreso');
 

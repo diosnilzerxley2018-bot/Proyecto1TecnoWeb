@@ -168,6 +168,25 @@ export const MOTIVOS_INGRESO = ['Compra', 'Produccion', 'Ajuste', 'Devolucion'] 
 export const MOTIVOS_EGRESO = ['Produccion', 'Merma', 'Ajuste'] as const;
 
 /**
+ * Los motivos que se eligen al registrar una nota a mano (CU-INV-03 y CU-INV-04).
+ *
+ * `Produccion` sigue en la base, pero solo lo escribe la orden de producción al
+ * finalizarse (CU-PRO-02): descuenta los insumos e ingresa el producto, las dos
+ * notas en una transacción. Como motivo manual repetía ese camino sin la orden
+ * —el reporte de producción no lo veía— y se prestaba a contar dos veces lo
+ * elaborado.
+ */
+export const MOTIVOS_INGRESO_MANUAL = ['Compra', 'Ajuste', 'Devolucion'] as const;
+export const MOTIVOS_EGRESO_MANUAL = ['Merma', 'Ajuste'] as const;
+
+/**
+ * Lo que vuelve en una devolución es lo que se entregó: un producto terminado.
+ * Un insumo no sale del negocio hacia nadie, así que no puede volver; si el
+ * recuento encuentra más insumo del que figura, es un Ajuste.
+ */
+export const MOTIVO_SOLO_PRODUCTOS = 'Devolucion';
+
+/**
  * Cómo se lee cada motivo de movimiento en un documento.
  *
  * El valor guardado va sin tilde —es el de la restricción `CHECK`—, y el PDF

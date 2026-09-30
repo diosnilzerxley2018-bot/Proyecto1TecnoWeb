@@ -10,8 +10,17 @@ import type { Tono } from '@/components/ui/Insignia';
  * almacén de origen. La nota de egreso documenta lo que no tiene otro respaldo.
  */
 
-export const MOTIVOS_INGRESO: MotivoIngreso[] = ['Compra', 'Produccion', 'Ajuste', 'Devolucion'];
-export const MOTIVOS_EGRESO: MotivoEgreso[] = ['Produccion', 'Merma', 'Ajuste'];
+/**
+ * Los motivos que se eligen al registrar una nota a mano. Producción no está:
+ * lo escribe la orden de producción al finalizarse —descuenta los insumos e
+ * ingresa el producto—, y cargarlo aquí también lo contaba dos veces. Las notas
+ * de las órdenes se siguen mostrando con ese motivo en el listado.
+ */
+export const MOTIVOS_INGRESO_MANUAL: MotivoIngreso[] = ['Compra', 'Ajuste', 'Devolucion'];
+export const MOTIVOS_EGRESO_MANUAL: MotivoEgreso[] = ['Merma', 'Ajuste'];
+
+/** Lo que vuelve en una devolución es lo que se entregó: un producto terminado. */
+export const MOTIVO_SOLO_PRODUCTOS: MotivoIngreso = 'Devolucion';
 
 export const ETIQUETA_MOTIVO: Record<string, string> = {
   Compra: 'Compra',
@@ -36,11 +45,8 @@ export const TONO_MOTIVO: Record<string, Tono> = {
 /** Descripción de qué significa cada motivo, para el formulario de registro. */
 export const AYUDA_MOTIVO: Record<string, string> = {
   Compra: 'Mercadería recibida de un proveedor',
-  // Lo elaborado con una orden ya mueve el stock al finalizarla: la nota
-  // manual es para lo que se produjo sin ella.
-  Produccion: 'Elaboración hecha sin orden de producción',
   Ajuste: 'Corrección de inventario tras un recuento',
-  Devolucion: 'Retorno de mercadería previamente entregada',
+  Devolucion: 'Productos terminados que vuelven tras entregarse',
   Merma: 'Pérdida por deterioro, rotura o vencimiento',
 };
 

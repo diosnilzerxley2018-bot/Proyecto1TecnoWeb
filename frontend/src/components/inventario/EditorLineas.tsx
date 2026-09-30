@@ -146,13 +146,16 @@ export interface ProblemaLinea {
  * Una línea a medio llenar se descartaba sin aviso: se elegía el ítem, se
  * olvidaba el almacén y la nota se registraba sin esa línea. Ahora se señala.
  * En un egreso también se compara con lo que hay, sumando las líneas del
- * mismo ítem en el mismo almacén, como hace el servidor al consolidarlas.
+ * mismo ítem en el mismo almacén, como hace el servidor al consolidarlas. En
+ * una devolución, un insumo elegido antes de cambiar de motivo se señala: el
+ * servidor la rechazaría entera.
  */
 export function revisarLineas(
   lineas: Linea[],
   items: ItemMovible[],
   almacenes: Almacen[],
   esIngreso: boolean,
+  soloProductos = false,
 ): Map<string, ProblemaLinea> {
   const porClave = new Map(items.map((i) => [i.clave, i]));
   const nombreAlmacen = new Map(almacenes.map((a) => [a.id, a.nombre]));
@@ -165,7 +168,12 @@ export function revisarLineas(
     const cantidad = Number(linea.cantidad);
 
     const problema = ((): ProblemaLinea | null => {
-      if (!item) return { campo: 'item', mensaje: 'Elija el insumo o producto' };
+      if (!item) {
+        return { campo: 'item', mensaje: soloProductos ? 'Elija el producto' : 'Elija el insumo o producto' };
+      }
+      if (soloProductos && item.tipo === 'insumo') {
+        return { campo: 'item', mensaje: 'Una devolución es de productos terminados: cambie o quite este insumo' };
+      }
       if (linea.idAlmacen === null) return { campo: 'almacen', mensaje: 'Elija el almacén' };
       if (!(cantidad > 0)) return { campo: 'cantidad', mensaje: 'Indique la cantidad' };
       if (item.tipo === 'producto' && !Number.isInteger(cantidad)) {
@@ -245,6 +253,7 @@ export function EditorLineas({
   almacenes,
   esIngreso,
   esCompra,
+  soloProductos = false,
   problemas,
   onCambiar,
   onItemElegido,
@@ -254,6 +263,8 @@ export function EditorLineas({
   almacenes: Almacen[];
   esIngreso: boolean;
   esCompra: boolean;
+  /** Una devolución: se ofrecen solo productos terminados. */
+  soloProductos?: boolean;
   /** Lo que falta en cada línea; `null` mientras no se intentó registrar. */
   problemas: Map<string, ProblemaLinea> | null;
   onCambiar: React.Dispatch<React.SetStateAction<Linea[]>>;
@@ -261,8 +272,26 @@ export function EditorLineas({
 }) {
   const porClave = new Map(items.map((i) => [i.clave, i]));
 
-  const opcionesItem: Opcion<string>[] = items.map((item) => {
+  /*
+   * En una devolución no se ofrecen insumos. El que ya estaba elegido antes de
+   * cambiar de motivo se deja a la vista, apagado y con el porqué: si
+   * desapareciera, la línea quedaría en blanco sin explicación.
+   */
+  const elegidos = new Set(lineas.map((l) => l.clave));
+  const ofrecidos = soloProductos
+    ? items.filter((item) => item.tipo === 'producto' || elegidos.has(item.clave))
+    : items;
+
+  const opcionesItem: Opcion<string>[] = ofrecidos.map((item) => {
     const tipo = item.tipo === 'insumo' ? 'Insumo' : 'Producto';
+    if (soloProductos && item.tipo === 'insumo') {
+      return {
+        valor: item.clave,
+        etiqueta: item.nombre,
+        descripcion: 'Insumo · una devolución es de productos terminados',
+        deshabilitada: true,
+      };
+    }
     if (esIngreso) {
       return {
         valor: item.clave,
@@ -399,7 +428,7 @@ export function EditorLineas({
                       valor={linea.clave}
                       opciones={opcionesItem}
                       onCambiar={(clave) => elegirItem(linea.uid, clave)}
-                      marcador="Elija un insumo o producto"
+                      marcador={soloProductos ? 'Elija un producto' : 'Elija un insumo o producto'}
                       error={errorEn('item')}
                     />
 

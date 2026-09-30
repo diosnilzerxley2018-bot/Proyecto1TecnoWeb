@@ -445,7 +445,7 @@ describe('CU-INV-04 Gestionar egreso', () => {
       .post('/api/egresos')
       .set(cabecera(staff))
       .send({
-        motivo: 'Produccion',
+        motivo: 'Merma',
         insumos: [{ idIngrediente: insumo.id, idAlmacen: almacen, cantidad: 5 }],
       });
 
@@ -636,5 +636,77 @@ describe('CU-INV-05 Control de stock', () => {
     const cliente = await registrarCliente();
     const r = await request(app).get('/api/stock').set(cabecera(cliente.token));
     expect(r.status).toBe(403);
+  });
+});
+
+describe('CU-INV-03/04 Los motivos de una nota manual', () => {
+  it('un ingreso no admite Producción: lo elaborado lo ingresa la orden al finalizarse', async () => {
+    const staff = await tokenEmpleado();
+    const almacen = await idAlmacen(staff, 'Almacen Seco');
+    const insumo = await crearInsumoVacio(staff);
+
+    const r = await request(app)
+      .post('/api/ingresos')
+      .set(cabecera(staff))
+      .send({
+        motivo: 'Produccion',
+        insumos: [{ idIngrediente: insumo.id, idAlmacen: almacen, cantidad: 1, costoUnitario: 1 }],
+      });
+
+    expect(r.status).toBe(400);
+    expect(r.body.error).toContain('orden de producción');
+  });
+
+  it('un egreso tampoco: los insumos de una orden los descuenta la orden', async () => {
+    const staff = await tokenEmpleado();
+    const almacen = await idAlmacen(staff, 'Almacen Seco');
+    const insumo = await crearInsumoVacio(staff);
+    await request(app)
+      .post('/api/ingresos')
+      .set(cabecera(staff))
+      .send({ insumos: [{ idIngrediente: insumo.id, idAlmacen: almacen, cantidad: 5, costoUnitario: 1 }] })
+      .expect(201);
+
+    const r = await request(app)
+      .post('/api/egresos')
+      .set(cabecera(staff))
+      .send({
+        motivo: 'Produccion',
+        insumos: [{ idIngrediente: insumo.id, idAlmacen: almacen, cantidad: 1 }],
+      });
+
+    expect(r.status).toBe(400);
+    expect(r.body.error).toContain('orden de producción');
+    const ficha = await request(app).get(`/api/insumos/${insumo.id}`).set(cabecera(await obtenerToken()));
+    expect(ficha.body.stockTotal).toBe(5);
+  });
+
+  it('una devolución es de productos terminados: un insumo se rechaza', async () => {
+    const staff = await tokenEmpleado();
+    const almacen = await idAlmacen(staff, 'Almacen Seco');
+    const insumo = await crearInsumoVacio(staff);
+
+    const r = await request(app)
+      .post('/api/ingresos')
+      .set(cabecera(staff))
+      .send({
+        motivo: 'Devolucion',
+        insumos: [{ idIngrediente: insumo.id, idAlmacen: almacen, cantidad: 2, costoUnitario: 1 }],
+      });
+
+    expect(r.status).toBe(400);
+    expect(r.body.error).toContain('productos terminados');
+    const ficha = await request(app).get(`/api/insumos/${insumo.id}`).set(cabecera(await obtenerToken()));
+    expect(ficha.body.stockTotal).toBe(0);
+  });
+
+  it('las notas que escriben las órdenes se siguen filtrando por Producción', async () => {
+    const staff = await obtenerToken();
+
+    for (const ruta of ['/api/ingresos', '/api/egresos']) {
+      const r = await request(app).get(ruta).query({ motivo: 'Produccion' }).set(cabecera(staff));
+      expect(r.status).toBe(200);
+      for (const nota of r.body.datos) expect(nota.motivo).toBe('Produccion');
+    }
   });
 });

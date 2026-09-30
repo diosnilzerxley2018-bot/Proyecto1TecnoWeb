@@ -217,7 +217,7 @@ describe('A6 · Consumo FEFO', () => {
       .post('/api/egresos')
       .set(cabecera(staff))
       .send({
-        motivo: 'Produccion',
+        motivo: 'Merma',
         insumos: [{ idIngrediente: insumo.id, idAlmacen: almacen, cantidad: 8 }],
       })
       .expect(201);
